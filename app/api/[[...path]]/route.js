@@ -1,13 +1,77 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '../../../lib/supabase.js'
+import { supabaseAdmin } from '../../../lib/supabase-admin.js'
+
+function unauthorized(msg = 'Unauthorized') {
+  return NextResponse.json({ error: msg }, { status: 401 })
+}
+
+function forbidden(msg = 'Forbidden') {
+  return NextResponse.json({ error: msg }, { status: 403 })
+}
+
+async function getUserFromRequest(request) {
+  const auth = request.headers.get('authorization') || request.headers.get('Authorization')
+  if (!auth || !auth.toLowerCase().startsWith('bearer ')) return null
+  const token = auth.split(' ')[1]
+  if (!token) return null
+  const { data, error } = await supabaseAdmin.auth.getUser(token)
+  if (error) return null
+  return data?.user || null
+}
+
+function applyFilterToQuery(query, filter) {
+  const { column, type, value } = filter || {}
+  if (!column || typeof value === 'undefined' || value === null) return query
+  switch (type) {
+    case 'contains':
+      return query.ilike(column, `%${value}%`)
+    case 'equals':
+      return query.eq(column, value)
+    case 'greaterThan':
+      return query.gt(column, value)
+    case 'lessThan':
+      return query.lt(column, value)
+    case 'greaterThanOrEqual':
+      return query.gte(column, value)
+    case 'lessThanOrEqual':
+      return query.lte(column, value)
+    default:
+      return query
+  }
+}
 
 export async function GET(request) {
   const { searchParams, pathname } = new URL(request.url)
   const path = pathname.replace('/api/', '')
 
   try {
+    // Identify user for authorization
+    const user = await getUserFromRequest(request)
+    if (!user) return unauthorized()
+    const meta = user.user_metadata || {}
+    const role = meta.role || 'viewer'
+    const sectors = Array.isArray(meta.sectors) && meta.sectors.length > 0 ? meta.sectors : ['Clientes', 'Usuários']
+    const perms = meta.permissions || {}
+    const allowedTables = Array.isArray(perms.allowedTables) ? perms.allowedTables : []
+    const filtersByTable = perms.filtersByTable || {}
+
     // Get list of all tables
     if (path === 'tables') {
+      // Require Clientes sector
+      if (role !== 'admin' && !sectors.includes('Clientes')) {
+        return forbidden('Acesso ao setor Clientes não permitido')
+      }
+
+      // If not admin, return only allowed tables
+      if (role !== 'admin') {
+        // Bootstrap: if caller tem setor Usuários e ainda não configurou allowedTables, permita listar todas para configurar
+        if ((sectors || []).includes('Usuários') && (!allowedTables || allowedTables.length === 0)) {
+          // continue para consultar todas
+        } else {
+          return NextResponse.json({ tables: allowedTables })
+        }
+      }
+
       try {
         // First try the information_schema approach
         const { data, error } = await supabaseAdmin
@@ -17,7 +81,11 @@ export async function GET(request) {
           .neq('table_name', 'spatial_ref_sys') // Exclude PostGIS table
 
         if (!error && data) {
-          const tables = data?.map(t => t.table_name) || []
+          let tables = data?.map(t => t.table_name) || []
+          // If non-admin, intersect with allowedTables to be safe
+          if (role !== 'admin') {
+            tables = tables.filter(t => allowedTables.includes(t))
+          }
           return NextResponse.json({ tables })
         }
 
@@ -29,7 +97,14 @@ export async function GET(request) {
         const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('rpc_list_crm_tables')
         
         if (!rpcError && rpcData) {
-          return NextResponse.json({ tables: rpcData || [] })
+          const t = rpcData || []
+          const names = t.map(x => (typeof x === 'string' ? x : x.table_name || x))
+          const safe = role === 'admin'
+            ? names
+            : ((sectors || []).includes('Usuários') && (!allowedTables || allowedTables.length === 0))
+              ? names
+              : names.filter(n => allowedTables.includes(n))
+          return NextResponse.json({ tables: safe })
         }
 
         // If both methods fail, return an empty array with a warning
@@ -54,6 +129,17 @@ export async function GET(request) {
 
       if (!tableName) {
         return NextResponse.json({ error: 'Table name is required' }, { status: 400 })
+      }
+
+      // Require Clientes sector and table permission for non-admins
+      if (role !== 'admin') {
+        if (!sectors.includes('Clientes')) return forbidden('Acesso ao setor Clientes não permitido')
+        if (!allowedTables.includes(tableName)) {
+          // Permitir se ainda não configurou allowedTables e tem setor Usuários (para bootstrap/configuração)
+          if (!((sectors || []).includes('Usuários') && (!allowedTables || allowedTables.length === 0))) {
+            return forbidden('Tabela não permitida')
+          }
+        }
       }
 
       let query = supabaseAdmin.from(tableName).select('*')
@@ -82,6 +168,12 @@ export async function GET(request) {
         }
       }
 
+      // Enforce user-required filters
+      const requiredFilters = Array.isArray(filtersByTable[tableName]) ? filtersByTable[tableName] : []
+      for (const rf of requiredFilters) {
+        query = applyFilterToQuery(query, rf)
+      }
+
       // Limit to 1000 rows for performance
       query = query.limit(1000)
 
@@ -101,6 +193,15 @@ export async function GET(request) {
 
       if (!tableName) {
         return NextResponse.json({ error: 'Table name is required' }, { status: 400 })
+      }
+
+      if (role !== 'admin') {
+        if (!sectors.includes('Clientes')) return forbidden('Acesso ao setor Clientes não permitido')
+        if (!allowedTables.includes(tableName)) {
+          if (!((sectors || []).includes('Usuários') && (!allowedTables || allowedTables.length === 0))) {
+            return forbidden('Tabela não permitida')
+          }
+        }
       }
 
       try {

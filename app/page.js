@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
@@ -39,7 +40,11 @@ export default function App() {
     try {
       setLoading(true)
       setError('')
-      const response = await fetch('/api/tables')
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const response = await fetch('/api/tables', {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
       const data = await response.json()
       
       if (response.ok) {
@@ -57,7 +62,11 @@ export default function App() {
 
   const fetchTableColumns = async () => {
     try {
-      const response = await fetch(`/api/table-columns?table=${selectedTable}`)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const response = await fetch(`/api/table-columns?table=${selectedTable}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
       const data = await response.json()
       
       if (response.ok) {
@@ -79,7 +88,11 @@ export default function App() {
         url += `&filterColumn=${filterColumn}&filterValue=${encodeURIComponent(filterValue)}&filterType=${filterType}`
       }
       
-      const response = await fetch(url)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const response = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
       const data = await response.json()
       
       if (response.ok) {
@@ -190,9 +203,9 @@ export default function App() {
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <Database className="h-8 w-8 text-primary" />
-            <h1 className="text-4xl font-bold text-foreground">Supabase Table Viewer</h1>
+            <h1 className="text-4xl font-bold text-foreground">Clientes</h1>
           </div>
-          <p className="text-muted-foreground">View and filter your Supabase database tables</p>
+          <p className="text-muted-foreground">Visualize e filtre os dados dos clientes</p>
         </div>
 
         {/* Main Card */}

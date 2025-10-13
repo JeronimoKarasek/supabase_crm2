@@ -1,15 +1,38 @@
 import './globals.css'
+import Link from 'next/link'
+import { Database, Users, LogOut } from 'lucide-react'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+  SidebarInset,
+} from '@/components/ui/sidebar'
+import AppNav from '@/components/app-nav'
+import AuthGuard from '@/components/auth-guard'
+import AppChrome from '@/components/app-chrome'
 
 export const metadata = {
-  title: 'Next.js MongoDB Template',
-  description: 'A simple template with App Router, MongoDB, and shadcn/ui',
+  title: 'CRM - Supabase Viewer',
+  description: 'Visualize e gerencie dados e usuários',
 }
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="pt-br">
       <body>
-        {children}
+        <AuthGuard>
+        <AppChrome>
+          {children}
+        </AppChrome>
+        </AuthGuard>
       </body>
     </html>
   )
