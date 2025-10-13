@@ -307,19 +307,19 @@ def main():
     print(f"\n📋 Using table '{test_table_name}' for detailed testing")
     
     # Test 2: Get table columns
-    columns = test_get_table_columns(test_table)
+    columns = test_get_table_columns(test_table_name)
     if not columns:
-        print(f"\n❌ FAILED: Could not get columns for table '{test_table}'")
+        print(f"\n❌ FAILED: Could not get columns for table '{test_table_name}'")
         return False
     
     # Test 3: Get table data
-    table_data = test_get_table_data(test_table)
+    table_data = test_get_table_data(test_table_name)
     if table_data is None:
-        print(f"\n❌ FAILED: Could not get data for table '{test_table}'")
+        print(f"\n❌ FAILED: Could not get data for table '{test_table_name}'")
         return False
     
     # Test 4: Test filtered data
-    filter_success = test_filtered_table_data(test_table, columns, table_data)
+    filter_success = test_filtered_table_data(test_table_name, columns, table_data)
     
     # Test 5: Error cases
     test_error_cases()
