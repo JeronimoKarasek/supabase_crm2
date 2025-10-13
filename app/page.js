@@ -212,11 +212,15 @@ export default function App() {
                     <SelectValue placeholder="Select a table..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {tables.map((table) => (
-                      <SelectItem key={table} value={table}>
-                        {table}
-                      </SelectItem>
-                    ))}
+                    {tables.map((table) => {
+                      const tableName = typeof table === 'string' ? table : table.table_name
+                      const displayName = typeof table === 'string' ? table : table.display_name
+                      return (
+                        <SelectItem key={tableName} value={tableName}>
+                          {displayName}
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
               </div>
