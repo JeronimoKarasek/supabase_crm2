@@ -103,19 +103,46 @@ export async function GET(request) {
         return NextResponse.json({ error: 'Table name is required' }, { status: 400 })
       }
 
-      const { data, error } = await supabaseAdmin
-        .from('information_schema.columns')
-        .select('column_name, data_type')
-        .eq('table_schema', 'public')
-        .eq('table_name', tableName)
-        .order('ordinal_position')
+      try {
+        // First try information_schema approach
+        const { data, error } = await supabaseAdmin
+          .from('information_schema.columns')
+          .select('column_name, data_type')
+          .eq('table_schema', 'public')
+          .eq('table_name', tableName)
+          .order('ordinal_position')
 
-      if (error) {
-        console.error('Error fetching columns:', error)
-        return NextResponse.json({ error: 'Failed to fetch columns', details: error.message }, { status: 500 })
+        if (!error && data) {
+          return NextResponse.json({ columns: data || [] })
+        }
+
+        console.log('Information schema columns query failed, trying alternative approach:', error)
+
+        // Alternative approach: Try to get a sample row and extract column names
+        const { data: sampleData, error: sampleError } = await supabaseAdmin
+          .from(tableName)
+          .select('*')
+          .limit(1)
+
+        if (sampleError) {
+          console.error('Error fetching sample data for columns:', sampleError)
+          return NextResponse.json({ error: 'Failed to fetch columns', details: sampleError.message }, { status: 500 })
+        }
+
+        // Extract column names from the sample data
+        const columns = sampleData && sampleData.length > 0 
+          ? Object.keys(sampleData[0]).map(key => ({
+              column_name: key,
+              data_type: typeof sampleData[0][key] === 'number' ? 'numeric' : 'text'
+            }))
+          : []
+
+        return NextResponse.json({ columns })
+
+      } catch (err) {
+        console.error('Unexpected error fetching columns:', err)
+        return NextResponse.json({ error: 'Failed to fetch columns', details: err.message }, { status: 500 })
       }
-
-      return NextResponse.json({ columns: data || [] })
     }
 
     return NextResponse.json({ error: 'Endpoint not found' }, { status: 404 })
