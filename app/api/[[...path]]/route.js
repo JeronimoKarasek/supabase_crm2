@@ -8,26 +8,41 @@ export async function GET(request) {
   try {
     // Get list of all tables
     if (path === 'tables') {
-      const { data, error } = await supabaseAdmin
-        .from('information_schema.tables')
-        .select('table_name')
-        .eq('table_schema', 'public')
-        .neq('table_name', 'spatial_ref_sys') // Exclude PostGIS table
+      try {
+        // First try the information_schema approach
+        const { data, error } = await supabaseAdmin
+          .from('information_schema.tables')
+          .select('table_name')
+          .eq('table_schema', 'public')
+          .neq('table_name', 'spatial_ref_sys') // Exclude PostGIS table
 
-      if (error) {
-        // Fallback: try alternative method using raw SQL
-        const { data: tablesData, error: sqlError } = await supabaseAdmin.rpc('get_tables')
-        
-        if (sqlError) {
-          console.error('Error fetching tables:', sqlError)
-          return NextResponse.json({ error: 'Failed to fetch tables', details: sqlError.message }, { status: 500 })
+        if (!error && data) {
+          const tables = data?.map(t => t.table_name) || []
+          return NextResponse.json({ tables })
         }
-        
-        return NextResponse.json({ tables: tablesData || [] })
-      }
 
-      const tables = data?.map(t => t.table_name) || []
-      return NextResponse.json({ tables })
+        // If information_schema fails, try to get tables by attempting to query common table names
+        // or use a different approach
+        console.log('Information schema query failed, trying alternative approach:', error)
+        
+        // Try to use the suggested RPC function if it exists
+        const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('rpc_list_crm_tables')
+        
+        if (!rpcError && rpcData) {
+          return NextResponse.json({ tables: rpcData || [] })
+        }
+
+        // If both methods fail, return an empty array with a warning
+        console.log('Both table listing methods failed. RPC error:', rpcError)
+        return NextResponse.json({ 
+          tables: [], 
+          warning: 'Could not fetch table list. This might be due to database permissions or configuration.' 
+        })
+
+      } catch (err) {
+        console.error('Unexpected error fetching tables:', err)
+        return NextResponse.json({ error: 'Failed to fetch tables', details: err.message }, { status: 500 })
+      }
     }
 
     // Get data from a specific table with optional filters
