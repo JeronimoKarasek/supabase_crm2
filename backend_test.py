@@ -299,7 +299,12 @@ def main():
     
     # Use the first table for detailed testing
     test_table = tables[0]
-    print(f"\n📋 Using table '{test_table}' for detailed testing")
+    if isinstance(test_table, dict) and 'table_name' in test_table:
+        test_table_name = test_table['table_name']
+    else:
+        test_table_name = str(test_table)
+    
+    print(f"\n📋 Using table '{test_table_name}' for detailed testing")
     
     # Test 2: Get table columns
     columns = test_get_table_columns(test_table)
