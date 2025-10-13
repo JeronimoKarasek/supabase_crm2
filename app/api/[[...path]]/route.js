@@ -1,104 +1,123 @@
-import { MongoClient } from 'mongodb'
-import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '../../../lib/supabase.js'
 
-// MongoDB connection
-let client
-let db
-
-async function connectToMongo() {
-  if (!client) {
-    client = new MongoClient(process.env.MONGO_URL)
-    await client.connect()
-    db = client.db(process.env.DB_NAME)
-  }
-  return db
-}
-
-// Helper function to handle CORS
-function handleCORS(response) {
-  response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGINS || '*')
-  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-  response.headers.set('Access-Control-Allow-Credentials', 'true')
-  return response
-}
-
-// OPTIONS handler for CORS
-export async function OPTIONS() {
-  return handleCORS(new NextResponse(null, { status: 200 }))
-}
-
-// Route handler function
-async function handleRoute(request, { params }) {
-  const { path = [] } = params
-  const route = `/${path.join('/')}`
-  const method = request.method
+export async function GET(request) {
+  const { searchParams, pathname } = new URL(request.url)
+  const path = pathname.replace('/api/', '')
 
   try {
-    const db = await connectToMongo()
+    // Get list of all tables
+    if (path === 'tables') {
+      const { data, error } = await supabaseAdmin
+        .from('information_schema.tables')
+        .select('table_name')
+        .eq('table_schema', 'public')
+        .neq('table_name', 'spatial_ref_sys') // Exclude PostGIS table
 
-    // Root endpoint - GET /api/root (since /api/ is not accessible with catch-all)
-    if (route === '/root' && method === 'GET') {
-      return handleCORS(NextResponse.json({ message: "Hello World" }))
-    }
-    // Root endpoint - GET /api/root (since /api/ is not accessible with catch-all)
-    if (route === '/' && method === 'GET') {
-      return handleCORS(NextResponse.json({ message: "Hello World" }))
-    }
-
-    // Status endpoints - POST /api/status
-    if (route === '/status' && method === 'POST') {
-      const body = await request.json()
-      
-      if (!body.client_name) {
-        return handleCORS(NextResponse.json(
-          { error: "client_name is required" }, 
-          { status: 400 }
-        ))
+      if (error) {
+        // Fallback: try alternative method using raw SQL
+        const { data: tablesData, error: sqlError } = await supabaseAdmin.rpc('get_tables')
+        
+        if (sqlError) {
+          console.error('Error fetching tables:', sqlError)
+          return NextResponse.json({ error: 'Failed to fetch tables', details: sqlError.message }, { status: 500 })
+        }
+        
+        return NextResponse.json({ tables: tablesData || [] })
       }
 
-      const statusObj = {
-        id: uuidv4(),
-        client_name: body.client_name,
-        timestamp: new Date()
+      const tables = data?.map(t => t.table_name) || []
+      return NextResponse.json({ tables })
+    }
+
+    // Get data from a specific table with optional filters
+    if (path === 'table-data') {
+      const tableName = searchParams.get('table')
+      const filterColumn = searchParams.get('filterColumn')
+      const filterValue = searchParams.get('filterValue')
+      const filterType = searchParams.get('filterType') || 'contains'
+
+      if (!tableName) {
+        return NextResponse.json({ error: 'Table name is required' }, { status: 400 })
       }
 
-      await db.collection('status_checks').insertOne(statusObj)
-      return handleCORS(NextResponse.json(statusObj))
+      let query = supabaseAdmin.from(tableName).select('*')
+
+      // Apply filters if provided
+      if (filterColumn && filterValue) {
+        switch (filterType) {
+          case 'contains':
+            query = query.ilike(filterColumn, `%${filterValue}%`)
+            break
+          case 'equals':
+            query = query.eq(filterColumn, filterValue)
+            break
+          case 'greaterThan':
+            query = query.gt(filterColumn, filterValue)
+            break
+          case 'lessThan':
+            query = query.lt(filterColumn, filterValue)
+            break
+          case 'greaterThanOrEqual':
+            query = query.gte(filterColumn, filterValue)
+            break
+          case 'lessThanOrEqual':
+            query = query.lte(filterColumn, filterValue)
+            break
+        }
+      }
+
+      // Limit to 1000 rows for performance
+      query = query.limit(1000)
+
+      const { data, error } = await query
+
+      if (error) {
+        console.error('Error fetching table data:', error)
+        return NextResponse.json({ error: 'Failed to fetch table data', details: error.message }, { status: 500 })
+      }
+
+      return NextResponse.json({ data: data || [] })
     }
 
-    // Status endpoints - GET /api/status
-    if (route === '/status' && method === 'GET') {
-      const statusChecks = await db.collection('status_checks')
-        .find({})
-        .limit(1000)
-        .toArray()
+    // Get columns for a specific table
+    if (path === 'table-columns') {
+      const tableName = searchParams.get('table')
 
-      // Remove MongoDB's _id field from response
-      const cleanedStatusChecks = statusChecks.map(({ _id, ...rest }) => rest)
-      
-      return handleCORS(NextResponse.json(cleanedStatusChecks))
+      if (!tableName) {
+        return NextResponse.json({ error: 'Table name is required' }, { status: 400 })
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('information_schema.columns')
+        .select('column_name, data_type')
+        .eq('table_schema', 'public')
+        .eq('table_name', tableName)
+        .order('ordinal_position')
+
+      if (error) {
+        console.error('Error fetching columns:', error)
+        return NextResponse.json({ error: 'Failed to fetch columns', details: error.message }, { status: 500 })
+      }
+
+      return NextResponse.json({ columns: data || [] })
     }
 
-    // Route not found
-    return handleCORS(NextResponse.json(
-      { error: `Route ${route} not found` }, 
-      { status: 404 }
-    ))
-
+    return NextResponse.json({ error: 'Endpoint not found' }, { status: 404 })
   } catch (error) {
     console.error('API Error:', error)
-    return handleCORS(NextResponse.json(
-      { error: "Internal server error" }, 
-      { status: 500 }
-    ))
+    return NextResponse.json({ error: 'Internal server error', details: error.message }, { status: 500 })
   }
 }
 
-// Export all HTTP methods
-export const GET = handleRoute
-export const POST = handleRoute
-export const PUT = handleRoute
-export const DELETE = handleRoute
-export const PATCH = handleRoute
+export async function POST(request) {
+  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+}
+
+export async function PUT(request) {
+  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+}
+
+export async function DELETE(request) {
+  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+}
