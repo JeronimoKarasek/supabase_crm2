@@ -11,7 +11,7 @@ import os
 from urllib.parse import urlencode
 
 # Get base URL from environment
-BASE_URL = "https://port-3000.csb.app"
+BASE_URL = "http://localhost:3000"
 API_BASE = f"{BASE_URL}/api"
 
 def test_get_tables():
