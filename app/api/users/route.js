@@ -173,6 +173,22 @@ export async function PUT(request) {
   }
 }
 
-export async function DELETE() {
-  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+export async function DELETE(request) {
+  try {
+    const caller = await getUserFromRequest(request)
+    if (!caller) return unauthorized()
+    const roleCaller = caller.user_metadata?.role || 'viewer'
+    const sectorsCaller = Array.isArray(caller.user_metadata?.sectors) && caller.user_metadata.sectors.length > 0 ? caller.user_metadata.sectors : ['Clientes', 'Usuários']
+    if (!(roleCaller === 'admin' || sectorsCaller.includes('Usuários'))) return forbidden('Acesso ao setor Usuários não permitido')
+
+    const body = await request.json()
+    const { id } = body || {}
+    if (!id) return NextResponse.json({ error: 'ID é obrigatório' }, { status: 400 })
+
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(id)
+    if (error) return NextResponse.json({ error: 'Falha ao deletar usuário', details: error.message }, { status: 400 })
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    return NextResponse.json({ error: 'Internal server error', details: e.message }, { status: 500 })
+  }
 }

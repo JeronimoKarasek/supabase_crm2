@@ -18,15 +18,23 @@ export default function AuthGuard({ children }) {
         router.replace('/login')
       }
       if (hasSession) {
-        // Sector guard: restrict by user_metadata.sectors unless admin
         const { data: udata } = await supabase.auth.getUser()
         const user = udata?.user
         const role = user?.user_metadata?.role || 'viewer'
-        const sectors = Array.isArray(user?.user_metadata?.sectors) && user.user_metadata.sectors.length > 0 ? user.user_metadata.sectors : ['Clientes', 'Usuários']
+        const sectors = (Array.isArray(user?.user_metadata?.sectors) && user.user_metadata.sectors.length > 0)
+          ? user.user_metadata.sectors
+          : ['Clientes', 'Usuários', 'Dashboard', 'Configuração']
+
+        const norm = (s) => {
+          try { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() } catch { return String(s || '').toLowerCase() }
+        }
+        const hasSector = (name) => sectors.some(s => norm(s) === norm(name))
 
         const pickDefaultRoute = () => {
-          if (role === 'admin' || sectors.includes('Clientes')) return '/'
-          if (sectors.includes('Usuários')) return '/usuarios'
+          if (role === 'admin' || hasSector('Dashboard')) return '/dashboard'
+          if (hasSector('Clientes')) return '/'
+          if (hasSector('Usuarios') || hasSector('Usuários')) return '/usuarios'
+          if (hasSector('Configuracao') || hasSector('Configuração')) return '/configuracao'
           return '/login'
         }
 
@@ -34,11 +42,19 @@ export default function AuthGuard({ children }) {
           const target = pickDefaultRoute()
           if (target !== '/login') router.replace(target)
         } else if (pathname.startsWith('/usuarios')) {
-          if (!(role === 'admin' || sectors.includes('Usuários'))) {
+          if (!(role === 'admin' || hasSector('Usuarios') || hasSector('Usuários'))) {
             router.replace(pickDefaultRoute())
           }
         } else if (pathname === '/' || pathname.startsWith('/clientes')) {
-          if (!(role === 'admin' || sectors.includes('Clientes'))) {
+          if (!(role === 'admin' || hasSector('Clientes'))) {
+            router.replace(pickDefaultRoute())
+          }
+        } else if (pathname.startsWith('/dashboard')) {
+          if (!(role === 'admin' || hasSector('Dashboard'))) {
+            router.replace(pickDefaultRoute())
+          }
+        } else if (pathname.startsWith('/configuracao')) {
+          if (!(role === 'admin' || hasSector('Configuracao') || hasSector('Configuração'))) {
             router.replace(pickDefaultRoute())
           }
         }
@@ -56,21 +72,37 @@ export default function AuthGuard({ children }) {
       if (hasSession) {
         const user = session.user
         const role = user?.user_metadata?.role || 'viewer'
-        const sectors = Array.isArray(user?.user_metadata?.sectors) && user.user_metadata.sectors.length > 0 ? user.user_metadata.sectors : ['Clientes', 'Usuários']
+        const sectors = (Array.isArray(user?.user_metadata?.sectors) && user.user_metadata.sectors.length > 0)
+          ? user.user_metadata.sectors
+          : ['Clientes', 'Usuários', 'Dashboard', 'Configuração']
+        const norm = (s) => {
+          try { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() } catch { return String(s || '').toLowerCase() }
+        }
+        const hasSector = (name) => sectors.some(s => norm(s) === norm(name))
         const pickDefaultRoute = () => {
-          if (role === 'admin' || sectors.includes('Clientes')) return '/'
-          if (sectors.includes('Usuários')) return '/usuarios'
+          if (role === 'admin' || hasSector('Dashboard')) return '/dashboard'
+          if (hasSector('Clientes')) return '/'
+          if (hasSector('Usuarios') || hasSector('Usuários')) return '/usuarios'
+          if (hasSector('Configuracao') || hasSector('Configuração')) return '/configuracao'
           return '/login'
         }
         if (pathname === '/login') {
           const target = pickDefaultRoute()
           if (target !== '/login') router.replace(target)
         } else if (pathname.startsWith('/usuarios')) {
-          if (!(role === 'admin' || sectors.includes('Usuários'))) {
+          if (!(role === 'admin' || hasSector('Usuarios') || hasSector('Usuários'))) {
             router.replace(pickDefaultRoute())
           }
         } else if (pathname === '/' || pathname.startsWith('/clientes')) {
-          if (!(role === 'admin' || sectors.includes('Clientes'))) {
+          if (!(role === 'admin' || hasSector('Clientes'))) {
+            router.replace(pickDefaultRoute())
+          }
+        } else if (pathname.startsWith('/dashboard')) {
+          if (!(role === 'admin' || hasSector('Dashboard'))) {
+            router.replace(pickDefaultRoute())
+          }
+        } else if (pathname.startsWith('/configuracao')) {
+          if (!(role === 'admin' || hasSector('Configuracao') || hasSector('Configuração'))) {
             router.replace(pickDefaultRoute())
           }
         }

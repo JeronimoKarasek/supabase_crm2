@@ -268,6 +268,28 @@ export default function UsuariosPage() {
     }
   }
 
+  const onDeleteUser = async (u) => {
+    if (!u?.id) return
+    const ok = window.confirm(`Excluir usuário ${u.email}?`)
+    if (!ok) return
+    try {
+      setLoading(true)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const res = await fetch('/api/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id: u.id }) })
+      if (res.ok) {
+        fetchUsers()
+      } else {
+        const data = await res.json()
+        setError(data?.error || 'Falha ao excluir usuário')
+      }
+    } catch (e) {
+      setError('Erro inesperado ao excluir usuário')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <div className="container mx-auto py-8 px-4">
@@ -439,14 +461,18 @@ export default function UsuariosPage() {
                       {users.map((u) => {
                         const allowed = u.user_metadata?.permissions?.allowedTables || []
                         const userSectors = Array.isArray(u.user_metadata?.sectors) ? u.user_metadata.sectors : []
+                        const isSelf = false // optional: could compare with current session
                         return (
                           <TableRow key={u.id}>
                             <TableCell>{u.email}</TableCell>
                             <TableCell>{u.user_metadata?.role || '-'}</TableCell>
                             <TableCell className="text-xs">{allowed.length ? allowed.join(', ') : '—'}</TableCell>
                             <TableCell className="text-xs">{userSectors.length ? userSectors.join(', ') : '—'}</TableCell>
-                            <TableCell>
+                            <TableCell className="flex gap-2">
                               <Button size="sm" variant="outline" onClick={() => startEdit(u)}>Editar</Button>
+                              <Button size="sm" variant="destructive" onClick={() => onDeleteUser(u)}>
+                                Excluir
+                              </Button>
                             </TableCell>
                             <TableCell className="font-mono text-xs">{u.id}</TableCell>
                           </TableRow>

@@ -57,8 +57,8 @@ export async function GET(request) {
 
     // Get list of all tables
     if (path === 'tables') {
-      // Require Clientes sector
-      if (role !== 'admin' && !sectors.includes('Clientes')) {
+      // Require Clientes, Dashboard or Usuários sector
+      if (role !== 'admin' && !(sectors.includes('Clientes') || sectors.includes('Dashboard') || sectors.includes('Usuários'))) {
         return forbidden('Acesso ao setor Clientes não permitido')
       }
 
@@ -126,14 +126,21 @@ export async function GET(request) {
       const filterColumn = searchParams.get('filterColumn')
       const filterValue = searchParams.get('filterValue')
       const filterType = searchParams.get('filterType') || 'contains'
+      const periodStart = searchParams.get('periodStart')
+      const periodEnd = searchParams.get('periodEnd')
+      const dateColumn = 'horario da ultima resposta'
+      const pageParam = parseInt(searchParams.get('page') || '1', 10)
+      const pageSizeParam = parseInt(searchParams.get('pageSize') || '100', 10)
+      const page = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam
+      const pageSize = isNaN(pageSizeParam) || pageSizeParam < 1 ? 100 : Math.min(pageSizeParam, 100)
 
       if (!tableName) {
         return NextResponse.json({ error: 'Table name is required' }, { status: 400 })
       }
 
-      // Require Clientes sector and table permission for non-admins
+      // Require Clientes or Dashboard sector and table permission for non-admins
       if (role !== 'admin') {
-        if (!sectors.includes('Clientes')) return forbidden('Acesso ao setor Clientes não permitido')
+        if (!(sectors.includes('Clientes') || sectors.includes('Dashboard') || sectors.includes('Usuários'))) return forbidden('Acesso ao setor Clientes não permitido')
         if (!allowedTables.includes(tableName)) {
           // Permitir se ainda não configurou allowedTables e tem setor Usuários (para bootstrap/configuração)
           if (!((sectors || []).includes('Usuários') && (!allowedTables || allowedTables.length === 0))) {
@@ -142,7 +149,7 @@ export async function GET(request) {
         }
       }
 
-      let query = supabaseAdmin.from(tableName).select('*')
+      let query = supabaseAdmin.from(tableName).select('*', { count: 'exact' })
 
       // Apply filters if provided
       if (filterColumn && filterValue) {
@@ -168,23 +175,35 @@ export async function GET(request) {
         }
       }
 
+      // Period filter (if provided)
+      if (periodStart) {
+        query = query.gte(dateColumn, periodStart)
+      }
+      if (periodEnd) {
+        query = query.lte(dateColumn, periodEnd)
+      }
+
       // Enforce user-required filters
       const requiredFilters = Array.isArray(filtersByTable[tableName]) ? filtersByTable[tableName] : []
       for (const rf of requiredFilters) {
         query = applyFilterToQuery(query, rf)
       }
 
-      // Limit to 1000 rows for performance
-      query = query.limit(1000)
+      // Pagination via range
+      const from = (page - 1) * pageSize
+      const to = from + pageSize - 1
+      query = query.range(from, to)
 
-      const { data, error } = await query
+      const { data, error, count } = await query
 
       if (error) {
         console.error('Error fetching table data:', error)
         return NextResponse.json({ error: 'Failed to fetch table data', details: error.message }, { status: 500 })
       }
 
-      return NextResponse.json({ data: data || [] })
+      const total = count ?? (data?.length || 0)
+      const totalPages = Math.max(1, Math.ceil(total / pageSize))
+      return NextResponse.json({ data: data || [], page, pageSize, count: total, totalPages })
     }
 
     // Get columns for a specific table
@@ -196,7 +215,7 @@ export async function GET(request) {
       }
 
       if (role !== 'admin') {
-        if (!sectors.includes('Clientes')) return forbidden('Acesso ao setor Clientes não permitido')
+        if (!(sectors.includes('Clientes') || sectors.includes('Dashboard') || sectors.includes('Usuários'))) return forbidden('Acesso ao setor Clientes não permitido')
         if (!allowedTables.includes(tableName)) {
           if (!((sectors || []).includes('Usuários') && (!allowedTables || allowedTables.length === 0))) {
             return forbidden('Tabela não permitida')

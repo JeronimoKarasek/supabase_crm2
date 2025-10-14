@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Database, Users } from 'lucide-react'
+import { Database, Users, Gauge, Settings } from 'lucide-react'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -14,6 +14,10 @@ import {
 } from '@/components/ui/sidebar'
 import { supabase } from '@/lib/supabase'
 import { sectors as allSectors } from '@/lib/sectors'
+
+function normalizeLabel(s) {
+  try { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() } catch { return String(s || '').toLowerCase() }
+}
 
 export default function AppNav() {
   const pathname = usePathname()
@@ -34,14 +38,30 @@ export default function AppNav() {
 
   const role = user?.user_metadata?.role || 'viewer'
   const userSectors = Array.isArray(user?.user_metadata?.sectors) ? user.user_metadata.sectors : []
-  const can = (sector) => role === 'admin' || userSectors.includes(sector)
+  const can = (sector) => {
+    if (role === 'admin') return true
+    const target = normalizeLabel(sector)
+    return userSectors.some(s => normalizeLabel(s) === target)
+  }
 
   const items = [
+    (role === 'admin' || can('Dashboard')) && {
+      href: '/dashboard',
+      label: 'Dashboard',
+      icon: Gauge,
+      isActive: pathname?.startsWith('/dashboard') ?? false,
+    },
     can('Clientes') && {
-      href: '/',
+      href: '/clientes',
       label: 'Clientes',
       icon: Database,
-      isActive: pathname === '/',
+      isActive: pathname === '/clientes' || pathname?.startsWith('/clientes'),
+    },
+    (role === 'admin' || can('Configuração')) && {
+      href: '/configuracao',
+      label: 'Configuração',
+      icon: Settings,
+      isActive: pathname?.startsWith('/configuracao') ?? false,
     },
     can('Usuários') && {
       href: '/usuarios',
