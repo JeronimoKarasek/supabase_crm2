@@ -17,6 +17,11 @@ export default function ConfiguracaoPage() {
   const [condValue, setCondValue] = useState('')
   const [message, setMessage] = useState('')
   const [list, setList] = useState([])
+  const [siteName, setSiteName] = useState('')
+  const [siteSubtitle, setSiteSubtitle] = useState('')
+  const [logoUrl, setLogoUrl] = useState('')
+  const [banks, setBanks] = useState([]) // [{key,name,fields:[{key,label}], webhookUrl, returnWebhookUrl}]
+  const [products, setProducts] = useState([]) // [string]
 
   useEffect(() => {
     ;(async () => {
@@ -42,13 +47,16 @@ export default function ConfiguracaoPage() {
   useEffect(() => {
     ;(async () => {
       try {
-        const { data: sessionData } = await supabase.auth.getSession()
-        const token = sessionData?.session?.access_token
-        const res = await fetch('/api/settings', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+        const res = await fetch('/api/global-settings')
         const json = await res.json()
         if (res.ok) {
           if (Array.isArray(json.settings?.valorPagoList)) setList(json.settings.valorPagoList)
           else if (json.settings?.valorPago) setList([json.settings.valorPago])
+          setSiteName(json.settings?.siteName || '')
+          setSiteSubtitle(json.settings?.siteSubtitle || '')
+          setLogoUrl(json.settings?.logoUrl || '')
+          setBanks(Array.isArray(json.settings?.banks) ? json.settings.banks : [])
+          setProducts(Array.isArray(json.settings?.products) ? json.settings.products : [])
         }
       } catch {}
     })()
@@ -56,9 +64,7 @@ export default function ConfiguracaoPage() {
 
   const saveList = async () => {
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData?.session?.access_token
-      const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ valorPagoList: list }) })
+      const res = await fetch('/api/global-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valorPagoList: list, siteName, siteSubtitle, logoUrl, banks, products }) })
       if (res.ok) {
         setMessage('Configurações salvas')
         setTimeout(() => setMessage(''), 2000)
@@ -79,6 +85,12 @@ export default function ConfiguracaoPage() {
             <CardDescription>Defina como calcular o "Valor Pago" por tabela</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Branding */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Input placeholder="Nome do sistema" value={siteName} onChange={(e) => setSiteName(e.target.value)} />
+              <Input placeholder="Subtítulo" value={siteSubtitle} onChange={(e) => setSiteSubtitle(e.target.value)} />
+              <Input placeholder="URL do logo" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Select value={table} onValueChange={(v) => { setTable(v); setSumColumn(''); setCondColumn('') }}>
                 <SelectTrigger>
@@ -183,8 +195,83 @@ export default function ConfiguracaoPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Banks config */}
+        <div className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Configurar Bancos</CardTitle>
+              <CardDescription>Defina campos de credenciais e webhooks</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button variant="outline" onClick={() => setBanks(prev => [...prev, { key: `bank_${Date.now()}`, name: '', fields: [{ key: 'usuario', label: 'Usuário' }, { key: 'senha', label: 'Senha' }], webhookUrl: '', returnWebhookUrl: '' }])}>Adicionar banco</Button>
+              <div className="space-y-4">
+                {banks.map((b, idx) => (
+                  <div key={b.key} className="p-3 border rounded space-y-2">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <Input placeholder="Nome do banco (ex.: BANCO V8)" value={b.name} onChange={(e) => {
+                        const val = e.target.value
+                        setBanks(prev => prev.map((x,i) => i===idx ? { ...x, name: val } : x))
+                      }} />
+                      <Input placeholder="Webhook (consulta)" value={b.webhookUrl} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookUrl: e.target.value } : x))} />
+                      <Input placeholder="Webhook de retorno" value={b.returnWebhookUrl} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, returnWebhookUrl: e.target.value } : x))} />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Campos de credenciais</div>
+                      {b.fields.map((f, fi) => (
+                        <div key={fi} className="grid grid-cols-2 gap-2">
+                          <Input placeholder="Label" value={f.label} onChange={(e) => setBanks(prev => prev.map((x,i) => i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, label: e.target.value } : ff) } : x))} />
+                          <Input placeholder="Chave (ex.: id_client)" value={f.key} onChange={(e) => setBanks(prev => prev.map((x,i) => i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, key: e.target.value } : ff) } : x))} />
+                        </div>
+                      ))}
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, fields: [...x.fields, { key: '', label: '' }] } : x))}>Adicionar campo</Button>
+                        <Button size="sm" variant="destructive" onClick={() => setBanks(prev => prev.filter((_,i)=> i!==idx))}>Remover banco</Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={saveList}>Salvar configurações</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Products config */}
+        <div className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Configurar Produtos</CardTitle>
+              <CardDescription>Adicione produtos para uso em Consulta em lote</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex gap-2 items-center">
+                <Input placeholder="Novo produto" id="newProduct" />
+                <Button variant="outline" onClick={() => {
+                  const inp = document.getElementById('newProduct')
+                  const val = inp?.value?.trim()
+                  if (!val) return
+                  setProducts(prev => Array.from(new Set([...prev, val])))
+                  inp.value=''
+                }}>Adicionar</Button>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {products.map((p, i) => (
+                  <div key={i} className="px-2 py-1 rounded border bg-muted/30 flex items-center gap-2">
+                    <span className="text-sm">{p}</span>
+                    <Button size="sm" variant="ghost" onClick={() => setProducts(prev => prev.filter((x)=> x!==p))}>Remover</Button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={saveList}>Salvar produtos</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )
 }
-

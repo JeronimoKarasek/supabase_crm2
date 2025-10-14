@@ -81,7 +81,7 @@ export default function DashboardPage() {
       try {
         const { data: sessionData } = await supabase.auth.getSession()
         const token = sessionData?.session?.access_token
-        const sres = await fetch('/api/settings', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+        const sres = await fetch('/api/global-settings')
         const sjson = await sres.json()
         const list = Array.isArray(sjson?.settings?.valorPagoList) ? sjson.settings.valorPagoList : (sjson?.settings?.valorPago ? [sjson.settings.valorPago] : [])
         if (list.length) {

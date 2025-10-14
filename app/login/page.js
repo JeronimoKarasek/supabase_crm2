@@ -13,6 +13,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [branding, setBranding] = useState({ siteName: 'CRM', siteSubtitle: 'Supabase Viewer', logoUrl: '' })
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const res = await fetch('/api/global-settings')
+        const json = await res.json()
+        if (res.ok) setBranding({
+          siteName: json?.settings?.siteName || 'CRM',
+          siteSubtitle: json?.settings?.siteSubtitle || 'Supabase Viewer',
+          logoUrl: json?.settings?.logoUrl || '',
+        })
+      } catch {}
+    })()
+  }, [])
 
   const onSubmit = async (e) => {
     e.preventDefault()
@@ -34,7 +49,15 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4">
       <Card className="w-full max-w-sm shadow-lg">
         <CardHeader>
-          <CardTitle>Entrar</CardTitle>
+          <div className="flex flex-col items-center gap-2">
+            {branding.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={branding.logoUrl} alt="logo" className="h-10 w-10 object-contain" />
+            ) : null}
+            <div className="text-lg font-semibold">{branding.siteName}</div>
+            <div className="text-xs text-muted-foreground">{branding.siteSubtitle}</div>
+          </div>
+          <CardTitle className="mt-2">Entrar</CardTitle>
           <CardDescription>Acesse com seu e-mail e senha</CardDescription>
         </CardHeader>
         <CardContent>
@@ -51,4 +74,3 @@ export default function LoginPage() {
     </div>
   )
 }
-

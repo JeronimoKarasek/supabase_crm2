@@ -7,7 +7,6 @@ import { Database, Users, Gauge, Settings } from 'lucide-react'
 import {
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -69,11 +68,22 @@ export default function AppNav() {
       icon: Users,
       isActive: pathname?.startsWith('/usuarios') ?? false,
     },
+    (role === 'admin' || can('Acesso Banco')) && {
+      href: '/acesso-banco',
+      label: 'Acesso Banco',
+      icon: Settings,
+      isActive: pathname?.startsWith('/acesso-banco') ?? false,
+    },
+    (role === 'admin' || can('Consulta em lote')) && {
+      href: '/consulta-lote',
+      label: 'Consulta em lote',
+      icon: Settings,
+      isActive: pathname?.startsWith('/consulta-lote') ?? false,
+    },
   ].filter(Boolean)
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Seções</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => (

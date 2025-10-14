@@ -18,6 +18,7 @@ import {
 import AppNav from '@/components/app-nav'
 import AuthGuard from '@/components/auth-guard'
 import AppChrome from '@/components/app-chrome'
+import { ThemeProvider } from 'next-themes'
 
 export const metadata = {
   title: 'CRM - Supabase Viewer',
@@ -28,11 +29,13 @@ export default function RootLayout({ children }) {
   return (
     <html lang="pt-br">
       <body>
-        <AuthGuard>
-        <AppChrome>
-          {children}
-        </AppChrome>
-        </AuthGuard>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+          <AuthGuard>
+            <AppChrome>
+              {children}
+            </AppChrome>
+          </AuthGuard>
+        </ThemeProvider>
       </body>
     </html>
   )

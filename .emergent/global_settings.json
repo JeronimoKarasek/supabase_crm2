@@ -1,0 +1,41 @@
+{
+  "valorPagoList": [
+    {
+      "table": "BANCO V8",
+      "sumColumn": "saldo",
+      "cond": {
+        "column": "status",
+        "type": "contains",
+        "value": "paid"
+      }
+    }
+  ],
+  "siteName": "FarolTech",
+  "siteSubtitle": "iluminando seu caminho",
+  "logoUrl": "https://gpakoffbuypbmfiwewka.supabase.co/storage/v1/object/public/Farol/Loguin%20farolchat.png",
+  "banks": [
+    {
+      "key": "bank_1760412643133",
+      "name": "Banco Facta",
+      "fields": [
+        {
+          "key": "Basic",
+          "label": "Basic"
+        },
+        {
+          "key": "Cód Master",
+          "label": "Cód Master"
+        },
+        {
+          "key": "Vendedor",
+          "label": "Vendedor"
+        }
+      ],
+      "webhookUrl": "https://weebserver6.farolchat.com/webhook/loteclt",
+      "returnWebhookUrl": ""
+    }
+  ],
+  "products": [
+    "CLT_CreditoTrabalho"
+  ]
+}
