@@ -64,7 +64,7 @@ export default function ConfiguracaoPage() {
 
   const saveList = async () => {
     try {
-      const res = await fetch('/api/global-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valorPagoList: list, siteName, siteSubtitle, logoUrl, banks, products }) })
+      const res = await fetch('/api/global-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valorPagoList: list }) })
       if (res.ok) {
         setMessage('Configurações salvas')
         setTimeout(() => setMessage(''), 2000)

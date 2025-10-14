@@ -18,15 +18,57 @@ async function getUserFromRequest(request) {
 }
 
 function parseCsv(text) {
-  const lines = text.split(/\r?\n/).filter(Boolean)
+  // Robust CSV parser supporting ";" or "," delimiter and quotes
+  const norm = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const lines = (text || '')
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
   if (!lines.length) return []
-  const headers = lines[0].split(',').map(h => h.trim())
-  return lines.slice(1).map((line) => {
-    const cols = line.split(',')
+  // Detect delimiter on header
+  const headerRaw = lines[0]
+  const delim = (headerRaw.match(/;/g)?.length || 0) > (headerRaw.match(/,/g)?.length || 0) ? ';' : ','
+  const splitLine = (line) => {
+    const out = []
+    let cur = ''
+    let inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (ch === '"') {
+        if (inQuotes && line[i+1] === '"') { cur += '"'; i++; continue }
+        inQuotes = !inQuotes
+      } else if (ch === delim && !inQuotes) {
+        out.push(cur)
+        cur = ''
+      } else {
+        cur += ch
+      }
+    }
+    out.push(cur)
+    return out
+  }
+  const headers = splitLine(headerRaw).map(h => h.trim())
+  const rows = []
+  for (let idx = 1; idx < lines.length; idx++) {
+    const cols = splitLine(lines[idx])
     const obj = {}
-    headers.forEach((h, i) => obj[h] = (cols[i] || '').trim())
-    return obj
+    headers.forEach((h, i) => { obj[h] = (cols[i] ?? '').toString().trim() })
+    rows.push(obj)
+  }
+  // Attempt to normalize keys for nome/telefone/cpf
+  const headerMap = {}
+  headers.forEach((h) => {
+    const hn = norm(h).toLowerCase()
+    if (hn.includes('nome') && !headerMap.nome) headerMap.nome = h
+    if ((hn.includes('telefone') || hn.includes('celular') || hn === 'fone' || hn.includes('phone')) && !headerMap.telefone) headerMap.telefone = h
+    if (hn === 'cpf' && !headerMap.cpf) headerMap.cpf = h
   })
+  return rows.map(r => ({
+    ...r,
+    __nome: headerMap.nome ? r[headerMap.nome] : (r.nome ?? ''),
+    __telefone: headerMap.telefone ? r[headerMap.telefone] : (r.telefone ?? ''),
+    __cpf: headerMap.cpf ? r[headerMap.cpf] : (r.cpf ?? ''),
+  }))
 }
 
 export async function GET(request) {
@@ -109,9 +151,9 @@ export async function POST(request) {
 
     // Insert into Supabase table 'importar'
     const payload = rows.map(r => ({
-      nome: r.nome || '',
-      telefone: r.telefone || '',
-      cpf: r.cpf || '',
+      nome: (r.__nome ?? r.nome ?? '').toString(),
+      telefone: (r.__telefone ?? r.telefone ?? '').toString(),
+      cpf: (r.__cpf ?? r.cpf ?? '').toString(),
       cliente: user.email,
       produto,
       banco_simulado: bancoName,
