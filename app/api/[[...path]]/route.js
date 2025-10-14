@@ -25,8 +25,12 @@ function applyFilterToQuery(query, filter) {
   switch (type) {
     case 'contains':
       return query.ilike(column, `%${value}%`)
+    case 'notContains':
+      return query.not(column, 'ilike', `%${value}%`)
     case 'equals':
       return query.eq(column, value)
+    case 'notEquals':
+      return query.neq(column, value)
     case 'greaterThan':
       return query.gt(column, value)
     case 'lessThan':
@@ -153,26 +157,7 @@ export async function GET(request) {
 
       // Apply filters if provided
       if (filterColumn && filterValue) {
-        switch (filterType) {
-          case 'contains':
-            query = query.ilike(filterColumn, `%${filterValue}%`)
-            break
-          case 'equals':
-            query = query.eq(filterColumn, filterValue)
-            break
-          case 'greaterThan':
-            query = query.gt(filterColumn, filterValue)
-            break
-          case 'lessThan':
-            query = query.lt(filterColumn, filterValue)
-            break
-          case 'greaterThanOrEqual':
-            query = query.gte(filterColumn, filterValue)
-            break
-          case 'lessThanOrEqual':
-            query = query.lte(filterColumn, filterValue)
-            break
-        }
+        query = applyFilterToQuery(query, { column: filterColumn, type: filterType, value: filterValue })
       }
 
       // Period filter (if provided)

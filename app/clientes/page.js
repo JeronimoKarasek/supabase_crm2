@@ -174,6 +174,7 @@ export default function App() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="equals">Equals</SelectItem>
+            <SelectItem value="notEquals">Not Equal</SelectItem>
             <SelectItem value="greaterThan">Greater Than</SelectItem>
             <SelectItem value="lessThan">Less Than</SelectItem>
             <SelectItem value="greaterThanOrEqual">Greater or Equal</SelectItem>
@@ -205,7 +206,9 @@ export default function App() {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="contains">Contains</SelectItem>
+          <SelectItem value="notContains">Does Not Contain</SelectItem>
           <SelectItem value="equals">Equals</SelectItem>
+          <SelectItem value="notEquals">Not Equal</SelectItem>
         </SelectContent>
       </Select>
     )

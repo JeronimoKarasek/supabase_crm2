@@ -330,7 +330,9 @@ export default function DashboardPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="contains">Contém</SelectItem>
+                  <SelectItem value="notContains">Não contém</SelectItem>
                   <SelectItem value="equals">Igual</SelectItem>
+                  <SelectItem value="notEquals">Diferente</SelectItem>
                   <SelectItem value="greaterThan">Maior que</SelectItem>
                   <SelectItem value="lessThan">Menor que</SelectItem>
                 </SelectContent>

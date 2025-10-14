@@ -91,6 +91,14 @@ export default function ConfiguracaoPage() {
               <Input placeholder="Subtítulo" value={siteSubtitle} onChange={(e) => setSiteSubtitle(e.target.value)} />
               <Input placeholder="URL do logo" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
             </div>
+            <div className="flex justify-end">
+              <Button onClick={async () => {
+                try {
+                  const res = await fetch('/api/global-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ siteName, siteSubtitle, logoUrl }) })
+                  if (res.ok) { setMessage('Configurações salvas'); setTimeout(()=>setMessage(''),2000) }
+                } catch {}
+              }}>Salvar</Button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Select value={table} onValueChange={(v) => { setTable(v); setSumColumn(''); setCondColumn('') }}>
                 <SelectTrigger>
