@@ -143,8 +143,12 @@ export async function POST(request) {
     // Map bank key -> bank name from global settings
     let bancoName = bancoKey
     try {
-      const gs = JSON.parse(fs.readFileSync(path.join(process.cwd(), '.emergent', 'global_settings.json'), 'utf8'))
-      const banks = Array.isArray(gs?.banks) ? gs.banks : []
+      const { data: gsRow } = await supabaseAdmin
+        .from('global_settings')
+        .select('data')
+        .eq('id', 'global')
+        .single()
+      const banks = Array.isArray(gsRow?.data?.banks) ? gsRow.data.banks : []
       const bank = banks.find(b => (b.key === bancoKey))
       if (bank?.name) bancoName = bank.name
     } catch {}
@@ -167,16 +171,22 @@ export async function POST(request) {
 
     // Trigger webhook if configured
     try {
-      const gs = JSON.parse(fs.readFileSync(path.join(process.cwd(), '.emergent', 'global_settings.json'), 'utf8'))
-      const banks = Array.isArray(gs?.banks) ? gs.banks : []
+      const { data: gsRow } = await supabaseAdmin
+        .from('global_settings')
+        .select('data')
+        .eq('id', 'global')
+        .single()
+      const banks = Array.isArray(gsRow?.data?.banks) ? gsRow.data.banks : []
       const bank = banks.find(b => (b.key === bancoKey))
       if (bank?.webhookUrl) {
-        // Load user credentials
-        const credsStorePath = path.join(process.cwd(), '.emergent', 'credentials.json')
-        let creds = {}
-        try { creds = JSON.parse(fs.readFileSync(credsStorePath, 'utf8')) } catch {}
-        const userCreds = creds?.[user.id]?.[bancoKey] || {}
-        // Provide return webhook for completion callback
+        // Load user credentials from Supabase table
+        const { data: credsRows } = await supabaseAdmin
+          .from('bank_credentials')
+          .select('credentials')
+          .eq('user_id', user.id)
+          .eq('bank_key', bancoKey)
+          .single()
+        const userCreds = credsRows?.credentials || {}
         const returnWebhook = bank.returnWebhookUrl || `${new URL(request.url).origin}/api/importar/status`
         await fetch(bank.webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credentials: userCreds, itemId: id, returnWebhook }) })
       }
