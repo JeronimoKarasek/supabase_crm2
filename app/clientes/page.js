@@ -373,32 +373,48 @@ export default function App() {
                 </div>
                 <div className="border rounded-lg overflow-auto max-h-[600px]">
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        {Object.keys(tableData[0]).map((key) => (
-                          <TableHead key={key} className="font-semibold bg-muted/50">
-                            {key}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {tableData.map((row, idx) => (
-                        <TableRow key={idx}>
-                          {Object.entries(row).map(([key, value]) => (
-                            <TableCell key={key} className="max-w-xs truncate">
-                              {value === null ? (
-                                <span className="text-muted-foreground italic">null</span>
-                              ) : typeof value === 'object' ? (
-                                <span className="text-xs font-mono">{JSON.stringify(value)}</span>
-                              ) : (
-                                String(value)
-                              )}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableBody>
+                    {(() => {
+                      const norm = (s) => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+                      const preferred = ['Nome','cpf','telefone','instancia','saldo','status','respondeu','simulou','digitou','pausa ia','produto','proposta fgts','cliente']
+                      const preferredNorm = preferred.map(norm)
+                      const keys = Object.keys(tableData[0] || {})
+                      let visibleKeys = keys.filter(k => preferredNorm.includes(norm(k)))
+                      visibleKeys.sort((a,b) => preferredNorm.indexOf(norm(a)) - preferredNorm.indexOf(norm(b)))
+                      if (visibleKeys.length === 0) visibleKeys = keys
+                      return (
+                        <>
+                          <TableHeader className="sticky top-0 z-10">
+                            <TableRow>
+                              {visibleKeys.map((key) => (
+                                <TableHead key={key} className="font-semibold bg-muted/70 backdrop-blur supports-[backdrop-filter]:bg-muted/50">
+                                  {key}
+                                </TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {tableData.map((row, idx) => (
+                              <TableRow key={idx}>
+                                {visibleKeys.map((key) => {
+                                  const value = row[key]
+                                  return (
+                                    <TableCell key={key} className="max-w-xs truncate">
+                                      {value === null ? (
+                                        <span className="text-muted-foreground italic">null</span>
+                                      ) : typeof value === 'object' ? (
+                                        <span className="text-xs font-mono">{JSON.stringify(value)}</span>
+                                      ) : (
+                                        String(value)
+                                      )}
+                                    </TableCell>
+                                  )
+                                })}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </>
+                      )
+                    })()}
                   </Table>
                 </div>
               </div>

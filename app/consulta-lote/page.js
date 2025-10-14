@@ -14,6 +14,8 @@ export default function ConsultaLotePage() {
   const [product, setProduct] = useState('')
   const [fileName, setFileName] = useState('')
   const [list, setList] = useState([])
+  const [creds, setCreds] = useState({})
+  const [message, setMessage] = useState('')
 
   useEffect(() => {
     ;(async () => {
@@ -26,6 +28,9 @@ export default function ConsultaLotePage() {
       const lres = await fetch('/api/importar', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
       const ljson = await lres.json()
       if (lres.ok) setList(ljson.items || [])
+      const cres = await fetch('/api/banks/credentials', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      const cjson = await cres.json()
+      if (cres.ok) setCreds(cjson.credentials || {})
     })()
   }, [])
 
@@ -38,7 +43,38 @@ export default function ConsultaLotePage() {
     const token = sessionData?.session?.access_token
     const res = await fetch('/api/importar', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ csv: text, produto: product, banco: bank }) })
     const json = await res.json()
-    if (res.ok) setList(json.items || [])
+    if (res.ok) { setList(json.items || []); setMessage('Planilha importada com sucesso') }
+  }
+
+  const onFileClick = (e) => {
+    if (!bank) {
+      alert('Coloque suas credenciais do Banco antes.')
+      e.preventDefault()
+      return
+    }
+    const c = creds?.[bank] || {}
+    const bankDef = banks.find(b => b.key === bank)
+    const fields = bankDef?.fields || []
+    const hasAny = fields.some(f => (c[f.key] || '').trim() !== '')
+    if (!hasAny) {
+      alert('Coloque suas credenciais do Banco antes.')
+      e.preventDefault()
+      return
+    }
+  }
+
+  const onDelete = async (id) => {
+    const ok = window.confirm('Excluir base?')
+    if (!ok) return
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData?.session?.access_token
+    const res = await fetch('/api/importar', { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id }) })
+    if (res.ok) {
+      // reload list
+      const lres = await fetch('/api/importar', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      const ljson = await lres.json()
+      if (lres.ok) setList(ljson.items || [])
+    }
   }
 
   const download = async (id) => {
@@ -95,7 +131,7 @@ export default function ConsultaLotePage() {
                 </SelectContent>
               </Select>
               <div>
-                <Input type="file" accept=".csv" onChange={onUpload} />
+                <Input type="file" accept=".csv" onChange={onUpload} onClick={onFileClick} />
               </div>
             </div>
 
@@ -111,19 +147,26 @@ export default function ConsultaLotePage() {
                         <div><span className="font-medium">ID:</span> {it.id}</div>
                         <div><span className="font-medium">Produto:</span> {it.produto} | <span className="font-medium">Banco:</span> {it.bancoName}</div>
                         <div><span className="font-medium">Status:</span> {it.status}</div>
+                        {it.progress && (
+                          <div className="mt-1 w-64 h-2 bg-muted rounded">
+                            <div className="h-2 bg-primary rounded" style={{ width: `${it.progress.percent}%` }} />
+                            <div className="text-xs text-muted-foreground mt-1">{it.progress.done}/{it.progress.total} ({it.progress.percent}%)</div>
+                          </div>
+                        )}
                       </div>
                       <div className="flex gap-2">
                         <Button variant="outline" onClick={() => download(it.id)}>Exportar</Button>
+                        <Button variant="destructive" onClick={() => onDelete(it.id)}>Excluir</Button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
+            {message && <div className="text-emerald-600 text-sm">{message}</div>}
           </CardContent>
         </Card>
       </div>
     </div>
   )
 }
-

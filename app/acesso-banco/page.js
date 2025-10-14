@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 export default function AcessoBancoPage() {
   const [banks, setBanks] = useState([])
   const [creds, setCreds] = useState({}) // { [bankKey]: { fieldKey: value } }
+  const [message, setMessage] = useState('')
 
   useEffect(() => {
     ;(async () => {
@@ -28,7 +29,8 @@ export default function AcessoBancoPage() {
   const save = async () => {
     const { data: sessionData } = await supabase.auth.getSession()
     const token = sessionData?.session?.access_token
-    await fetch('/api/banks/credentials', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ credentials: creds }) })
+    const res = await fetch('/api/banks/credentials', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ credentials: creds }) })
+    if (res.ok) setMessage('Salvo com sucesso')
   }
 
   return (
@@ -52,7 +54,8 @@ export default function AcessoBancoPage() {
                 </div>
               </div>
             ))}
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2 items-center">
+              {message && <div className="text-emerald-600 text-sm">{message}</div>}
               <Button onClick={save}>Salvar credenciais</Button>
             </div>
           </CardContent>
@@ -61,4 +64,3 @@ export default function AcessoBancoPage() {
     </div>
   )
 }
-

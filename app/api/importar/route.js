@@ -65,6 +65,25 @@ export async function GET(request) {
       items.push({ id: r.lote_id, produto: r.produto, bancoName: r.banco_simulado, status: r.status || 'pendente' })
     }
   }
+  // compute progress (consultado true/total) per lote_id
+  for (const it of items) {
+    try {
+      const { count: total } = await supabaseAdmin
+        .from('importar')
+        .select('*', { count: 'exact', head: true })
+        .eq('cliente', user.email)
+        .eq('lote_id', it.id)
+      const { count: done } = await supabaseAdmin
+        .from('importar')
+        .select('*', { count: 'exact', head: true })
+        .eq('cliente', user.email)
+        .eq('lote_id', it.id)
+        .eq('consultado', true)
+      const percent = total ? Math.round(((done || 0) / total) * 100) : 0
+      it.progress = { done: done || 0, total: total || 0, percent }
+      if (percent === 100 && it.status !== 'concluido') it.status = 'concluido'
+    } catch {}
+  }
   return NextResponse.json({ items })
 }
 
@@ -138,6 +157,25 @@ export async function POST(request) {
       }
     }
     return NextResponse.json({ items })
+  } catch (e) {
+    return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
+  }
+}
+
+export async function DELETE(request) {
+  try {
+    const user = await getUserFromRequest(request)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const body = await request.json()
+    const { id } = body || {}
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    const { error } = await supabaseAdmin
+      .from('importar')
+      .delete()
+      .eq('cliente', user.email)
+      .eq('lote_id', id)
+    if (error) return NextResponse.json({ error: 'Delete failed', details: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
   }

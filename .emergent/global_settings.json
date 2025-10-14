@@ -32,7 +32,7 @@
         }
       ],
       "webhookUrl": "https://weebserver6.farolchat.com/webhook/loteclt",
-      "returnWebhookUrl": ""
+      "returnWebhookUrl": "https://crm.farolchat.com/api/importar/status"
     }
   ],
   "products": [
