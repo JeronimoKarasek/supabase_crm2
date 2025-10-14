@@ -62,3 +62,31 @@ export async function PUT(request) {
     return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
   }
 }
+
+export async function POST(request) {
+  // Mirror PUT: accept settings in body and persist sanitized fields
+  try {
+    const body = await request.json()
+    const current = await readSettingsFromDb()
+    const next = { ...current }
+    if (typeof body.siteName === 'string') next.siteName = body.siteName
+    if (typeof body.siteSubtitle === 'string') next.siteSubtitle = body.siteSubtitle
+    if (typeof body.logoUrl === 'string') next.logoUrl = body.logoUrl
+    if (Array.isArray(body.valorPagoList)) next.valorPagoList = body.valorPagoList
+    if (Array.isArray(body.products)) next.products = body.products
+    if (Array.isArray(body.banks)) {
+      next.banks = body.banks.map(b => ({
+        key: b.key,
+        name: b.name,
+        fields: Array.isArray(b.fields) ? b.fields.map(f => ({ key: f.key, label: f.label })) : [],
+        webhookUrl: b.webhookUrl || '',
+        returnWebhookUrl: b.returnWebhookUrl || '',
+      }))
+    }
+    await writeSettingsToDb(next)
+    const sanitized = { ...next, banks: (next.banks || []).map(b => ({ key: b.key, name: b.name, fields: b.fields })) }
+    return NextResponse.json({ settings: sanitized })
+  } catch (e) {
+    return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
+  }
+}
