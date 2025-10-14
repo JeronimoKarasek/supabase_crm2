@@ -1,15 +1,5 @@
 import { NextResponse } from 'next/server'
-import fs from 'fs'
-import path from 'path'
 import { supabaseAdmin } from '../../../../lib/supabase-admin.js'
-
-const filePath = path.join(process.cwd(), '.emergent', 'credentials.json')
-
-function ensureDir() {
-  try { const dir = path.dirname(filePath); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }) } catch {}
-}
-function readStore() { try { ensureDir(); if (!fs.existsSync(filePath)) return {}; return JSON.parse(fs.readFileSync(filePath,'utf8')) } catch { return {} } }
-function writeStore(obj) { ensureDir(); fs.writeFileSync(filePath, JSON.stringify(obj, null, 2), 'utf8') }
 
 async function getUserFromRequest(request) {
   const auth = request.headers.get('authorization') || request.headers.get('Authorization')
@@ -23,9 +13,15 @@ async function getUserFromRequest(request) {
 export async function GET(request) {
   const user = await getUserFromRequest(request)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const store = readStore()
-  const creds = store[user.id] || {}
-  return NextResponse.json({ credentials: creds })
+  const { data, error } = await supabaseAdmin
+    .from('bank_credentials')
+    .select('bank_key, credentials')
+    .eq('user_id', user.id)
+    .limit(100)
+  if (error) return NextResponse.json({ error: 'Failed to fetch', details: error.message }, { status: 500 })
+  const out = {}
+  for (const row of (data || [])) out[row.bank_key] = row.credentials || {}
+  return NextResponse.json({ credentials: out })
 }
 
 export async function PUT(request) {
@@ -33,12 +29,16 @@ export async function PUT(request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   try {
     const body = await request.json()
-    const store = readStore()
-    store[user.id] = body?.credentials || {}
-    writeStore(store)
+    const creds = body?.credentials || {}
+    const rows = Object.entries(creds).map(([bank_key, credentials]) => ({ user_id: user.id, bank_key, credentials }))
+    if (rows.length) {
+      const { error } = await supabaseAdmin
+        .from('bank_credentials')
+        .upsert(rows, { onConflict: 'user_id,bank_key' })
+      if (error) return NextResponse.json({ error: 'Failed to save', details: error.message }, { status: 500 })
+    }
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
   }
 }
-

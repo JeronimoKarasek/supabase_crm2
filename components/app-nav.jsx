@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Database, Users, Gauge, Settings } from 'lucide-react'
+import { Database, Users, Gauge, Settings, FileSearch } from 'lucide-react'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -77,7 +77,7 @@ export default function AppNav() {
     (role === 'admin' || can('Consulta em lote')) && {
       href: '/consulta-lote',
       label: 'Consulta em lote',
-      icon: Settings,
+      icon: FileSearch,
       isActive: pathname?.startsWith('/consulta-lote') ?? false,
     },
   ].filter(Boolean)
