@@ -62,13 +62,27 @@ export default function ConfiguracaoPage() {
     })()
   }, [])
 
-  const saveList = async () => {
+  const saveValorPagoList = async () => {
     try {
-      const res = await fetch('/api/global-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valorPagoList: list }) })
+      const res = await fetch('/api/global-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valorPagoList: list }) })
       if (res.ok) {
         setMessage('Configurações salvas')
         setTimeout(() => setMessage(''), 2000)
       }
+    } catch {}
+  }
+
+  const saveBanks = async () => {
+    try {
+      const res = await fetch('/api/global-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ banks }) })
+      if (res.ok) { setMessage('Configurações salvas'); setTimeout(()=>setMessage(''),2000) }
+    } catch {}
+  }
+
+  const saveProducts = async () => {
+    try {
+      const res = await fetch('/api/global-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ products }) })
+      if (res.ok) { setMessage('Configurações salvas'); setTimeout(()=>setMessage(''),2000) }
     } catch {}
   }
 
@@ -155,7 +169,7 @@ export default function ConfiguracaoPage() {
                   const item = { table, sumColumn, cond: { column: condColumn, type: condType, value: condValue } }
                   setList((prev) => [...prev, item])
                 }}>Adicionar à lista</Button>
-                <Button onClick={saveList} disabled={list.length === 0}>Salvar lista</Button>
+                <Button onClick={saveValorPagoList} disabled={list.length === 0}>Salvar lista</Button>
               </div>
             </div>
             {message && <div className="text-emerald-600 text-sm">{message}</div>}
@@ -241,7 +255,7 @@ export default function ConfiguracaoPage() {
                 ))}
               </div>
               <div className="flex justify-end">
-                <Button onClick={saveList}>Salvar configurações</Button>
+                <Button onClick={saveBanks}>Salvar configurações</Button>
               </div>
             </CardContent>
           </Card>
@@ -274,7 +288,7 @@ export default function ConfiguracaoPage() {
                 ))}
               </div>
               <div className="flex justify-end">
-                <Button onClick={saveList}>Salvar produtos</Button>
+                <Button onClick={saveProducts}>Salvar produtos</Button>
               </div>
             </CardContent>
           </Card>

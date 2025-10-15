@@ -22,6 +22,8 @@ export default function App() {
   const pageSize = 100
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
+  const [filtersList, setFiltersList] = useState([])
+  const [exportingAll, setExportingAll] = useState(false)
   
   // Filter state
   const [filterColumn, setFilterColumn] = useState('')
@@ -92,9 +94,14 @@ export default function App() {
       let url = `/api/table-data?table=${selectedTable}&page=${page}&pageSize=${pageSize}`
       if (periodStart) url += `&periodStart=${encodeURIComponent(periodStart)}`
       if (periodEnd) url += `&periodEnd=${encodeURIComponent(periodEnd)}`
-      
+
       if (applyFilter && filterColumn && filterValue) {
-        url += `&filterColumn=${filterColumn}&filterValue=${encodeURIComponent(filterValue)}&filterType=${filterType}`
+        url += `&filterColumn=${encodeURIComponent(filterColumn)}&filterValue=${encodeURIComponent(filterValue)}&filterType=${encodeURIComponent(filterType)}`
+      }
+      if (filtersList && filtersList.length > 0) {
+        try {
+          url += `&filters=${encodeURIComponent(JSON.stringify(filtersList))}`
+        } catch {}
       }
       
       const { data: sessionData } = await supabase.auth.getSession()
@@ -132,6 +139,7 @@ export default function App() {
     setFilterType('contains')
     setPeriodStart('')
     setPeriodEnd('')
+    setFiltersList([])
     setPage(1)
     fetchTableData(false)
   }
@@ -214,6 +222,54 @@ export default function App() {
     )
   }
 
+  const exportAll = async () => {
+    if (!selectedTable) return
+    try {
+      setExportingAll(true)
+      // Build base url with filters and period
+      const baseParams = new URLSearchParams()
+      baseParams.set('table', selectedTable)
+      baseParams.set('pageSize', String(pageSize))
+      if (periodStart) baseParams.set('periodStart', periodStart)
+      if (periodEnd) baseParams.set('periodEnd', periodEnd)
+      if (filtersList && filtersList.length > 0) {
+        try { baseParams.set('filters', JSON.stringify(filtersList)) } catch {}
+      }
+      if (filterColumn && filterValue) {
+        baseParams.set('filterColumn', filterColumn)
+        baseParams.set('filterValue', String(filterValue))
+        baseParams.set('filterType', filterType)
+      }
+
+      // First page to get totalPages
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const firstRes = await fetch(`/api/table-data?${baseParams.toString()}&page=1`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+      const firstJson = await firstRes.json()
+      if (!firstRes.ok) {
+        throw new Error(firstJson?.error || 'Falha ao buscar dados para exportação')
+      }
+      const allRows = [...(firstJson?.data || [])]
+      const totalPagesLocal = Math.max(1, parseInt(firstJson?.totalPages || 1, 10))
+
+      for (let p = 2; p <= totalPagesLocal; p++) {
+        const res = await fetch(`/api/table-data?${baseParams.toString()}&page=${p}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+        const json = await res.json()
+        if (res.ok) {
+          const rows = Array.isArray(json?.data) ? json.data : []
+          if (rows.length) allRows.push(...rows)
+        }
+      }
+
+      exportToCsv(allRows, `clientes_${selectedTable}_all.csv`)
+    } catch (e) {
+      console.error('Export all failed', e)
+      setError(e?.message || 'Falha na exportação')
+    } finally {
+      setExportingAll(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <div className="container mx-auto py-8 px-4">
@@ -228,10 +284,10 @@ export default function App() {
             <div className="flex items-center gap-2">
               <button
                 className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded border hover:bg-muted"
-                disabled={!selectedTable || tableData.length === 0}
-                onClick={() => exportToCsv(tableData, `clientes_${selectedTable}_p${page}.csv`)}
+                disabled={!selectedTable || loading || exportingAll}
+                onClick={() => exportAll()}
               >
-                <Download className="h-4 w-4" /> Exportar Excel
+                <Download className="h-4 w-4" /> Exportar Excel (tudo)
               </button>
             </div>
           </div>
@@ -326,9 +382,13 @@ export default function App() {
                       <Button variant="outline" onClick={clearFilter} disabled={!filterColumn && !filterValue && filtersList.length===0 && !periodStart && !periodEnd}>
                         <X className="h-4 w-4" /> Limpar
                       </Button>
-                      <Button variant="outline" onClick={exportAll} disabled={loading || !selectedTable}>
+                      <Button variant="outline" onClick={exportAll} disabled={loading || exportingAll || !selectedTable}>
                         <Download className="h-4 w-4 mr-2" /> Exportar (tudo)
                       </Button>
+                    </div>
+                    <div className="md:col-span-6 flex items-center gap-3 mt-2">
+                      <Badge variant="outline">Total: {total}</Badge>
+                      {exportingAll && <span className="text-xs text-muted-foreground">Exportando tudo...</span>}
                     </div>
                     {filtersList.length > 0 && (
                       <div className="md:col-span-6 flex flex-wrap gap-2">

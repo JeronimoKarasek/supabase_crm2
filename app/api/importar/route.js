@@ -77,17 +77,39 @@ export async function GET(request) {
   const url = new URL(request.url)
   const downloadId = url.searchParams.get('downloadId')
   if (downloadId) {
-    // Export from Supabase table 'importar' for this user's lote_id
+    // Export all columns from Supabase table 'importar' for this user's lote_id
     const { data, error } = await supabaseAdmin
       .from('importar')
-      .select('nome,telefone,cpf,cliente,produto,banco_simulado,lote_id')
+      .select('*')
       .eq('cliente', user.email)
       .eq('lote_id', downloadId)
       .limit(100000)
     if (error) return NextResponse.json({ error: 'Export failed', details: error.message }, { status: 500 })
-    const headers = ['nome','telefone','cpf','cliente','produto','banco_simulado']
     const rows = Array.isArray(data) ? data : []
-    const csv = [headers.join(',')].concat(rows.map(r => [r.nome,r.telefone,r.cpf,r.cliente,r.produto,r.banco_simulado].join(','))).join('\n')
+    // Build headers as union of keys across rows, preserving first-row order first
+    let headers = []
+    if (rows.length > 0) {
+      const first = Object.keys(rows[0])
+      const set = new Set(first)
+      headers = [...first]
+      for (let i = 1; i < rows.length; i++) {
+        const ks = Object.keys(rows[i] || {})
+        for (const k of ks) { if (!set.has(k)) { set.add(k); headers.push(k) } }
+      }
+    }
+    const esc = (val) => {
+      if (val === null || typeof val === 'undefined') return ''
+      const s = String(val)
+      if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"'
+      return s
+    }
+    const lines = []
+    if (headers.length) lines.push(headers.map(esc).join(','))
+    for (const row of rows) {
+      const line = headers.map((h) => esc(row[h]))
+      lines.push(line.join(','))
+    }
+    const csv = lines.join('\n')
     return new NextResponse(csv, { status: 200, headers: { 'Content-Type': 'text/csv; charset=utf-8' } })
   }
   // List lots for this user

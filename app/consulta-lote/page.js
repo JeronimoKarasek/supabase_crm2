@@ -78,7 +78,9 @@ export default function ConsultaLotePage() {
   }
 
   const download = async (id) => {
-    const res = await fetch(`/api/importar?downloadId=${encodeURIComponent(id)}`)
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData?.session?.access_token
+    const res = await fetch(`/api/importar?downloadId=${encodeURIComponent(id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
