@@ -130,6 +130,17 @@ export async function GET(request) {
       const filterColumn = searchParams.get('filterColumn')
       const filterValue = searchParams.get('filterValue')
       const filterType = searchParams.get('filterType') || 'contains'
+      // Optional multiple filters as JSON array passed via `filters`
+      let multiFilters = []
+      const filtersParam = searchParams.get('filters')
+      if (filtersParam) {
+        try {
+          const parsed = JSON.parse(filtersParam)
+          if (Array.isArray(parsed)) {
+            multiFilters = parsed.filter(f => f && f.column && typeof f.value !== 'undefined')
+          }
+        } catch {}
+      }
       const periodStart = searchParams.get('periodStart')
       const periodEnd = searchParams.get('periodEnd')
       const dateColumn = 'horario da ultima resposta'
@@ -155,9 +166,15 @@ export async function GET(request) {
 
       let query = supabaseAdmin.from(tableName).select('*', { count: 'exact' })
 
-      // Apply filters if provided
+      // Apply filters if provided (single)
       if (filterColumn && filterValue) {
         query = applyFilterToQuery(query, { column: filterColumn, type: filterType, value: filterValue })
+      }
+      // Apply multiple filters if provided
+      if (multiFilters.length > 0) {
+        for (const f of multiFilters) {
+          query = applyFilterToQuery(query, { column: f.column, type: f.type || 'contains', value: f.value })
+        }
       }
 
       // Period filter (if provided)

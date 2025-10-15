@@ -310,23 +310,36 @@ export default function App() {
                     <Input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} placeholder="Início" />
                     <Input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} placeholder="Fim" />
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <Button 
                         onClick={applyFilter} 
-                        disabled={loading || (!filterColumn && !periodStart && !periodEnd) || (filterColumn && !filterValue)}
-                        className="flex-1"
+                        disabled={loading || (!filterColumn && !periodStart && !periodEnd)}
                       >
                         <Search className="h-4 w-4 mr-2" />
-                        Apply
+                        Aplicar
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={clearFilter}
-                        disabled={!filterColumn && !filterValue}
-                      >
-                        <X className="h-4 w-4" />
+                      <Button variant="outline" onClick={() => {
+                        if (!filterColumn || !filterValue) return
+                        setFiltersList(prev => [...prev, { column: filterColumn, type: filterType, value: filterValue }])
+                        setFilterColumn(''); setFilterValue(''); setFilterType('contains')
+                      }}>Adicionar filtro</Button>
+                      <Button variant="outline" onClick={clearFilter} disabled={!filterColumn && !filterValue && filtersList.length===0 && !periodStart && !periodEnd}>
+                        <X className="h-4 w-4" /> Limpar
+                      </Button>
+                      <Button variant="outline" onClick={exportAll} disabled={loading || !selectedTable}>
+                        <Download className="h-4 w-4 mr-2" /> Exportar (tudo)
                       </Button>
                     </div>
+                    {filtersList.length > 0 && (
+                      <div className="md:col-span-6 flex flex-wrap gap-2">
+                        {filtersList.map((f, idx) => (
+                          <div key={idx} className="px-2 py-1 border rounded text-xs bg-muted/50 flex items-center gap-2">
+                            <span>{f.column} {getFilterTypeLabel(f.type)} {String(f.value)}</span>
+                            <button className="text-muted-foreground hover:text-destructive" onClick={() => setFiltersList(prev => prev.filter((_,i)=>i!==idx))}>remover</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
