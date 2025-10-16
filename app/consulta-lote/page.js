@@ -63,19 +63,7 @@ export default function ConsultaLotePage() {
     }
   }
 
-  const onDelete = async (id) => {
-    const ok = window.confirm('Excluir base?')
-    if (!ok) return
-    const { data: sessionData } = await supabase.auth.getSession()
-    const token = sessionData?.session?.access_token
-    const res = await fetch('/api/importar', { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id }) })
-    if (res.ok) {
-      // reload list
-      const lres = await fetch('/api/importar', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-      const ljson = await lres.json()
-      if (lres.ok) setList(ljson.items || [])
-    }
-  }
+  // Removido botão de exclusão; mantemos apenas exportação
 
   const download = async (id) => {
     const { data: sessionData } = await supabase.auth.getSession()
@@ -158,7 +146,7 @@ export default function ConsultaLotePage() {
                       </div>
                       <div className="flex gap-2">
                         <Button variant="outline" onClick={() => download(it.id)}>Exportar</Button>
-                        <Button variant="destructive" onClick={() => onDelete(it.id)}>Excluir</Button>
+                        {/* Botão Excluir removido conforme solicitado */}
                       </div>
                     </div>
                   ))}
