@@ -55,6 +55,8 @@ export default function AuthGuard({ children }) {
           if (!(role === 'admin' || hasSector(sectors, 'Acesso Banco'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/consulta-lote')) {
           if (!(role === 'admin' || hasSector(sectors, 'Consulta em lote'))) router.replace(pickDefaultRoute())
+        } else if (pathname.startsWith('/simular-digitar')) {
+          if (!(role === 'admin' || hasSector(sectors, 'Simular/Digitar'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/produtos')) {
           // Produtos acessível a qualquer usuário logado
           // nenhuma restrição adicional
@@ -104,6 +106,8 @@ export default function AuthGuard({ children }) {
           if (!(role === 'admin' || hasSector(sectors, 'Acesso Banco'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/consulta-lote')) {
           if (!(role === 'admin' || hasSector(sectors, 'Consulta em lote'))) router.replace(pickDefaultRoute())
+        } else if (pathname.startsWith('/simular-digitar')) {
+          if (!(role === 'admin' || hasSector(sectors, 'Simular/Digitar'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/produtos')) {
           // Produtos acessível a qualquer usuário logado
         }

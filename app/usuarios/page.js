@@ -42,6 +42,7 @@ export default function UsuariosPage() {
   const [editFilterType, setEditFilterType] = useState('contains')
   const [editFilterValue, setEditFilterValue] = useState('')
   const [editFiltersByTable, setEditFiltersByTable] = useState({})
+  const [editPassword, setEditPassword] = useState('')
 
   const fetchUsers = async () => {
     try {
@@ -250,6 +251,7 @@ export default function UsuariosPage() {
         allowedTables: editAllowedTables,
         filtersByTable: editFiltersByTable,
       }
+      if (editPassword && editPassword.length >= 8) payload.password = editPassword
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
       const res = await fetch('/api/users', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ ...payload, sectors: editSelectedSectors }) })
@@ -257,6 +259,7 @@ export default function UsuariosPage() {
       if (res.ok) {
         setMessage('Usuário atualizado com sucesso.')
         setEditingId('')
+        setEditPassword('')
         await fetchUsers()
       } else {
         setError(data?.error || 'Falha ao atualizar usuário')
@@ -507,8 +510,9 @@ export default function UsuariosPage() {
                       <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
-                  <div className="md:col-span-3 flex gap-2 justify-end">
-                    <Button variant="outline" onClick={() => setEditingId('')}>Cancelar</Button>
+                  <Input type="password" placeholder="Nova senha (opcional)" value={editPassword} onChange={(e)=> setEditPassword(e.target.value)} minLength={8} />
+                  <div className="md:col-span-2 flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => { setEditingId(''); setEditPassword('') }}>Cancelar</Button>
                     <Button onClick={saveEdit} disabled={loading}>{loading ? 'Salvando...' : 'Salvar alterações'}</Button>
                   </div>
                 </div>

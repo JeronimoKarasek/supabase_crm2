@@ -38,6 +38,7 @@ export default function App() {
   const [products, setProducts] = useState([])
   const [sendBank, setSendBank] = useState('')
   const [sendProduct, setSendProduct] = useState('')
+  const [canSendBatch, setCanSendBatch] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [addForm, setAddForm] = useState({})
   const [addLoading, setAddLoading] = useState(false)
@@ -65,6 +66,31 @@ export default function App() {
         }
       } catch {}
     })()
+  }, [])
+
+  // Determine permission to send to batch (sector: Consulta em lote or admin)
+  useEffect(() => {
+    let active = true
+    const norm = (s) => { try { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() } catch { return String(s || '').toLowerCase() } }
+    const check = async () => {
+      try {
+        const { data } = await supabase.auth.getUser()
+        const user = data?.user
+        const role = user?.user_metadata?.role || 'viewer'
+        const sectors = Array.isArray(user?.user_metadata?.sectors) ? user.user_metadata.sectors : []
+        const has = sectors.some((s) => norm(s) === norm('Consulta em lote'))
+        if (active) setCanSendBatch(role === 'admin' || has)
+      } catch { if (active) setCanSendBatch(false) }
+    }
+    check()
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      const user = session?.user
+      const role = user?.user_metadata?.role || 'viewer'
+      const sectors = Array.isArray(user?.user_metadata?.sectors) ? user.user_metadata.sectors : []
+      const has = sectors.some((s) => norm(s) === norm('Consulta em lote'))
+      if (active) setCanSendBatch(role === 'admin' || has)
+    })
+    return () => { active = false; sub?.subscription?.unsubscribe?.() }
   }, [])
 
   // Load columns for import dialog when table changes
@@ -608,9 +634,11 @@ export default function App() {
                       <Button variant="outline" onClick={exportAll} disabled={loading || exportingAll || !selectedTable}>
                         <Download className="h-4 w-4 mr-2" /> Exportar (tudo)
                       </Button>
-                      <Button variant="outline" onClick={() => setSendOpen(true)} disabled={loading || !selectedTable}>
-                        <Send className="h-4 w-4 mr-2" /> Enviar p/ consulta em lote
-                      </Button>
+                      {canSendBatch && (
+                        <Button variant="outline" onClick={() => setSendOpen(true)} disabled={loading || !selectedTable}>
+                          <Send className="h-4 w-4 mr-2" /> Enviar p/ consulta em lote
+                        </Button>
+                      )}
                     </div>
                     <div className="md:col-span-6 flex items-center gap-3 mt-2">
                       <Badge variant="outline">Total: {total}</Badge>
@@ -632,6 +660,7 @@ export default function App() {
             )}
 
             {/* Send to batch Dialog */}
+            {canSendBatch && (
             <Dialog open={sendOpen} onOpenChange={setSendOpen}>
               <DialogContent>
                 <DialogHeader>
@@ -666,6 +695,7 @@ export default function App() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            )}
 
             {/* Add row Dialog */}
             <Dialog open={addOpen} onOpenChange={setAddOpen}>

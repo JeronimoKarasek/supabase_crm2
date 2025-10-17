@@ -46,13 +46,19 @@ export async function PUT(request) {
     if (Array.isArray(body.valorPagoList)) next.valorPagoList = body.valorPagoList
     if (Array.isArray(body.products)) next.products = body.products
     if (Array.isArray(body.banks)) {
-      // Sanitize banks: keep only name/key/fields/webhooks
+      // Sanitize banks and support new fields (compatibility kept)
       next.banks = body.banks.map(b => ({
         key: b.key,
         name: b.name,
         fields: Array.isArray(b.fields) ? b.fields.map(f => ({ key: f.key, label: f.label })) : [],
-        webhookUrl: b.webhookUrl || '',
-        returnWebhookUrl: b.returnWebhookUrl || '',
+        digitarFields: Array.isArray(b.digitarFields) ? b.digitarFields.map(f => ({ key: f.key, label: f.label })) : [],
+        webhookUrl: b.webhookUrl || '', // consulta em lote
+        returnWebhookUrl: b.returnWebhookUrl || '', // callback/status (lote)
+        webhookSimulador: b.webhookSimulador || '',
+        webhookDigitar: b.webhookDigitar || '',
+        webhookProposta: b.webhookProposta || '',
+        forBatch: !!b.forBatch,
+        forSimular: !!b.forSimular,
       }))
     }
     if (typeof body.farolChat === 'object' && body.farolChat !== null) {
@@ -90,8 +96,14 @@ export async function POST(request) {
         key: b.key,
         name: b.name,
         fields: Array.isArray(b.fields) ? b.fields.map(f => ({ key: f.key, label: f.label })) : [],
+        digitarFields: Array.isArray(b.digitarFields) ? b.digitarFields.map(f => ({ key: f.key, label: f.label })) : [],
         webhookUrl: b.webhookUrl || '',
         returnWebhookUrl: b.returnWebhookUrl || '',
+        webhookSimulador: b.webhookSimulador || '',
+        webhookDigitar: b.webhookDigitar || '',
+        webhookProposta: b.webhookProposta || '',
+        forBatch: !!b.forBatch,
+        forSimular: !!b.forSimular,
       }))
     }
     if (typeof body.farolChat === 'object' && body.farolChat !== null) {

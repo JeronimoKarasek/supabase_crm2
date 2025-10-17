@@ -111,7 +111,7 @@ export async function PUT(request) {
     if (!(roleCaller === 'admin' || sectorsCaller.includes('Usuários'))) return forbidden('Acesso ao setor Usuários não permitido')
 
     const body = await request.json()
-    const { id, role, allowedTables, filter, filters, filtersByTable, sectors } = body || {}
+    const { id, role, allowedTables, filter, filters, filtersByTable, sectors, password } = body || {}
 
     if (!id) {
       return NextResponse.json({ error: 'ID do usuário é obrigatório' }, { status: 400 })
@@ -156,9 +156,11 @@ export async function PUT(request) {
       ...(Array.isArray(sectors) ? { sectors } : {}),
     }
 
-    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(id, {
-      user_metadata: newMeta,
-    })
+    const updatePayload = { user_metadata: newMeta }
+    if (typeof password === 'string' && password.length >= 8) {
+      updatePayload.password = password
+    }
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(id, updatePayload)
 
     if (error) {
       console.error('Error updating user:', error)

@@ -247,8 +247,23 @@ export default function ConfiguracaoPage() {
                         const val = e.target.value
                         setBanks(prev => prev.map((x,i) => i===idx ? { ...x, name: val } : x))
                       }} />
-                      <Input placeholder="Webhook (consulta)" value={b.webhookUrl} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookUrl: e.target.value } : x))} />
-                      <Input placeholder="Webhook de retorno" value={b.returnWebhookUrl} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, returnWebhookUrl: e.target.value } : x))} />
+                      <Input placeholder="Webhook (consulta em lote)" value={b.webhookUrl} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookUrl: e.target.value } : x))} />
+                      <Input placeholder="Webhook de retorno (status lote)" value={b.returnWebhookUrl} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, returnWebhookUrl: e.target.value } : x))} />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <Input placeholder="Webhook simulador" value={b.webhookSimulador || ''} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookSimulador: e.target.value } : x))} />
+                      <Input placeholder="Webhook digitar" value={b.webhookDigitar || ''} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookDigitar: e.target.value } : x))} />
+                      <Input placeholder="Webhook proposta (futuro)" value={b.webhookProposta || ''} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookProposta: e.target.value } : x))} />
+                    </div>
+                    <div className="flex gap-4 text-sm">
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={!!b.forBatch} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, forBatch: e.target.checked } : x))} />
+                        Consulta em lote
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={!!b.forSimular} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, forSimular: e.target.checked } : x))} />
+                        Simular/Digitar
+                      </label>
                     </div>
                     <div className="space-y-2">
                       <div className="text-sm font-medium">Campos de credenciais</div>
@@ -261,6 +276,18 @@ export default function ConfiguracaoPage() {
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" onClick={() => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, fields: [...x.fields, { key: '', label: '' }] } : x))}>Adicionar campo</Button>
                         <Button size="sm" variant="destructive" onClick={() => setBanks(prev => prev.filter((_,i)=> i!==idx))}>Remover banco</Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Campos para Digitar</div>
+                      {(b.digitarFields || []).map((f, fi) => (
+                        <div key={fi} className="grid grid-cols-2 gap-2">
+                          <Input placeholder="Label" value={f.label} onChange={(e) => setBanks(prev => prev.map((x,i) => i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, label: e.target.value } : ff) } : x))} />
+                          <Input placeholder="Chave (ex.: conta, agencia, pix)" value={f.key} onChange={(e) => setBanks(prev => prev.map((x,i) => i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, key: e.target.value } : ff) } : x))} />
+                        </div>
+                      ))}
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, digitarFields: [ ...(x.digitarFields || []), { key: '', label: '' } ] } : x))}>Adicionar campo</Button>
                       </div>
                     </div>
                   </div>
@@ -328,3 +355,4 @@ export default function ConfiguracaoPage() {
     </div>
   )
 }
+

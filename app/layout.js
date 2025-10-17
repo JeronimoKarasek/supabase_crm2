@@ -19,6 +19,7 @@ import AppNav from '@/components/app-nav'
 import AuthGuard from '@/components/auth-guard'
 import AppChrome from '@/components/app-chrome'
 import { ThemeProvider } from 'next-themes'
+import FarolChatWidget from '@/components/farolchat-widget'
 
 export const metadata = {
   title: 'CRM - Supabase Viewer',
@@ -34,6 +35,7 @@ export default function RootLayout({ children }) {
             <AppChrome>
               {children}
             </AppChrome>
+            <FarolChatWidget />
           </AuthGuard>
         </ThemeProvider>
       </body>

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag } from 'lucide-react'
+import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag, FileDigit } from 'lucide-react'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -79,6 +79,12 @@ export default function AppNav() {
       label: 'Consulta em lote',
       icon: FileSearch,
       isActive: pathname?.startsWith('/consulta-lote') ?? false,
+    },
+    (role === 'admin' || can('Simular/Digitar')) && {
+      href: '/simular-digitar',
+      label: 'Simular/Digitar',
+      icon: FileDigit,
+      isActive: pathname?.startsWith('/simular-digitar') ?? false,
     },
     // Produtos disponível para todos usuários logados
     {
