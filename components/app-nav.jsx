@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Database, Users, Gauge, Settings, FileSearch } from 'lucide-react'
+import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag } from 'lucide-react'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -79,6 +79,13 @@ export default function AppNav() {
       label: 'Consulta em lote',
       icon: FileSearch,
       isActive: pathname?.startsWith('/consulta-lote') ?? false,
+    },
+    // Produtos disponível para todos usuários logados
+    {
+      href: '/produtos',
+      label: 'Produtos',
+      icon: ShoppingBag,
+      isActive: pathname?.startsWith('/produtos') ?? false,
     },
   ].filter(Boolean)
 

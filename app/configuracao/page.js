@@ -22,6 +22,8 @@ export default function ConfiguracaoPage() {
   const [logoUrl, setLogoUrl] = useState('')
   const [banks, setBanks] = useState([]) // [{key,name,fields:[{key,label}], webhookUrl, returnWebhookUrl}]
   const [products, setProducts] = useState([]) // [string]
+  const [farolUserPrice, setFarolUserPrice] = useState('')
+  const [farolConnPrice, setFarolConnPrice] = useState('')
 
   useEffect(() => {
     ;(async () => {
@@ -57,6 +59,8 @@ export default function ConfiguracaoPage() {
           setLogoUrl(json.settings?.logoUrl || '')
           setBanks(Array.isArray(json.settings?.banks) ? json.settings.banks : [])
           setProducts(Array.isArray(json.settings?.products) ? json.settings.products : [])
+          setFarolUserPrice(String(json.settings?.farolChat?.userPrice ?? ''))
+          setFarolConnPrice(String(json.settings?.farolChat?.connectionPrice ?? ''))
         }
       } catch {}
     })()
@@ -82,6 +86,14 @@ export default function ConfiguracaoPage() {
   const saveProducts = async () => {
     try {
       const res = await fetch('/api/global-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ products }) })
+      if (res.ok) { setMessage('Configurações salvas'); setTimeout(()=>setMessage(''),2000) }
+    } catch {}
+  }
+
+  const saveFarolChat = async () => {
+    try {
+      const payload = { farolChat: { userPrice: farolUserPrice, connectionPrice: farolConnPrice } }
+      const res = await fetch('/api/global-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (res.ok) { setMessage('Configurações salvas'); setTimeout(()=>setMessage(''),2000) }
     } catch {}
   }
@@ -289,6 +301,25 @@ export default function ConfiguracaoPage() {
               </div>
               <div className="flex justify-end">
                 <Button onClick={saveProducts}>Salvar produtos</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* FarolChat pricing */}
+        <div className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>FarolChat</CardTitle>
+              <CardDescription>Defina valores por usuário e por conexão</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Input type="number" step="0.01" placeholder="Valor usuário (R$)" value={farolUserPrice} onChange={(e)=> setFarolUserPrice(e.target.value)} />
+                <Input type="number" step="0.01" placeholder="Valor conexão (R$)" value={farolConnPrice} onChange={(e)=> setFarolConnPrice(e.target.value)} />
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={saveFarolChat}>Salvar valores</Button>
               </div>
             </CardContent>
           </Card>

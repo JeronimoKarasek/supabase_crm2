@@ -55,6 +55,17 @@ export async function PUT(request) {
         returnWebhookUrl: b.returnWebhookUrl || '',
       }))
     }
+    if (typeof body.farolChat === 'object' && body.farolChat !== null) {
+      const fc = body.farolChat
+      const toNumber = (v) => {
+        const n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : Number(v)
+        return isNaN(n) ? 0 : Math.max(0, n)
+      }
+      next.farolChat = {
+        userPrice: toNumber(fc.userPrice),
+        connectionPrice: toNumber(fc.connectionPrice),
+      }
+    }
     await writeSettingsToDb(next)
     const sanitized = { ...next, banks: (next.banks || []).map(b => ({ key: b.key, name: b.name, fields: b.fields })) }
     return NextResponse.json({ settings: sanitized })
@@ -82,6 +93,17 @@ export async function POST(request) {
         webhookUrl: b.webhookUrl || '',
         returnWebhookUrl: b.returnWebhookUrl || '',
       }))
+    }
+    if (typeof body.farolChat === 'object' && body.farolChat !== null) {
+      const fc = body.farolChat
+      const toNumber = (v) => {
+        const n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : Number(v)
+        return isNaN(n) ? 0 : Math.max(0, n)
+      }
+      next.farolChat = {
+        userPrice: toNumber(fc.userPrice),
+        connectionPrice: toNumber(fc.connectionPrice),
+      }
     }
     await writeSettingsToDb(next)
     const sanitized = { ...next, banks: (next.banks || []).map(b => ({ key: b.key, name: b.name, fields: b.fields })) }
