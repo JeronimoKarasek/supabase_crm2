@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag, FileDigit } from 'lucide-react'
+import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag, FileDigit, Send } from 'lucide-react'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -85,6 +85,12 @@ export default function AppNav() {
       label: 'Simular/Digitar',
       icon: FileDigit,
       isActive: pathname?.startsWith('/simular-digitar') ?? false,
+    },
+    (role === 'admin' || can('Disparo API')) && {
+      href: '/disparo-api',
+      label: 'Disparo API',
+      icon: Send,
+      isActive: pathname?.startsWith('/disparo-api') ?? false,
     },
     // Produtos disponível para todos usuários logados
     {
