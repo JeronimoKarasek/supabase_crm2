@@ -22,7 +22,7 @@ import { ThemeProvider } from 'next-themes'
 import FarolChatWidget from '@/components/farolchat-widget'
 
 export const metadata = {
-  title: 'CRM - Supabase Viewer',
+  title: 'FarolTech - Iluminando seu caminho',
   description: 'Visualize e gerencie dados e usuários',
 }
 
@@ -42,3 +42,4 @@ export default function RootLayout({ children }) {
     </html>
   )
 }
+

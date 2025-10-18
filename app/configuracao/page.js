@@ -238,7 +238,7 @@ export default function ConfiguracaoPage() {
               <CardDescription>Defina campos de credenciais e webhooks</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Button variant="outline" onClick={() => setBanks(prev => [...prev, { key: `bank_${Date.now()}`, name: '', fields: [{ key: 'usuario', label: 'Usuário' }, { key: 'senha', label: 'Senha' }], webhookUrl: '', returnWebhookUrl: '' }])}>Adicionar banco</Button>
+              <Button variant="outline" onClick={() => setBanks(prev => [...prev, { key: `bank_${Date.now()}`, name: '', fields: [{ key: 'usuario', label: 'Usuário', required: false }, { key: 'senha', label: 'Senha', required: false }], digitarFields: [], webhookUrl: '', forBatch: true, forSimular: true, productConfigs: [] }])}>Adicionar banco</Button>
               <div className="space-y-4">
                 {banks.map((b, idx) => (
                   <div key={b.key} className="p-3 border rounded space-y-2">
@@ -248,13 +248,9 @@ export default function ConfiguracaoPage() {
                         setBanks(prev => prev.map((x,i) => i===idx ? { ...x, name: val } : x))
                       }} />
                       <Input placeholder="Webhook (consulta em lote)" value={b.webhookUrl} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookUrl: e.target.value } : x))} />
-                      <Input placeholder="Webhook de retorno (status lote)" value={b.returnWebhookUrl} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, returnWebhookUrl: e.target.value } : x))} />
+                      {/* Removido webhook de retorno conforme solicitado */}
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                      <Input placeholder="Webhook simulador" value={b.webhookSimulador || ''} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookSimulador: e.target.value } : x))} />
-                      <Input placeholder="Webhook digitar" value={b.webhookDigitar || ''} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookDigitar: e.target.value } : x))} />
-                      <Input placeholder="Webhook proposta (futuro)" value={b.webhookProposta || ''} onChange={(e) => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookProposta: e.target.value } : x))} />
-                    </div>
+                    {/* Removidos webhooks simulador/digitar no topo. Configurar por produto abaixo. */}
                     <div className="flex gap-4 text-sm">
                       <label className="flex items-center gap-2">
                         <input type="checkbox" checked={!!b.forBatch} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, forBatch: e.target.checked } : x))} />
@@ -268,9 +264,26 @@ export default function ConfiguracaoPage() {
                     <div className="space-y-2">
                       <div className="text-sm font-medium">Campos de credenciais</div>
                       {b.fields.map((f, fi) => (
-                        <div key={fi} className="grid grid-cols-2 gap-2">
-                          <Input placeholder="Label" value={f.label} onChange={(e) => setBanks(prev => prev.map((x,i) => i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, label: e.target.value } : ff) } : x))} />
-                          <Input placeholder="Chave (ex.: id_client)" value={f.key} onChange={(e) => setBanks(prev => prev.map((x,i) => i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, key: e.target.value } : ff) } : x))} />
+                        <div key={fi} className="space-y-1">
+                          <div className="grid grid-cols-3 gap-2 items-center">
+                            <Input placeholder="Label" value={f.label} onChange={(e) => setBanks(prev => prev.map((x,i) => i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, label: e.target.value } : ff) } : x))} />
+                            <Input placeholder="Chave (ex.: id_client)" value={f.key} onChange={(e) => setBanks(prev => prev.map((x,i) => i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, key: e.target.value } : ff) } : x))} />
+                            <div className="flex items-center gap-4">
+                              <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!f.required} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, required: e.target.checked } : ff) } : x))} /> Obrigatório</label>
+                              <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={f.type === 'select'} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, type: e.target.checked ? 'select' : 'text' } : ff) } : x))} /> Lista</label>
+                            </div>
+                          </div>
+                          {f.type === 'select' && (() => {
+                            const optionsText = f._optionsText ?? (Array.isArray(f.options) ? f.options.join(', ') : '')
+                            return (
+                              <Input
+                                placeholder="Opções (separadas por vírgula)"
+                                value={optionsText}
+                                onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, _optionsText: e.target.value } : ff) } : x))}
+                                onBlur={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, _optionsText: e.target.value, options: e.target.value.split(',').map(s=>s.trim()).filter(Boolean) } : ff) } : x))}
+                              />
+                            )
+                          })()}
                         </div>
                       ))}
                       <div className="flex gap-2">
@@ -281,14 +294,73 @@ export default function ConfiguracaoPage() {
                     <div className="space-y-2">
                       <div className="text-sm font-medium">Campos para Digitar</div>
                       {(b.digitarFields || []).map((f, fi) => (
-                        <div key={fi} className="grid grid-cols-2 gap-2">
-                          <Input placeholder="Label" value={f.label} onChange={(e) => setBanks(prev => prev.map((x,i) => i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, label: e.target.value } : ff) } : x))} />
-                          <Input placeholder="Chave (ex.: conta, agencia, pix)" value={f.key} onChange={(e) => setBanks(prev => prev.map((x,i) => i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, key: e.target.value } : ff) } : x))} />
+                        <div key={fi} className="space-y-1">
+                          <div className="grid grid-cols-3 gap-2 items-center">
+                            <Input placeholder="Label" value={f.label} onChange={(e) => setBanks(prev => prev.map((x,i) => i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, label: e.target.value } : ff) } : x))} />
+                            <Input placeholder="Chave (ex.: conta, agencia, pix)" value={f.key} onChange={(e) => setBanks(prev => prev.map((x,i) => i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, key: e.target.value } : ff) } : x))} />
+                            <div className="flex items-center gap-4">
+                              <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!f.required} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, required: e.target.checked } : ff) } : x))} /> Obrigatório</label>
+                              <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={f.type === 'select'} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, type: e.target.checked ? 'select' : 'text' } : ff) } : x))} /> Lista</label>
+                            </div>
+                          </div>
+                          {f.type === 'select' && (() => {
+                            const optionsText = f._optionsText ?? (Array.isArray(f.options) ? f.options.join(', ') : '')
+                            return (
+                              <Input
+                                placeholder="Opções (separadas por vírgula)"
+                                value={optionsText}
+                                onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, _optionsText: e.target.value } : ff) } : x))}
+                                onBlur={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, _optionsText: e.target.value, options: e.target.value.split(',').map(s=>s.trim()).filter(Boolean) } : ff) } : x))}
+                              />
+                            )
+                          })()}
                         </div>
                       ))}
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" onClick={() => setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, digitarFields: [ ...(x.digitarFields || []), { key: '', label: '' } ] } : x))}>Adicionar campo</Button>
                       </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Produtos deste banco</div>
+                      {(products || []).map((p, pi) => {
+                        const name = typeof p === 'string' ? p : (p?.name || '')
+                        const list = b.productConfigs || []
+                        const cfg = list.find(pc => pc.product === name) || null
+                        return (
+                          <div key={pi} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-center">
+                            <label className="flex items-center gap-2 md:col-span-2">
+                              <input type="checkbox" checked={!!cfg} onChange={(e)=> setBanks(prev => prev.map((x,i)=> {
+                                if (i!==idx) return x
+                                const cur = Array.isArray(x.productConfigs) ? [...x.productConfigs] : []
+                                const ix = cur.findIndex(pc => pc.product === name)
+                                if (e.target.checked) {
+                                  if (ix === -1) cur.push({ product: name, webhookSimulador: '', webhookDigitar: '' })
+                                } else {
+                                  if (ix !== -1) cur.splice(ix,1)
+                                }
+                                return { ...x, productConfigs: cur }
+                              }))} />
+                              <span className="text-sm">{name}</span>
+                            </label>
+                            <Input placeholder="Webhook simulador (produto)" value={cfg?.webhookSimulador || ''} onChange={(e)=> setBanks(prev => prev.map((x,i)=> {
+                              if (i!==idx) return x
+                              const cur = Array.isArray(x.productConfigs) ? [...x.productConfigs] : []
+                              const ix = cur.findIndex(pc => pc.product === name)
+                              if (ix === -1) cur.push({ product: name, webhookSimulador: e.target.value, webhookDigitar: '' })
+                              else cur[ix] = { ...cur[ix], webhookSimulador: e.target.value }
+                              return { ...x, productConfigs: cur }
+                            }))} />
+                            <Input placeholder="Webhook digitar (produto)" value={cfg?.webhookDigitar || ''} onChange={(e)=> setBanks(prev => prev.map((x,i)=> {
+                              if (i!==idx) return x
+                              const cur = Array.isArray(x.productConfigs) ? [...x.productConfigs] : []
+                              const ix = cur.findIndex(pc => pc.product === name)
+                              if (ix === -1) cur.push({ product: name, webhookSimulador: '', webhookDigitar: e.target.value })
+                              else cur[ix] = { ...cur[ix], webhookDigitar: e.target.value }
+                              return { ...x, productConfigs: cur }
+                            }))} />
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 ))}
@@ -305,7 +377,7 @@ export default function ConfiguracaoPage() {
           <Card>
             <CardHeader>
               <CardTitle>Configurar Produtos</CardTitle>
-              <CardDescription>Adicione produtos para uso em Consulta em lote</CardDescription>
+              <CardDescription>Defina produtos e onde serão usados</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex gap-2 items-center">
@@ -314,17 +386,24 @@ export default function ConfiguracaoPage() {
                   const inp = document.getElementById('newProduct')
                   const val = inp?.value?.trim()
                   if (!val) return
-                  setProducts(prev => Array.from(new Set([...prev, val])))
+                  setProducts(prev => ([...prev, { name: val, forBatch: true, forSimular: true }]))
                   inp.value=''
                 }}>Adicionar</Button>
               </div>
-              <div className="flex gap-2 flex-wrap">
-                {products.map((p, i) => (
-                  <div key={i} className="px-2 py-1 rounded border bg-muted/30 flex items-center gap-2">
-                    <span className="text-sm">{p}</span>
-                    <Button size="sm" variant="ghost" onClick={() => setProducts(prev => prev.filter((x)=> x!==p))}>Remover</Button>
-                  </div>
-                ))}
+              <div className="space-y-2">
+                {(products || []).map((p, i) => {
+                  const name = typeof p === 'string' ? p : (p?.name || '')
+                  const forBatch = typeof p === 'string' ? true : !!p.forBatch
+                  const forSim = typeof p === 'string' ? true : !!p.forSimular
+                  return (
+                    <div key={i} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-center">
+                      <Input value={name} onChange={(e)=> setProducts(prev => prev.map((x,xi)=> xi===i ? (typeof x === 'string' ? { name: e.target.value, forBatch, forSimular: forSim } : { ...x, name: e.target.value }) : x))} />
+                      <label className="text-sm flex items-center gap-2"><input type="checkbox" checked={forBatch} onChange={(e)=> setProducts(prev => prev.map((x,xi)=> xi===i ? (typeof x === 'string' ? { name, forBatch: e.target.checked, forSimular: forSim } : { ...x, forBatch: e.target.checked }) : x))} /> Consulta em lote</label>
+                      <label className="text-sm flex items-center gap-2"><input type="checkbox" checked={forSim} onChange={(e)=> setProducts(prev => prev.map((x,xi)=> xi===i ? (typeof x === 'string' ? { name, forBatch, forSimular: e.target.checked } : { ...x, forSimular: e.target.checked }) : x))} /> Simular/Digitar</label>
+                      <Button size="sm" variant="destructive" onClick={() => setProducts(prev => prev.filter((_,xi)=> xi!==i))}>Remover</Button>
+                    </div>
+                  )
+                })}
               </div>
               <div className="flex justify-end">
                 <Button onClick={saveProducts}>Salvar produtos</Button>
@@ -342,8 +421,8 @@ export default function ConfiguracaoPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Input type="number" step="0.01" placeholder="Valor usuário (R$)" value={farolUserPrice} onChange={(e)=> setFarolUserPrice(e.target.value)} />
-                <Input type="number" step="0.01" placeholder="Valor conexão (R$)" value={farolConnPrice} onChange={(e)=> setFarolConnPrice(e.target.value)} />
+                <Input type="text" inputMode="decimal" placeholder="Valor usuário (R$)" value={farolUserPrice} onChange={(e)=> setFarolUserPrice(e.target.value)} />
+                <Input type="text" inputMode="decimal" placeholder="Valor conexão (R$)" value={farolConnPrice} onChange={(e)=> setFarolConnPrice(e.target.value)} />
               </div>
               <div className="flex justify-end">
                 <Button onClick={saveFarolChat}>Salvar valores</Button>

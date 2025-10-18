@@ -48,9 +48,20 @@ export default function AcessoBancoPage() {
               <div key={b.key} className="p-3 border rounded space-y-2">
                 <div className="font-medium">{b.name}</div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {(b.fields || []).map((f, idx) => (
-                    <Input key={idx} placeholder={f.label || f.key} value={creds?.[b.key]?.[f.key] || ''} onChange={(e) => setCreds(prev => ({ ...prev, [b.key]: { ...(prev[b.key]||{}), [f.key]: e.target.value } }))} />
-                  ))}
+                  {(b.fields || []).map((f, idx) => {
+                    const val = creds?.[b.key]?.[f.key] || ''
+                    if (f.type === 'select' && Array.isArray(f.options) && f.options.length > 0) {
+                      return (
+                        <select key={idx} className="border rounded h-10 px-2 bg-background" value={val} onChange={(e)=> setCreds(prev => ({ ...prev, [b.key]: { ...(prev[b.key]||{}), [f.key]: e.target.value } }))}>
+                          <option value="">{f.label || f.key}</option>
+                          {f.options.map((o,i)=> <option key={i} value={o}>{o}</option>)}
+                        </select>
+                      )
+                    }
+                    return (
+                      <Input key={idx} placeholder={f.label || f.key} value={val} onChange={(e) => setCreds(prev => ({ ...prev, [b.key]: { ...(prev[b.key]||{}), [f.key]: e.target.value } }))} />
+                    )
+                  })}
                 </div>
               </div>
             ))}

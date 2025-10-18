@@ -109,7 +109,12 @@ export default function ConsultaLotePage() {
                   <SelectValue placeholder="Produto" />
                 </SelectTrigger>
                 <SelectContent>
-                  {products.map((p,i) => <SelectItem key={i} value={p}>{p}</SelectItem>)}
+                  {products.map((p,i) => {
+                    const name = typeof p === 'string' ? p : (p?.name || '')
+                    return (
+                      <SelectItem key={i} value={name}>{name}</SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
               <Select value={bank} onValueChange={setBank}>

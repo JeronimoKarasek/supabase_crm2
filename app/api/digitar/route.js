@@ -20,7 +20,7 @@ export async function POST(request) {
     const user = await getUserFromRequest(request)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const body = await request.json()
-    const { bankKey, cpf, payload } = body || {}
+    const { bankKey, cpf, payload, product } = body || {}
     if (!bankKey || !cpf) return NextResponse.json({ error: 'bankKey e cpf são obrigatórios' }, { status: 400 })
     const settings = await readSettings()
     const banks = Array.isArray(settings?.banks) ? settings.banks : []
@@ -36,7 +36,7 @@ export async function POST(request) {
       .single()
     const credentials = credRow?.credentials || {}
 
-    const res = await fetch(bank.webhookDigitar, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cpf, email: user.email, credentials, data: payload || {} }) })
+    const res = await fetch(webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cpf, email: user.email, credentials, data: payload || {}, product }) })
     const json = await res.json().catch(() => ({}))
     if (!res.ok) return NextResponse.json({ error: json?.error || 'Falha no webhook' }, { status: 400 })
     return NextResponse.json({ ok: true, response: json })
