@@ -10,8 +10,10 @@ import { supabase } from '@/lib/supabase'
 export default function SimularDigitarPage() {
   const [cpf, setCpf] = useState('')
   const [banks, setBanks] = useState([])
-  const [results, setResults] = useState([]) // [{bankKey, bankName, products:[{product, data|error}]}]
+  const [credsByBank, setCredsByBank] = useState({})
+  const [results, setResults] = useState([]) // [{bankKey, bankName, products:[{product, data|error, loading?}]}]
   const [loading, setLoading] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
   const [open, setOpen] = useState(false)
   const [currentBank, setCurrentBank] = useState(null)
   const [currentProduct, setCurrentProduct] = useState('')
@@ -31,6 +33,76 @@ export default function SimularDigitarPage() {
       } catch {}
     })()
   }, [])
+
+  // carrega credenciais por banco (para filtrar apenas os que possuem senha/cred salvo)
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData?.session?.access_token
+        const res = await fetch('/api/banks/credentials', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+        const json = await res.json()
+        if (res.ok) setCredsByBank(json?.credentials || {})
+      } catch {}
+    })()
+  }, [])
+
+  // execução paralela, atualizando conforme cada webhook responde
+  const callAllStreaming = async () => {
+    if (!cpf) { setMessage('Informe o CPF'); setTimeout(()=>setMessage(''), 2000); return }
+    const hasCred = (key) => {
+      const c = credsByBank?.[key]
+      return c && Object.keys(c || {}).length > 0
+    }
+    const target = (banks || []).filter(b => b.forSimular && hasCred(b.key))
+    const initial = target.map(b => {
+      const cfgs = Array.isArray(b.productConfigs) && b.productConfigs.length ? b.productConfigs : [{ product: 'default' }]
+      return { bankKey: b.key, bankName: b.name || b.key, products: cfgs.map(pc => ({ product: pc.product || 'default', loading: true })) }
+    })
+    setResults(initial)
+
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData?.session?.access_token
+    const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+
+    const tasks = []
+    for (const b of target) {
+      const cfgs = Array.isArray(b.productConfigs) && b.productConfigs.length ? b.productConfigs : [{ product: null }]
+      for (const pc of cfgs) {
+        const prod = pc.product
+        const body = { cpf, bankKey: b.key, ...(prod ? { product: prod } : {}) }
+        tasks.push({ bankKey: b.key, product: prod || 'default', promise: fetch('/api/simular', { method: 'POST', headers, body: JSON.stringify(body) }) })
+      }
+    }
+    setLoading(true)
+    setPendingCount(tasks.length)
+    for (const t of tasks) {
+      t.promise
+        .then(async (res) => {
+          const json = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error(json?.error || json?.message || `HTTP ${res.status}`)
+          const updatedBank = json.results?.[0]
+          setResults(prev => prev.map(r => {
+            if (r.bankKey !== t.bankKey) return r
+            const idx = r.products.findIndex(p => p.product === t.product)
+            const prodVal = (updatedBank?.products?.[0]) || { product: t.product, error: 'Sem dados' }
+            const next = [...r.products]
+            next[idx >= 0 ? idx : 0] = { ...prodVal, loading: false }
+            return { ...r, products: next }
+          }))
+        })
+        .catch((e) => {
+          setResults(prev => prev.map(r => {
+            if (r.bankKey !== t.bankKey) return r
+            const idx = r.products.findIndex(p => p.product === t.product)
+            const next = [...r.products]
+            next[idx >= 0 ? idx : 0] = { product: t.product, error: e.message, loading: false }
+            return { ...r, products: next }
+          }))
+        })
+        .finally(() => setPendingCount(c => { const n = Math.max(0, c - 1); if (n === 0) setLoading(false); return n }))
+    }
+  }
 
   const callAll = async () => {
     if (!cpf) { setMessage('Informe o CPF'); setTimeout(()=>setMessage(''), 2000); return }
@@ -98,6 +170,27 @@ export default function SimularDigitarPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Falha ao enviar digitação')
       setOpen(false)
+      // Extrai link retornado pelo webhook e anexa ao cartão
+      const resp = json?.response || {}
+      const urlKnown = resp.link || resp.url || resp.proposta_url || resp.propostaLink || resp.proposta || resp.pdf || resp.contrato || ''
+      const findFirstUrl = (obj) => {
+        if (!obj || typeof obj !== 'object') return ''
+        for (const [k,v] of Object.entries(obj)) {
+          if (typeof v === 'string' && v.startsWith('http')) return v
+          if (v && typeof v === 'object') { const r = findFirstUrl(v); if (r) return r }
+        }
+        return ''
+      }
+      const url = (typeof urlKnown === 'string' && urlKnown.startsWith('http')) ? urlKnown : findFirstUrl(resp)
+      const mensagem = resp.mensagem || resp.message || resp.msg || ''
+      setResults(prev => prev.map(r => {
+        if (r.bankKey !== (currentBank?.key)) return r
+        const next = (r.products || []).map(p => {
+          if (p.product !== currentProduct) return p
+          return { ...p, submit: { url, mensagem, raw: resp } }
+        })
+        return { ...r, products: next }
+      }))
       setMessage('Enviado com sucesso')
       setTimeout(()=>setMessage(''), 2000)
     } catch (e) {
@@ -119,9 +212,9 @@ export default function SimularDigitarPage() {
           <CardContent>
             <div className="flex flex-col md:flex-row gap-3 items-start md:items-end">
               <div className="flex-1">
-                <Input placeholder="CPF" value={cpf} onChange={(e)=> setCpf(e.target.value)} />
+                <Input placeholder="CPF" value={cpf} onChange={(e)=> setCpf(e.target.value)} onKeyDown={(e)=> { if (e.key==='Enter') callAllStreaming() }} />
               </div>
-              <Button onClick={callAll} disabled={loading}>{loading ? 'Consultando...' : 'Consultar'}</Button>
+              <Button onClick={callAllStreaming} disabled={loading}>{loading ? `Consultando (${pendingCount})...` : 'Consultar'}</Button>
             </div>
             {message && <div className="mt-2 text-amber-600 text-sm">{message}</div>}
           </CardContent>
@@ -152,7 +245,12 @@ export default function SimularDigitarPage() {
                             {canDigit(item) && <Button onClick={() => openDigitar(r, item.product)}>Digitar</Button>}
                           </div>
                         </div>
-                        {item.error ? (
+                        {item.loading ? (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span className="inline-block h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            Carregando...
+                          </div>
+                        ) : item.error ? (
                           <div className="text-destructive text-sm">{item.error}</div>
                         ) : (
                           <div className="space-y-2 text-sm">
@@ -165,6 +263,17 @@ export default function SimularDigitarPage() {
                               {typeof d.prazo !== 'undefined' && <div><span className="font-medium">Prazo:</span> {String(d.prazo)}</div>}
                               {typeof d.valor_bloqueado !== 'undefined' && <div><span className="font-medium">Valor bloqueado:</span> {String(d.valor_bloqueado)}</div>}
                             </div>
+                            {item.submit && (item.submit.url || item.submit.mensagem) ? (
+                              <div className="border rounded p-2 bg-muted/30">
+                                <div className="text-xs font-medium mb-1">Proposta</div>
+                                {item.submit.url ? (
+                                  <div><a className="text-primary underline" href={item.submit.url} target="_blank" rel="noreferrer">Abrir proposta</a></div>
+                                ) : null}
+                                {item.submit.mensagem ? (
+                                  <div className="text-xs text-muted-foreground">{item.submit.mensagem}</div>
+                                ) : null}
+                              </div>
+                            ) : null}
                             {(() => {
                               const known = new Set(['mensagem','valor_cliente','valor_liberado','taxa','tabela','prazo','valor_bloqueado','_raw'])
                               const extra = Object.entries(d._raw || {}).filter(([k]) => !known.has(k))
