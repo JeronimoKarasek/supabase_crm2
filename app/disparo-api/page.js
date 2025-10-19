@@ -49,6 +49,7 @@ export default function DisparoApiPage() {
   // Disparo/import
   const [csvText, setCsvText] = useState('')
   const [csvRows, setCsvRows] = useState([])
+  const [countryCode, setCountryCode] = useState('55')
   const [selectedCredentialId, setSelectedCredentialId] = useState('')
   const [phoneNumbers, setPhoneNumbers] = useState([])
   const [selectedPhoneNumberId, setSelectedPhoneNumberId] = useState('')
@@ -56,6 +57,7 @@ export default function DisparoApiPage() {
   const [templateName, setTemplateName] = useState('')
   const [templateLanguage, setTemplateLanguage] = useState('pt_BR')
   const [batchId, setBatchId] = useState('')
+  const [campaignsRefreshKey, setCampaignsRefreshKey] = useState(0)
 
   // Reports
   const [report, setReport] = useState({
@@ -66,15 +68,54 @@ export default function DisparoApiPage() {
   })
 
   const parseCsv = (text) => {
-    const lines = text.split(/\r?\n/).filter(Boolean)
+    if (!text) return []
+    // remove BOM if present
+    text = text.replace(/^\uFEFF/, '')
+
+    const rawLines = text.split(/\r?\n/)
+    const lines = rawLines.filter(l => l.trim().length > 0)
     if (!lines.length) return []
-    const header = lines[0].split(',').map(h => h.trim())
+
+    // autodetect delimiter among ; , \t |
+    const candidates = [';', ',', '\t', '|'].map(s => s === '\\t' ? '\t' : s)
+    const scoreDelim = (d) => {
+      const sample = lines.slice(0, Math.min(lines.length, 3))
+      return sample.reduce((acc, l) => acc + (l.split(d).length - 1), 0)
+    }
+    let delim = ','
+    let best = -1
+    for (const c of candidates) {
+      const val = scoreDelim(c)
+      if (val > best) { best = val; delim = c }
+    }
+
+    const splitLine = (line) => {
+      const DELIM = delim
+      const out = []
+      let cur = ''
+      let inQuotes = false
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i]
+        if (ch === '"') {
+          if (inQuotes && i + 1 < line.length && line[i + 1] === '"') { cur += '"'; i++ } else { inQuotes = !inQuotes }
+        } else if (ch === DELIM && !inQuotes) {
+          out.push(cur)
+          cur = ''
+        } else {
+          cur += ch
+        }
+      }
+      out.push(cur)
+      return out
+    }
+
+    const header = splitLine(lines[0]).map(h => h.trim())
     const out = []
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',')
+      const cols = splitLine(lines[i])
       const row = {}
       header.forEach((h, idx) => {
-        row[h] = (cols[idx] || '').trim()
+        row[h] = (cols[idx] ?? '').toString().trim()
       })
       if (row.phone) out.push(row)
     }
@@ -176,12 +217,57 @@ export default function DisparoApiPage() {
       setMessage('')
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const payload = { credential_id: selectedCredentialId, phone_number_id: selectedPhoneNumberId, template_name: templateName, template_language: templateLanguage, rows: csvRows }
+      // normaliza phones (remove não-dígitos e prefixa código do país se necessário)
+      const sciToIntString = (val) => {
+        const s = String(val || '').trim()
+        const m = s.match(/^([0-9]+(?:\.[0-9]+)?)e([+-]?[0-9]+)$/i)
+        if (!m) return null
+        let mant = m[1]
+        const exp = parseInt(m[2], 10)
+        if (isNaN(exp)) return null
+        // remove dot and track decimals
+        const parts = mant.split('.')
+        let int = parts[0]
+        let frac = parts[1] || ''
+        if (exp >= 0) {
+          // shift decimal to right
+          if (exp >= frac.length) {
+            int = int + frac + '0'.repeat(exp - frac.length)
+            frac = ''
+          } else {
+            int = int + frac.slice(0, exp)
+            frac = frac.slice(exp)
+          }
+          return int + (frac ? frac : '')
+        } else {
+          // negative exponent: shift left (produce leading zeros)
+          const k = Math.abs(exp)
+          const all = int + frac
+          if (k >= all.length) return '0' // too small
+          const pos = all.length - k
+          const left = all.slice(0, pos)
+          // drop fractional part
+          return left
+        }
+      }
+
+      const normalized = csvRows.map(r => {
+        let raw = String(r.phone ?? '').trim()
+        // try convert scientific notation like 1.997e+10
+        const sci = sciToIntString(raw)
+        if (sci) raw = sci
+        let digits = raw.replace(/\D/g, '')
+        const cc = String(countryCode || '').replace(/\D/g, '')
+        if (cc && digits && !digits.startsWith(cc)) digits = cc + digits
+        return { ...r, phone: digits }
+      })
+      const payload = { credential_id: selectedCredentialId, phone_number_id: selectedPhoneNumberId, template_name: templateName, template_language: templateLanguage, rows: normalized }
       const res = await fetch('/api/disparo-api/import', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(payload) })
       const data = await res.json()
       if (res.ok) {
         setMessage(`Importação concluída. ${data.inserted || 0} registros. Batch: ${data.batch_id}`)
         setBatchId(data.batch_id)
+        setCampaignsRefreshKey(k => k + 1)
       } else {
         setError(data?.error || 'Falha ao importar')
       }
@@ -204,6 +290,7 @@ export default function DisparoApiPage() {
       const data = await res.json()
       if (res.ok) {
         setMessage(`Envio iniciado. Sucessos: ${data.sent || 0}, Falhas: ${data.failed || 0}`)
+        setCampaignsRefreshKey(k => k + 1)
       } else {
         setError(data?.error || 'Falha ao enviar')
       }
@@ -267,6 +354,7 @@ export default function DisparoApiPage() {
           <TabsTrigger value="credenciais">Credenciais</TabsTrigger>
           <TabsTrigger value="disparo">Disparo</TabsTrigger>
           <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
+          <TabsTrigger value="qualidade">Qualidade do número</TabsTrigger>
         </TabsList>
 
         <TabsContent value="credenciais">
@@ -383,10 +471,16 @@ export default function DisparoApiPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2 md:col-span-4">
+                  <Label>Código do país para normalização (opcional)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input className="w-32" value={countryCode} onChange={e => setCountryCode(e.target.value)} placeholder="55" />
+                    <div className="text-xs text-muted-foreground">Se um telefone não iniciar com este código, ele será prefixado ao importar.</div>
+                  </div>
+                </div>
               </div>
               <div className="flex gap-2">
-                <Button onClick={importRows} disabled={loading || !csvRows.length}>Importar</Button>
-                <Button onClick={enviar} variant="secondary" disabled={!batchId || loading}>Enviar</Button>
+                <Button onClick={importRows} disabled={loading || !csvRows.length || !selectedCredentialId || !selectedPhoneNumberId || !templateName}>Importar</Button>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground">Prévia: {csvRows.length} linhas</div>
@@ -413,6 +507,11 @@ export default function DisparoApiPage() {
                   </Table>
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <div className="text-sm font-medium mt-4">Campanhas importadas</div>
+                <CampaignsList refreshKey={campaignsRefreshKey} selectedBatchId={batchId} onSend={(id) => { setBatchId(id); enviar() }} />
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -424,12 +523,42 @@ export default function DisparoApiPage() {
               <CardDescription>Qualidade do número e estatísticas dos envios.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Credencial</Label>
+                  <Select value={selectedCredentialId} onValueChange={v => setSelectedCredentialId(v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a credencial" /></SelectTrigger>
+                    <SelectContent>
+                      {credentials.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.label || c.waba_id}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Número (Phone Number ID)</Label>
+                  <Select value={selectedPhoneNumberId} onValueChange={setSelectedPhoneNumberId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione o número" /></SelectTrigger>
+                    <SelectContent>
+                      {phoneNumbers.map(n => (
+                        <SelectItem key={n.id} value={n.id}>{n.display_phone_number} ({n.id.slice(-6)})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="flex gap-2">
                 <Button onClick={loadReport} variant="outline">Atualizar</Button>
                 <Button onClick={async () => {
                   const { data: sessionData } = await supabase.auth.getSession()
                   const token = sessionData?.session?.access_token
-                  const res = await fetch(`/api/disparo-api/reports/download${batchId ? `?batch_id=${encodeURIComponent(batchId)}` : ''}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+                  const qp = []
+                  if (batchId) qp.push(`batch_id=${encodeURIComponent(batchId)}`)
+                  if (!batchId && selectedCredentialId && selectedPhoneNumberId) {
+                    qp.push(`credential_id=${encodeURIComponent(selectedCredentialId)}`)
+                    qp.push(`phone_number_id=${encodeURIComponent(selectedPhoneNumberId)}`)
+                  }
+                  const res = await fetch(`/api/disparo-api/reports/download${qp.length ? `?${qp.join('&')}` : ''}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
                   if (res.ok) {
                     const blob = await res.blob()
                     const url = URL.createObjectURL(blob)
@@ -480,7 +609,136 @@ export default function DisparoApiPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="qualidade">
+          <Card>
+            <CardHeader>
+              <CardTitle>Qualidade do número</CardTitle>
+              <CardDescription>Todos os números de todas as credenciais, com qualidade e envios de hoje.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <QualityAcrossCredentials credentials={credentials} />
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+function CampaignsList({ selectedBatchId, onSend, refreshKey }) {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  const load = async () => {
+    try {
+      setLoading(true)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const res = await fetch('/api/disparo-api/batches', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+      const data = await res.json()
+      if (res.ok) setItems(data?.batches || [])
+    } catch {}
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [refreshKey])
+
+  return (
+    <div className="border rounded">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Data</TableHead>
+            <TableHead>Batch</TableHead>
+            <TableHead>Número</TableHead>
+            <TableHead>Template</TableHead>
+            <TableHead>Contagens</TableHead>
+            <TableHead>Ações</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {(items || []).map((b) => (
+            <TableRow key={b.batch_id} className={selectedBatchId===b.batch_id? 'bg-muted/50' : ''}>
+              <TableCell>{new Date(b.created_at).toLocaleString()}</TableCell>
+              <TableCell>{b.batch_id.slice(0,8)}</TableCell>
+              <TableCell>{b.phone_number_id}</TableCell>
+              <TableCell>{b.template_name} ({b.template_language})</TableCell>
+              <TableCell>
+                <span className="text-xs">T:{b.counts.total} Q:{b.counts.queued} S:{b.counts.sent} D:{b.counts.delivered} R:{b.counts.read} F:{b.counts.failed}</span>
+              </TableCell>
+              <TableCell>
+                <Button size="sm" onClick={() => onSend(b.batch_id)} disabled={!b.counts || b.counts.queued === 0}>Enviar</Button>
+              </TableCell>
+            </TableRow>
+          ))}
+          {(!items || !items.length) && (
+            <TableRow><TableCell colSpan={6} className="text-center text-sm text-muted-foreground">Nenhuma campanha importada ainda.</TableCell></TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+function QualityAcrossCredentials({ credentials }) {
+  const [rows, setRows] = useState([])
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData?.session?.access_token
+        const all = []
+        for (const c of credentials || []) {
+          const res = await fetch(`/api/disparo-api/meta/phone-numbers?credential_id=${encodeURIComponent(c.id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+          const data = await res.json()
+          if (res.ok) {
+            for (const n of (data?.numbers || [])) {
+              all.push({ credential_label: c.label || c.waba_id, ...n })
+            }
+          }
+        }
+        // join com envios de hoje
+        const todayRes = await fetch('/api/disparo-api/sent-today', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+        const today = await todayRes.json()
+        const mapCounts = today?.counts || {}
+        setRows(all.map(n => ({ ...n, sent_today: mapCounts[n.id] || 0 })))
+      } catch {}
+    })()
+  }, [JSON.stringify(credentials)])
+
+  return (
+    <div className="border rounded max-h-[480px] overflow-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Credencial</TableHead>
+            <TableHead>Número</TableHead>
+            <TableHead>Phone Number ID</TableHead>
+            <TableHead>Qualidade</TableHead>
+            <TableHead>Status nome</TableHead>
+            <TableHead>Enviadas hoje</TableHead>
+            <TableHead>Limite diário</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r, idx) => (
+            <TableRow key={`${r.id}-${idx}`}>
+              <TableCell>{r.credential_label}</TableCell>
+              <TableCell>{r.display_phone_number}</TableCell>
+              <TableCell>{r.id}</TableCell>
+              <TableCell>{r.quality_rating || '-'}</TableCell>
+              <TableCell>{r.name_status || '-'}</TableCell>
+              <TableCell>{r.sent_today}</TableCell>
+              <TableCell>N/A</TableCell>
+            </TableRow>
+          ))}
+          {(!rows || !rows.length) && (
+            <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground">Nenhum número encontrado.</TableCell></TableRow>
+          )}
+        </TableBody>
+      </Table>
     </div>
   )
 }
