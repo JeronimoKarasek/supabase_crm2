@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '../../../lib/supabase-admin.js'
 
 async function getUserFromRequest(request) {
@@ -28,7 +28,7 @@ async function writeSettingsToDb(obj) {
 }
 
 export async function GET() {
-  // Always return full site-wide settings so Configuração works on Vercel
+  // Always return full site-wide settings so ConfiguraÃ§Ã£o works on Vercel
   const settings = await readSettingsFromDb()
   return NextResponse.json({ settings })
 }
@@ -75,6 +75,7 @@ export async function PUT(request) {
         connectionPrice: toNumber(fc.connectionPrice),
       }
     }
+    if (typeof body.payments === 'object' && body.payments !== null) { const pay = body.payments; next.payments = { provider: (typeof pay.provider === 'string' ? pay.provider : (next.payments?.provider || 'picpay')), picpaySellerToken: (typeof pay.picpaySellerToken === 'string' ? pay.picpaySellerToken : (next.payments?.picpaySellerToken || '')) }; }
     await writeSettingsToDb(next)
     const sanitized = { ...next, banks: (next.banks || []).map(b => ({ key: b.key, name: b.name, fields: b.fields })) }
     return NextResponse.json({ settings: sanitized })
@@ -121,6 +122,7 @@ export async function POST(request) {
         connectionPrice: toNumber(fc.connectionPrice),
       }
     }
+    if (typeof body.payments === 'object' && body.payments !== null) { const pay = body.payments; next.payments = { provider: (typeof pay.provider === 'string' ? pay.provider : (next.payments?.provider || 'picpay')), picpaySellerToken: (typeof pay.picpaySellerToken === 'string' ? pay.picpaySellerToken : (next.payments?.picpaySellerToken || '')) }; }
     await writeSettingsToDb(next)
     const sanitized = { ...next, banks: (next.banks || []).map(b => ({ key: b.key, name: b.name, fields: b.fields })) }
     return NextResponse.json({ settings: sanitized })
@@ -128,4 +130,11 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
   }
 }
+
+
+
+
+
+
+
 

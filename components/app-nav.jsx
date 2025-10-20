@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag, FileDigit, Send } from 'lucide-react'
+import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag, FileDigit, Send, PackagePlus } from 'lucide-react'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -98,6 +98,12 @@ export default function AppNav() {
       label: 'Produtos',
       icon: ShoppingBag,
       isActive: pathname?.startsWith('/produtos') ?? false,
+    },
+    (role === 'admin' || can('Criação de produtos')) && {
+      href: '/criacao-produtos',
+      label: 'Criação de produtos',
+      icon: PackagePlus,
+      isActive: pathname?.startsWith('/criacao-produtos') ?? false,
     },
   ].filter(Boolean)
 

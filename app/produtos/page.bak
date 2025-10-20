@@ -38,11 +38,7 @@ export default function ProdutosPage() {
                     <Link href="/produtos/farolchat/assinar">
                       <Button className="bg-emerald-600 hover:bg-emerald-700">ASSINAR</Button>
                     </Link>
-                  ) : (
-                    <Link href={`/produtos/${p.key}/comprar`}>
-                      <Button className="bg-emerald-600 hover:bg-emerald-700">ADQUIRIR</Button>
-                    </Link>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </CardHeader>

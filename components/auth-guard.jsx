@@ -17,6 +17,11 @@ export default function AuthGuard({ children }) {
     const hasSector = (sectors, name) => (Array.isArray(sectors) ? sectors : []).some(s => norm(s) === norm(name))
 
     const run = async () => {
+      // Permite que /login sempre carregue, mesmo sem sessão
+      if (pathname === '/login') {
+        if (mounted) setChecked(true)
+        return
+      }
       const { data } = await supabase.auth.getSession()
       const hasSession = !!data?.session
       if (!hasSession && pathname !== '/login') {

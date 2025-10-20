@@ -254,3 +254,56 @@ export async function DELETE(request) {
     return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
   }
 }
+
+export async function PUT(request) {
+  try {
+    const user = await getUserFromRequest(request)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const body = await request.json().catch(() => ({}))
+    const id = body?.id
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+
+    // Find one row of the lote to get banco_simulado (name)
+    const { data: one, error: oneErr } = await supabaseAdmin
+      .from('importar')
+      .select('banco_simulado, produto')
+      .eq('cliente', user.email)
+      .eq('lote_id', id)
+      .limit(1)
+
+    if (oneErr) return NextResponse.json({ error: 'Failed to load lote', details: oneErr.message }, { status: 400 })
+    const bancoName = one?.[0]?.banco_simulado || ''
+    if (!bancoName) return NextResponse.json({ error: 'Bank not found for lote' }, { status: 404 })
+
+    // Load banks configuration
+    const { data: gsRow } = await supabaseAdmin
+      .from('global_settings')
+      .select('data')
+      .eq('id', 'global')
+      .single()
+    const banks = Array.isArray(gsRow?.data?.banks) ? gsRow.data.banks : []
+    // Find bank by name (fallback by key)
+    let bank = banks.find(b => (b.name || '').toLowerCase() === String(bancoName).toLowerCase())
+    if (!bank) bank = banks.find(b => (b.key || '').toLowerCase() === String(bancoName).toLowerCase())
+    if (!bank?.webhookUrl) return NextResponse.json({ error: 'Webhook not configured for bank' }, { status: 400 })
+
+    // Load user credentials using bank key
+    const bankKey = bank.key
+    const { data: credsRows } = await supabaseAdmin
+      .from('bank_credentials')
+      .select('credentials')
+      .eq('user_id', user.id)
+      .eq('bank_key', bankKey)
+      .single()
+    const userCreds = credsRows?.credentials || {}
+
+    // Fire webhook again (no re-insert)
+    const origin = new URL(request.url).origin
+    const returnWebhook = bank.returnWebhookUrl || `${origin}/api/importar/status`
+    await fetch(bank.webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credentials: userCreds, itemId: id, returnWebhook }) })
+
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
+  }
+}

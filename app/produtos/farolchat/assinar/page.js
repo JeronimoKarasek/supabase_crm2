@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 export default function AssinarFarolChat() {
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({ nome: '', telefone: '', cpf: '', email: '', empresa: '' })
-  const [settings, setSettings] = useState({ userPrice: 0, connectionPrice: 0 })
+  const [pricing, setPricing] = useState({ userPrice: 0, connectionPrice: 0 })
   const [qty, setQty] = useState({ users: 1, connections: 1 })
   const [isSubmitting, setSubmitting] = useState(false)
   const [payment, setPayment] = useState(null) // { paymentUrl, qrcode }
@@ -18,17 +18,18 @@ export default function AssinarFarolChat() {
   useEffect(() => {
     ;(async () => {
       try {
-        const res = await fetch('/api/global-settings')
+        const res = await fetch('/api/products/public?key=farolchat')
         const json = await res.json()
-        const up = Number(json?.settings?.farolChat?.userPrice || 0)
-        const cp = Number(json?.settings?.farolChat?.connectionPrice || 0)
-        setSettings({ userPrice: up, connectionPrice: cp })
+        const p = json?.product?.pricing || {}
+        const up = Number(p.userPrice || 0)
+        const cp = Number(p.connectionPrice || 0)
+        setPricing({ userPrice: up, connectionPrice: cp })
       } catch {}
     })()
   }, [])
 
-  const totalUsers = useMemo(() => (qty.users || 0) * (settings.userPrice || 0), [qty.users, settings.userPrice])
-  const totalConnections = useMemo(() => (qty.connections || 0) * (settings.connectionPrice || 0), [qty.connections, settings.connectionPrice])
+  const totalUsers = useMemo(() => (qty.users || 0) * (pricing.userPrice || 0), [qty.users, pricing.userPrice])
+  const totalConnections = useMemo(() => (qty.connections || 0) * (pricing.connectionPrice || 0), [qty.connections, pricing.connectionPrice])
   const total = useMemo(() => totalUsers + totalConnections, [totalUsers, totalConnections])
 
   const onNext = () => {
@@ -45,6 +46,8 @@ export default function AssinarFarolChat() {
     try {
       const referenceId = `farol_${Date.now()}`
       const body = {
+        productKey: 'farolchat',
+        returnPath: '/produtos/farolchat/assinar',
         amount: Number(total.toFixed(2)),
         referenceId,
         buyer: {
@@ -54,6 +57,7 @@ export default function AssinarFarolChat() {
           email: form.email,
           phone: form.telefone,
         },
+        buyerForm: { nome: form.nome, cpf: form.cpf, email: form.email, telefone: form.telefone, empresa: form.empresa },
         metadata: { empresa: form.empresa, users: qty.users, connections: qty.connections }
       }
       const { data: sessionData } = await supabase.auth.getSession()
@@ -105,7 +109,7 @@ export default function AssinarFarolChat() {
                 <Input placeholder="Email" type="email" value={form.email} onChange={(e)=> setForm(prev => ({...prev, email: e.target.value}))} />
                 <Input placeholder="Nome da empresa" className="md:col-span-2" value={form.empresa} onChange={(e)=> setForm(prev => ({...prev, empresa: e.target.value}))} />
                 <div className="md:col-span-2 flex justify-end">
-                  <Button onClick={onNext}>Próximo</Button>
+                  <Button onClick={onNext}>PrÃ³ximo</Button>
                 </div>
               </div>
             )}
@@ -113,15 +117,15 @@ export default function AssinarFarolChat() {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
                   <div>
-                    <div className="text-sm font-medium">Usuários</div>
+                    <div className="text-sm font-medium">UsuÃ¡rios</div>
                     <Input type="number" min={0} value={qty.users} onChange={(e)=> setQty(prev => ({...prev, users: Number(e.target.value || 0)}))} />
                   </div>
-                  <div className="text-right text-sm">R$ {settings.userPrice?.toFixed?.(2) || Number(settings.userPrice).toFixed(2)} cada — Total: <span className="font-medium">R$ {totalUsers.toFixed(2)}</span></div>
+                  <div className="text-right text-sm">R$ {pricing.userPrice?.toFixed?.(2) || Number(pricing.userPrice).toFixed(2)} cada â€” Total: <span className="font-medium">R$ {totalUsers.toFixed(2)}</span></div>
                   <div>
-                    <div className="text-sm font-medium">Conexões</div>
+                    <div className="text-sm font-medium">ConexÃµes</div>
                     <Input type="number" min={0} value={qty.connections} onChange={(e)=> setQty(prev => ({...prev, connections: Number(e.target.value || 0)}))} />
                   </div>
-                  <div className="text-right text-sm">R$ {settings.connectionPrice?.toFixed?.(2) || Number(settings.connectionPrice).toFixed(2)} cada — Total: <span className="font-medium">R$ {totalConnections.toFixed(2)}</span></div>
+                  <div className="text-right text-sm">R$ {pricing.connectionPrice?.toFixed?.(2) || Number(pricing.connectionPrice).toFixed(2)} cada â€” Total: <span className="font-medium">R$ {totalConnections.toFixed(2)}</span></div>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="text-lg">Valor total</div>
@@ -133,7 +137,7 @@ export default function AssinarFarolChat() {
                 </div>
                 {payment && (
                   <div className="border rounded p-3 space-y-2">
-                    <div className="text-sm">Abra o PicPay no link gerado. Após o pagamento, clique em "Verificar".</div>
+                    <div className="text-sm">Abra o PicPay no link gerado. ApÃ³s o pagamento, clique em "Verificar".</div>
                     {payment.qrcode?.base64 && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={`data:image/png;base64,${payment.qrcode.base64}`} alt="QR" className="w-48 h-48" />
@@ -151,7 +155,7 @@ export default function AssinarFarolChat() {
             {step === 3 && (
               <div className="space-y-2">
                 <div className="text-xl font-semibold">Tudo certo!</div>
-                <div className="text-muted-foreground">Recebemos sua confirmação. Vamos entrar em contato enviando as credenciais.</div>
+                <div className="text-muted-foreground">Recebemos sua confirmaÃ§Ã£o. Vamos entrar em contato enviando as credenciais.</div>
               </div>
             )}
           </CardContent>
@@ -160,4 +164,13 @@ export default function AssinarFarolChat() {
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
 
