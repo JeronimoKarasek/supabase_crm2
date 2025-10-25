@@ -60,7 +60,7 @@ export async function GET(request) {
     const maxRows = Math.min(parseInt(searchParams.get('maxRows') || '100000', 10) || 100000, 200000)
     const periodStart = searchParams.get('periodStart')
     const periodEnd = searchParams.get('periodEnd')
-    const dateColumn = 'horario da ultima resposta'
+    const dateColumn = searchParams.get('dateColumn') || 'horario da ultima resposta'
 
     if (!table || !sumColumn) {
       return NextResponse.json({ error: 'Missing table or sumColumn' }, { status: 400 })
@@ -94,8 +94,8 @@ export async function GET(request) {
       if (condColumn && condValue) {
         query = applyFilterToQuery(query, { column: condColumn, type: condType, value: condValue })
       }
-      if (periodStart) query = query.gte(dateColumn, periodStart)
-      if (periodEnd) query = query.lte(dateColumn, periodEnd)
+      if (periodStart && dateColumn) query = query.gte(dateColumn, periodStart)
+      if (periodEnd && dateColumn) query = query.lte(dateColumn, periodEnd)
       const requiredFilters = Array.isArray(filtersByTable[table]) ? filtersByTable[table] : []
       for (const rf of requiredFilters) query = applyFilterToQuery(query, rf)
       query = query.range(offset, offset + pageSize - 1)

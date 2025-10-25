@@ -1,0 +1,470 @@
+   1: "use client"
+   2: 
+   3: import { useEffect, useMemo, useState } from 'react'
+   4: import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+   5: import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+   6: import { Button } from '@/components/ui/button'
+   7: import { Input } from '@/components/ui/input'
+   8: import { supabase } from '@/lib/supabase'
+   9: import ChartBuilder from '@/components/chart-builder'
+  10: import { Database } from 'lucide-react'
+  11: import {
+  12:   ResponsiveContainer,
+  13:   BarChart, Bar,
+  14:   LineChart, Line,
+  15:   PieChart, Pie, Cell,
+  16:   XAxis, YAxis, Tooltip, Legend
+  17: } from 'recharts'
+  18: 
+  19: const COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+  20: 
+  21: const parseMoney = (val) => {
+  22:   if (typeof val === 'number') return val
+  23:   if (val === null || typeof val === 'undefined') return 0
+  24:   const s = String(val).trim()
+  25:   if (!s) return 0
+  26:   const cleaned = s.replace(/\./g, '').replace(/,/g, '.').replace(/[^0-9.\-]/g, '')
+  27:   const n = parseFloat(cleaned)
+  28:   return isNaN(n) ? 0 : n
+  29: }
+  30: const fmtBRL = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0))
+  31: 
+  32: export default function DashboardPage() {
+  33:   const [tables, setTables] = useState([])
+  34:   const [table, setTable] = useState('')
+  35:   const [columns, setColumns] = useState([])
+  36:   const [xCol, setXCol] = useState('')
+  37:   const [yCol, setYCol] = useState('')
+  38:   const [agg, setAgg] = useState('count') // count | sum
+  39:   const [chartType, setChartType] = useState('bar') // bar | line | pie
+  40:   const [groupBy, setGroupBy] = useState('none') // none | day | month
+  41:   const [filterColumn, setFilterColumn] = useState('')
+  42:   const [filterType, setFilterType] = useState('contains')
+  43:   const [filterValue, setFilterValue] = useState('')
+  44:   const [data, setData] = useState([])
+  45:   const [loading, setLoading] = useState(false)
+  46:   const [error, setError] = useState('')
+  47:   const [saved, setSaved] = useState([]) // [{id, table, xCol, yCol, agg, chartType, title, order}]
+  48:   const [loadingSaved, setLoadingSaved] = useState(false)
+  49:   const [valorPago, setValorPago] = useState(0)
+  50:   const [totaisPorTabela, setTotaisPorTabela] = useState({}) // { [table]: total }
+  51:   const [periodStart, setPeriodStart] = useState('')
+  52:   const [periodEnd, setPeriodEnd] = useState('')
+  53: 
+  54:   const [userId, setUserId] = useState('')
+  55:   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserId(data?.user?.id || '')) }, [])
+  56: 
+  57:   useEffect(() => {
+  58:     ;(async () => {
+  59:       try {
+  60:         const { data: sessionData } = await supabase.auth.getSession()
+  61:         const token = sessionData?.session?.access_token
+  62:         const res = await fetch('/api/tables', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+  63:         const json = await res.json()
+  64:         if (res.ok) setTables(json.tables || [])
+  65:         else setError(json.error || 'Falha ao listar tabelas')
+  66:       } catch (e) {
+  67:         setError('Falha ao carregar tabelas')
+  68:       }
+  69:     })()
+  70:   }, [])
+  71: 
+  72:   // Load saved charts and valorPago list
+  73:   useEffect(() => {
+  74:     if (!userId) return
+  75:     try {
+  76:       const raw = localStorage.getItem(`charts:${userId}`)
+  77:       const arr = raw ? JSON.parse(raw) : []
+  78:       setSaved(Array.isArray(arr) ? arr : [])
+  79:     } catch {}
+  80: 
+  81:     ;(async () => {
+  82:       try {
+  83:         const { data: sessionData } = await supabase.auth.getSession()
+  84:         const token = sessionData?.session?.access_token
+  85:         const sres = await fetch('/api/global-settings')
+  86:         const sjson = await sres.json()
+  87:         const list = Array.isArray(sjson?.settings?.valorPagoList) ? sjson.settings.valorPagoList : (sjson?.settings?.valorPago ? [sjson.settings.valorPago] : [])
+  88:         if (list.length) {
+  89:           let sum = 0
+  90:           const porTabela = {}
+  91:           for (const cfg of list) {
+  92:             if (!(cfg?.table && cfg?.sumColumn)) continue
+  93:             const url = new URL('/api/aggregate', window.location.origin)
+  94:             url.searchParams.set('table', cfg.table)
+  95:             url.searchParams.set('sumColumn', cfg.sumColumn)
+  96:             if (cfg.cond?.column && cfg.cond?.value) {
+  97:               url.searchParams.set('condColumn', cfg.cond.column)
+  98:               url.searchParams.set('condType', cfg.cond.type || 'contains')
+  99:               url.searchParams.set('condValue', cfg.cond.value)
+ 100:             }
+ 101:             if (periodStart) url.searchParams.set('periodStart', periodStart)
+ 102:             if (periodEnd) url.searchParams.set('periodEnd', periodEnd)
+ 103:             const res = await fetch(url.toString(), { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+ 104:             const json = await res.json()
+ 105:             if (res.ok) {
+ 106:               const val = Number(json.total) || 0
+ 107:               sum += val
+ 108:               porTabela[cfg.table] = (porTabela[cfg.table] || 0) + val
+ 109:             }
+ 110:           }
+ 111:           setValorPago(sum)
+ 112:           setTotaisPorTabela(porTabela)
+ 113:         } else {
+ 114:           setValorPago(0)
+ 115:           setTotaisPorTabela({})
+ 116:         }
+ 117:       } catch {}
+ 118:     })()
+ 119:   }, [userId, periodStart, periodEnd])
+ 120: 
+ 121:   useEffect(() => {
+ 122:     ;(async () => {
+ 123:       if (!table) { setColumns([]); return }
+ 124:       try {
+ 125:         const { data: sessionData } = await supabase.auth.getSession()
+ 126:         const token = sessionData?.session?.access_token
+ 127:         const res = await fetch(`/api/table-columns?table=${encodeURIComponent(table)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+ 128:         const json = await res.json()
+ 129:         if (res.ok) setColumns(json.columns || [])
+ 130:       } catch {}
+ 131:     })()
+ 132:   }, [table])
+ 133: 
+ 134:   const [chartDataMap, setChartDataMap] = useState({}) // id -> data
+ 135:   useEffect(() => {
+ 136:     ;(async () => {
+ 137:       if (!saved.length) { setChartDataMap({}); return }
+ 138:       setLoadingSaved(true)
+ 139:       try {
+ 140:         const { data: sessionData } = await supabase.auth.getSession()
+ 141:         const token = sessionData?.session?.access_token
+ 142:         const map = {}
+ 143:         for (const c of saved) {
+ 144:           const qs = new URLSearchParams({ table: c.table, page: '1', pageSize: '1000' })
+ 145:           if (periodStart) qs.set('periodStart', periodStart)
+ 146:           if (periodEnd) qs.set('periodEnd', periodEnd)
+ 147:           const res = await fetch(`/api/table-data?${qs.toString()}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+ 148:           const json = await res.json()
+ 149:           const rows = json.data || []
+ 150:           const aggMap = new Map()
+ 151:           for (const r of rows) {
+ 152:             const xv = r[c.xCol]
+ 153:             const yv = c.agg === 'sum' ? parseMoney(r[c.yCol]) : 1
+ 154:             aggMap.set(xv, (aggMap.get(xv) || 0) + yv)
+ 155:           }
+ 156:           map[c.id] = Array.from(aggMap.entries()).map(([x,y]) => ({ x, y }))
+ 157:         }
+ 158:         setChartDataMap(map)
+ 159:       } finally {
+ 160:         setLoadingSaved(false)
+ 161:       }
+ 162:     })()
+ 163:   }, [saved, periodStart, periodEnd])
+ 164: 
+ 165:   const createChart = async () => {
+ 166:     setLoading(true)
+ 167:     setError('')
+ 168:     try {
+ 169:       if (!table || !xCol || (agg === 'sum' && !yCol)) {
+ 170:         setError('Selecione tabela, coluna X e (se soma) coluna Y')
+ 171:         setLoading(false)
+ 172:         return
+ 173:       }
+ 174:       const { data: sessionData } = await supabase.auth.getSession()
+ 175:       const token = sessionData?.session?.access_token
+ 176:       const qs = new URLSearchParams({ table, page: '1', pageSize: '1000' })
+ 177:       if (periodStart) qs.set('periodStart', periodStart)
+ 178:       if (periodEnd) qs.set('periodEnd', periodEnd)
+ 179:       if (filterColumn && filterValue) {
+ 180:         qs.set('filterColumn', filterColumn)
+ 181:         qs.set('filterType', filterType)
+ 182:         qs.set('filterValue', filterValue)
+ 183:       }
+ 184:       const res = await fetch(`/api/table-data?${qs.toString()}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+ 185:       const json = await res.json()
+ 186:       if (!res.ok) {
+ 187:         setError(json.error || 'Falha ao buscar dados')
+ 188:         setLoading(false)
+ 189:         return
+ 190:       }
+ 191:       const rows = json.data || []
+ 192:       const dateCol = 'horario da ultima resposta'
+ 193:       const map = new Map()
+ 194:       for (const r of rows) {
+ 195:         let xv = r[xCol]
+ 196:         if (groupBy !== 'none' && r[dateCol]) {
+ 197:           const d = new Date(r[dateCol])
+ 198:           if (isFinite(d)) {
+ 199:             xv = groupBy === 'day'
+ 200:               ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+ 201:               : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+ 202:           }
+ 203:         }
+ 204:         const yv = agg === 'sum' ? parseMoney(r[yCol]) : 1
+ 205:         map.set(xv, (map.get(xv) || 0) + yv)
+ 206:       }
+ 207:       const out = Array.from(map.entries()).map(([x, y]) => ({ x, y }))
+ 208:       setData(out)
+ 209:     } catch (e) {
+ 210:       setError('Falha ao criar gráfico')
+ 211:     } finally {
+ 212:       setLoading(false)
+ 213:     }
+ 214:   }
+ 215: 
+ 216:   return (
+ 217:     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+ 218:       <div className="container mx-auto py-8 px-4">
+ 219:         <div className="mb-8">
+ 220:           <div className="flex items-center gap-3 mb-2">
+ 221:             <Database className="h-8 w-8 text-primary" />
+ 222:             <h1 className="text-4xl font-bold text-foreground">Dashboard</h1>
+ 223:           </div>
+ 224:             <div className="flex items-center justify-between gap-4">
+ 225:               <div className="flex items-center gap-3 text-muted-foreground">
+ 226:                 <span>Período:</span>
+ 227:                 <Input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="h-8 w-auto" />
+ 228:                 <Input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="h-8 w-auto" />
+ 229:               </div>
+ 230:               <div className="text-sm font-medium">Total Pago: <span className="font-semibold">{fmtBRL(valorPago)}</span></div>
+ 231:             </div>
+ 232:             {Object.keys(totaisPorTabela).length > 0 && (
+ 233:               <div className="mt-2 text-xs text-muted-foreground flex gap-3 flex-wrap">
+ 234:                 {Object.entries(totaisPorTabela).map(([t, v]) => (
+ 235:                   <div key={t} className="px-2 py-1 rounded border bg-muted/30">
+ 236:                     <span className="font-medium">{t}:</span> {fmtBRL(v)}
+ 237:                   </div>
+ 238:                 ))}
+ 239:               </div>
+ 240:             )}
+ 241:         </div>
+ 242: 
+ 243:         <Card className="shadow-lg">
+ 244:           <CardHeader>
+ 245:             <CardTitle>Criar gráfico</CardTitle>
+ 246:             <CardDescription>Escolha a tabela, colunas e tipo de gráfico</CardDescription>
+ 247:           </CardHeader>
+ 248:           <CardContent className="space-y-4">
+ 249:             <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+ 250:               <Select value={table} onValueChange={(v) => { setTable(v); setXCol(''); setYCol('') }}>
+ 251:                 <SelectTrigger>
+ 252:                   <SelectValue placeholder="Tabela" />
+ 253:                 </SelectTrigger>
+ 254:                 <SelectContent>
+ 255:                   {tables.map(t => (
+ 256:                     <SelectItem key={t} value={t}>{t}</SelectItem>
+ 257:                   ))}
+ 258:                 </SelectContent>
+ 259:               </Select>
+ 260: 
+ 261:               <Select value={xCol} onValueChange={setXCol} disabled={!table}>
+ 262:                 <SelectTrigger>
+ 263:                   <SelectValue placeholder="Coluna X (agrupamento)" />
+ 264:                 </SelectTrigger>
+ 265:                 <SelectContent>
+ 266:                   {columns.map(c => (
+ 267:                     <SelectItem key={c.column_name} value={c.column_name}>{c.column_name}</SelectItem>
+ 268:                   ))}
+ 269:                 </SelectContent>
+ 270:               </Select>
+ 271: 
+ 272:               <Select value={agg} onValueChange={setAgg}>
+ 273:                 <SelectTrigger>
+ 274:                   <SelectValue />
+ 275:                 </SelectTrigger>
+ 276:                 <SelectContent>
+ 277:                   <SelectItem value="count">Contagem de linhas</SelectItem>
+ 278:                   <SelectItem value="sum">Soma de coluna</SelectItem>
+ 279:                 </SelectContent>
+ 280:               </Select>
+ 281: 
+ 282:               <Select value={yCol} onValueChange={setYCol} disabled={agg !== 'sum'}>
+ 283:                 <SelectTrigger>
+ 284:                   <SelectValue placeholder="Coluna Y (qualquer)" />
+ 285:                 </SelectTrigger>
+ 286:                 <SelectContent>
+ 287:                   {columns.map(c => (
+ 288:                     <SelectItem key={c.column_name} value={c.column_name}>{c.column_name}</SelectItem>
+ 289:                   ))}
+ 290:                 </SelectContent>
+ 291:               </Select>
+ 292: 
+ 293:               <Select value={chartType} onValueChange={setChartType}>
+ 294:                 <SelectTrigger>
+ 295:                   <SelectValue />
+ 296:                 </SelectTrigger>
+ 297:                 <SelectContent>
+ 298:                   <SelectItem value="bar">Barras</SelectItem>
+ 299:                   <SelectItem value="line">Linhas</SelectItem>
+ 300:                   <SelectItem value="pie">Pizza</SelectItem>
+ 301:                 </SelectContent>
+ 302:               </Select>
+ 303: 
+ 304:               <Select value={groupBy} onValueChange={setGroupBy}>
+ 305:                 <SelectTrigger>
+ 306:                   <SelectValue />
+ 307:                 </SelectTrigger>
+ 308:                 <SelectContent>
+ 309:                   <SelectItem value="none">Sem agrupamento por data</SelectItem>
+ 310:                   <SelectItem value="day">Agrupar por dia</SelectItem>
+ 311:                   <SelectItem value="month">Agrupar por mês</SelectItem>
+ 312:                 </SelectContent>
+ 313:               </Select>
+ 314:             </div>
+ 315: 
+ 316:             {/* Optional filter for chart */}
+ 317:             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+ 318:               <Select value={filterColumn} onValueChange={setFilterColumn}>
+ 319:                 <SelectTrigger>
+ 320:                   <SelectValue placeholder="Coluna (filtro opcional)" />
+ 321:                 </SelectTrigger>
+ 322:                 <SelectContent>
+ 323:                   {columns.map(c => (
+ 324:                     <SelectItem key={c.column_name} value={c.column_name}>{c.column_name}</SelectItem>
+ 325:                   ))}
+ 326:                 </SelectContent>
+ 327:               </Select>
+ 328:               <Select value={filterType} onValueChange={setFilterType}>
+ 329:                 <SelectTrigger>
+ 330:                   <SelectValue />
+ 331:                 </SelectTrigger>
+ 332:                 <SelectContent>
+ 333:                   <SelectItem value="contains">Contém</SelectItem>
+ 334:                   <SelectItem value="notContains">Não contém</SelectItem>
+ 335:                   <SelectItem value="equals">Igual</SelectItem>
+ 336:                   <SelectItem value="notEquals">Diferente</SelectItem>
+ 337:                   <SelectItem value="greaterThan">Maior que</SelectItem>
+ 338:                   <SelectItem value="lessThan">Menor que</SelectItem>
+ 339:                 </SelectContent>
+ 340:               </Select>
+ 341:               <Input placeholder="Valor do filtro" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} />
+ 342:             </div>
+ 343: 
+ 344:             <div className="flex gap-2 justify-end">
+ 345:               <Button onClick={createChart} variant="outline" disabled={!table || !xCol || (agg === 'sum' && !yCol) || loading}>
+ 346:                 {loading ? 'Gerando...' : 'Pré-visualizar'}
+ 347:               </Button>
+ 348:               <Button onClick={() => {
+ 349:                 if (!table || !xCol || (agg === 'sum' && !yCol)) return
+ 350:                 const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`
+ 351:                 const newItem = { id, table, xCol, yCol, agg, chartType, title: `${chartType} ${table} por ${xCol}`, order: (saved[saved.length-1]?.order || 0) + 1 }
+ 352:                 const next = [...saved, newItem]
+ 353:                 setSaved(next)
+ 354:                 if (userId) localStorage.setItem(`charts:${userId}`, JSON.stringify(next))
+ 355:               }}>Salvar no Dashboard</Button>
+ 356:             </div>
+ 357: 
+ 358:             {error && (
+ 359:               <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg border border-destructive/20 text-sm">{error}</div>
+ 360:             )}
+ 361: 
+ 362:             {data.length > 0 && (
+ 363:               <div className="h-[420px]">
+ 364:                 <ResponsiveContainer width="100%" height="100%">
+ 365:                   {chartType === 'bar' ? (
+ 366:                     <BarChart data={data}>
+ 367:                       <XAxis dataKey="x" /><YAxis /><Tooltip /><Legend />
+ 368:                       <Bar dataKey="y" fill="#1f77b4" />
+ 369:                     </BarChart>
+ 370:                   ) : chartType === 'line' ? (
+ 371:                     <LineChart data={data}>
+ 372:                       <XAxis dataKey="x" /><YAxis /><Tooltip /><Legend />
+ 373:                       <Line type="monotone" dataKey="y" stroke="#1f77b4" />
+ 374:                     </LineChart>
+ 375:                   ) : (
+ 376:                     <PieChart>
+ 377:                       <Tooltip /><Legend />
+ 378:                       <Pie data={data} dataKey="y" nameKey="x" outerRadius={150} label>
+ 379:                         {data.map((entry, index) => (
+ 380:                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+ 381:                         ))}
+ 382:                       </Pie>
+ 383:                     </PieChart>
+ 384:                   )}
+ 385:                 </ResponsiveContainer>
+ 386:               </div>
+ 387:             )}
+ 388:           </CardContent>
+ 389:         </Card>
+ 390: 
+ 391:         {/* Gráfico Dinâmico (WhatsApp/Meta) */}
+ 392:         <div className="mt-8">
+ 393:           <ChartBuilder />
+ 394:         </div>
+ 395: 
+ 396:         {/* Saved charts grid */}
+ 397:         <div className="mt-8">
+ 398:           <Card>
+ 399:             <CardHeader>
+ 400:               <CardTitle>Meus gráficos</CardTitle>
+ 401:               <CardDescription>Arraste para reordenar. Clique em excluir para remover.</CardDescription>
+ 402:             </CardHeader>
+ 403:             <CardContent>
+ 404:               {saved.length === 0 ? (
+ 405:                 <div className="text-sm text-muted-foreground">Nenhum gráfico salvo ainda.</div>
+ 406:               ) : (
+ 407:                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+ 408:                   {saved.map((c, idx) => (
+ 409:                     <div key={c.id}
+ 410:                          className="border rounded-lg p-2 bg-background"
+ 411:                          draggable
+ 412:                          onDragStart={(e) => e.dataTransfer.setData('text/chart-id', c.id)}
+ 413:                          onDragOver={(e) => e.preventDefault()}
+ 414:                          onDrop={(e) => {
+ 415:                            const id = e.dataTransfer.getData('text/chart-id')
+ 416:                            if (!id || id === c.id) return
+ 417:                            const current = [...saved]
+ 418:                            const fromIdx = current.findIndex(ci => ci.id === id)
+ 419:                            const toIdx = current.findIndex(ci => ci.id === c.id)
+ 420:                            if (fromIdx === -1 || toIdx === -1) return
+ 421:                            const [moved] = current.splice(fromIdx, 1)
+ 422:                            current.splice(toIdx, 0, moved)
+ 423:                            current.forEach((ci, i) => ci.order = i+1)
+ 424:                            setSaved(current)
+ 425:                            if (userId) localStorage.setItem(`charts:${userId}`, JSON.stringify(current))
+ 426:                          }}>
+ 427:                       <div className="flex items-center justify-between mb-2">
+ 428:                         <div className="text-sm font-medium truncate">{c.title}</div>
+ 429:                         <Button size="sm" variant="outline" onClick={() => {
+ 430:                           const next = saved.filter(s => s.id !== c.id)
+ 431:                           setSaved(next)
+ 432:                           if (userId) localStorage.setItem(`charts:${userId}`, JSON.stringify(next))
+ 433:                         }}>Excluir</Button>
+ 434:                       </div>
+ 435:                       <div className="w-full h-[240px]">
+ 436:                         <ResponsiveContainer width="100%" height="100%">
+ 437:                           {c.chartType === 'bar' ? (
+ 438:                             <BarChart data={chartDataMap[c.id] || []}>
+ 439:                               <XAxis dataKey="x" /><YAxis /><Tooltip />
+ 440:                               <Bar dataKey="y" fill="#1f77b4" />
+ 441:                             </BarChart>
+ 442:                           ) : c.chartType === 'line' ? (
+ 443:                             <LineChart data={chartDataMap[c.id] || []}>
+ 444:                               <XAxis dataKey="x" /><YAxis /><Tooltip />
+ 445:                               <Line type="monotone" dataKey="y" stroke="#1f77b4" />
+ 446:                             </LineChart>
+ 447:                           ) : (
+ 448:                             <PieChart>
+ 449:                               <Tooltip />
+ 450:                               <Pie data={chartDataMap[c.id] || []} dataKey="y" nameKey="x" outerRadius={90}>
+ 451:                                 {(chartDataMap[c.id] || []).map((entry, index) => (
+ 452:                                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+ 453:                                 ))}
+ 454:                               </Pie>
+ 455:                             </PieChart>
+ 456:                           )}
+ 457:                         </ResponsiveContainer>
+ 458:                       </div>
+ 459:                     </div>
+ 460:                   ))}
+ 461:                 </div>
+ 462:               )}
+ 463:             </CardContent>
+ 464:           </Card>
+ 465:         </div>
+ 466:       </div>
+ 467:     </div>
+ 468:   )
+ 469: }
+

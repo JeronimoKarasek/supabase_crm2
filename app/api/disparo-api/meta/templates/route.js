@@ -25,7 +25,12 @@ export async function GET(request) {
 
     const waba = credRow.waba_id
     const token = credRow.access_token
-    const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(waba)}/message_templates?limit=200`
+    const appId = credRow.app_id || null
+    const appSecret = credRow.app_secret || null
+    let appProof = null
+    try { if (appSecret && token) { const { createHmac } = await import('crypto'); appProof = createHmac('sha256', appSecret).update(token).digest('hex') } } catch {}
+    const withProof = (url) => { if (!appProof) return url; const sep = url.includes('?') ? '&' : '?'; const idp = appId ? `&app_id=${encodeURIComponent(appId)}` : ''; return `${url}${sep}appsecret_proof=${appProof}${idp}` }
+    const url = withProof(`https://graph.facebook.com/v19.0/${encodeURIComponent(waba)}/message_templates?limit=200`)
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     const json = await res.json()
     if (!res.ok) return NextResponse.json({ error: 'Falha ao buscar templates', details: json?.error?.message || 'erro' }, { status: res.status })
