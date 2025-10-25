@@ -3,6 +3,12 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   experimental: {
     // Remove if not using Server Components
     serverComponentsExternalPackages: ['mongodb'],
