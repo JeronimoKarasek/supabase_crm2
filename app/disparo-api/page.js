@@ -11,9 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { supabase } from '@/lib/supabase'
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart'
-import ChartBuilder from '@/components/chart-builder'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, LineChart, Line } from 'recharts'
 
 function Help({ title, children }) {
   return (
@@ -1336,6 +1333,3 @@ function QualityAcrossCredentials({ credentials }) {
     </div>
   )
 }
-
-
-
