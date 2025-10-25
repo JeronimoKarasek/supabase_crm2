@@ -17,14 +17,30 @@ export async function GET(request) {
   const user = await getUserFromRequest(request)
   if (!user) return unauthorized()
   try {
-    const start = new Date()
-    start.setHours(0,0,0,0)
+    const { searchParams } = new URL(request.url)
+    const startParam = searchParams.get('start')
+    const endParam = searchParams.get('end')
+    let start
+    let end
+    if (startParam) {
+      start = new Date(startParam)
+    } else {
+      start = new Date()
+      // Use UTC midnight to avoid timezone mismatches
+      start.setUTCHours(0,0,0,0)
+    }
+    if (endParam) {
+      end = new Date(endParam)
+    } else {
+      end = new Date()
+    }
     const { data, error } = await supabaseAdmin
       .from('disparo_crm_api')
       .select('phone_number_id, sent_at')
       .eq('user_id', user.id)
       .gte('sent_at', start.toISOString())
-      .limit(10000)
+      .lte('sent_at', end.toISOString())
+      .limit(50000)
     if (error) return NextResponse.json({ error: 'Falha ao buscar envios de hoje', details: error.message }, { status: 400 })
     const counts = {}
     for (const r of data || []) {
@@ -36,4 +52,3 @@ export async function GET(request) {
     return NextResponse.json({ error: 'Erro interno', details: e.message }, { status: 500 })
   }
 }
-

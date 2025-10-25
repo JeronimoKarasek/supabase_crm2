@@ -35,7 +35,7 @@ export async function POST(request) {
   if (!user) return unauthorized()
   try {
     const body = await request.json()
-    const { waba_id, access_token, label, webhook_verify_token } = body || {}
+    const { waba_id, access_token, label, webhook_verify_token, app_id, app_secret } = body || {}
     if (!waba_id || !access_token) return NextResponse.json({ error: 'waba_id e access_token são obrigatórios' }, { status: 400 })
     const row = {
       user_id: user.id,
@@ -43,6 +43,8 @@ export async function POST(request) {
       access_token: String(access_token),
       label: label ? String(label) : null,
       webhook_verify_token: webhook_verify_token ? String(webhook_verify_token) : 'verificadorcrm',
+      app_id: typeof app_id === 'string' && app_id.length ? app_id : null,
+      app_secret: typeof app_secret === 'string' && app_secret.length ? app_secret : null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -59,13 +61,15 @@ export async function PUT(request) {
   if (!user) return unauthorized()
   try {
     const body = await request.json()
-    const { id, waba_id, access_token, label, webhook_verify_token } = body || {}
+    const { id, waba_id, access_token, label, webhook_verify_token, app_id, app_secret } = body || {}
     if (!id) return NextResponse.json({ error: 'id é obrigatório' }, { status: 400 })
     const patch = { updated_at: new Date().toISOString() }
     if (typeof waba_id === 'string' && waba_id) patch.waba_id = waba_id
     if (typeof access_token === 'string' && access_token) patch.access_token = access_token
     if (typeof label !== 'undefined') patch.label = label
     if (typeof webhook_verify_token === 'string' && webhook_verify_token) patch.webhook_verify_token = webhook_verify_token
+    if (typeof app_id === 'string') patch.app_id = app_id || null
+    if (typeof app_secret === 'string') patch.app_secret = app_secret || null
     const { data, error } = await supabaseAdmin.from('whatsapp_credentials').update(patch).eq('id', id).eq('user_id', user.id).select('*').single()
     if (error) return NextResponse.json({ error: 'Falha ao atualizar credencial', details: error.message }, { status: 400 })
     return NextResponse.json({ credential: data })

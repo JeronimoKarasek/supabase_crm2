@@ -8,6 +8,9 @@ create table if not exists whatsapp_credentials (
   label text,
   waba_id text not null,
   access_token text not null,
+  -- opcionais: App ID/Secret para gerar appsecret_proof nas chamadas Graph
+  app_id text,
+  app_secret text,
   webhook_verify_token text not null default 'verificadorcrm',
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
@@ -147,6 +150,10 @@ create trigger trg_whatsapp_credentials_updated_at
 before update on whatsapp_credentials
 for each row execute function set_updated_at();
 
+-- Migração: adicionar colunas opcionais se a tabela já existir sem elas
+alter table if exists whatsapp_credentials add column if not exists app_id text;
+alter table if exists whatsapp_credentials add column if not exists app_secret text;
+
 drop trigger if exists trg_whatsapp_phone_numbers_updated_at on whatsapp_phone_numbers;
 create trigger trg_whatsapp_phone_numbers_updated_at
 before update on whatsapp_phone_numbers
@@ -161,3 +168,68 @@ drop trigger if exists trg_disparo_crm_api_updated_at on disparo_crm_api;
 create trigger trg_disparo_crm_api_updated_at
 before update on disparo_crm_api
 for each row execute function set_updated_at();
+
+-- Inbound messages table (for received counts)
+create table if not exists whatsapp_inbound (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  credential_id uuid references whatsapp_credentials(id) on delete set null,
+  phone_number_id text not null,
+  from_wa_id text not null,
+  type text,
+  payload jsonb,
+  received_at timestamptz default now()
+);
+
+create index if not exists idx_inbound_user on whatsapp_inbound(user_id);
+create index if not exists idx_inbound_phone on whatsapp_inbound(phone_number_id);
+create index if not exists idx_inbound_received_at on whatsapp_inbound(received_at);
+
+alter table whatsapp_inbound enable row level security;
+
+create policy if not exists inbound_is_owner_select on whatsapp_inbound
+  for select using (auth.uid() = user_id);
+
+create policy if not exists inbound_is_owner_ins on whatsapp_inbound
+  for insert with check (auth.uid() = user_id);
+
+-- Status events table (captures Meta webhook statuses even fora do CRM)
+create table if not exists whatsapp_status_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  credential_id uuid references whatsapp_credentials(id) on delete set null,
+  phone_number_id text,
+  message_id text,
+  status text,
+  -- novos campos para cálculos de pagas/grátis e categorias
+  pricing_category text,
+  pricing_billable boolean,
+  conversation_id text,
+  conversation_category text,
+  conversation_origin text,
+  event_ts timestamptz default now(),
+  unique (message_id, status)
+);
+
+create index if not exists idx_status_user on whatsapp_status_events(user_id);
+create index if not exists idx_status_phone on whatsapp_status_events(phone_number_id);
+create index if not exists idx_status_ts on whatsapp_status_events(event_ts);
+create index if not exists idx_status_pricing_billable on whatsapp_status_events(pricing_billable);
+create index if not exists idx_status_pricing_category on whatsapp_status_events(pricing_category);
+
+alter table whatsapp_status_events enable row level security;
+
+create policy if not exists status_is_owner_select on whatsapp_status_events
+  for select using (auth.uid() = user_id);
+
+create policy if not exists status_is_owner_ins on whatsapp_status_events
+  for insert with check (auth.uid() = user_id);
+
+-- Migração segura: adicionar colunas se ainda não existirem
+alter table if exists whatsapp_status_events add column if not exists pricing_category text;
+alter table if exists whatsapp_status_events add column if not exists pricing_billable boolean;
+alter table if exists whatsapp_status_events add column if not exists conversation_id text;
+alter table if exists whatsapp_status_events add column if not exists conversation_category text;
+alter table if exists whatsapp_status_events add column if not exists conversation_origin text;
+create index if not exists idx_status_pricing_billable on whatsapp_status_events(pricing_billable);
+create index if not exists idx_status_pricing_category on whatsapp_status_events(pricing_category);

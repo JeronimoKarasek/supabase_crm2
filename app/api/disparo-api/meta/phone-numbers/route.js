@@ -25,7 +25,12 @@ export async function GET(request) {
 
     const waba = credRow.waba_id
     const token = credRow.access_token
-    const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(waba)}/phone_numbers?fields=display_phone_number,verified_name,quality_rating,name_status`
+    const appId = credRow.app_id || null
+    const appSecret = credRow.app_secret || null
+    let appProof = null
+    try { if (appSecret && token) { const { createHmac } = await import('crypto'); appProof = createHmac('sha256', appSecret).update(token).digest('hex') } } catch {}
+    const withProof = (url) => { if (!appProof) return url; const sep = url.includes('?') ? '&' : '?'; const idp = appId ? `&app_id=${encodeURIComponent(appId)}` : ''; return `${url}${sep}appsecret_proof=${appProof}${idp}` }
+    const url = withProof(`https://graph.facebook.com/v19.0/${encodeURIComponent(waba)}/phone_numbers?fields=display_phone_number,verified_name,quality_rating,name_status`)
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     const json = await res.json()
     if (!res.ok) return NextResponse.json({ error: 'Falha ao buscar números', details: json?.error?.message || 'erro' }, { status: res.status })

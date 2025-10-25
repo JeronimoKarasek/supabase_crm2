@@ -62,7 +62,13 @@ export async function GET(request) {
       try {
         const endpoint = `https://graph.facebook.com/v19.0/${encodeURIComponent(pn)}`
         const fields = 'quality_rating,display_phone_number,name_status'
-        const res = await fetch(`${endpoint}?fields=${encodeURIComponent(fields)}`, { headers: { Authorization: `Bearer ${credRow.access_token}` } })
+        const token = credRow.access_token
+        const appId = credRow.app_id || null
+        const appSecret = credRow.app_secret || null
+        let appProof = null
+        try { if (appSecret && token) { const { createHmac } = await import('crypto'); appProof = createHmac('sha256', appSecret).update(token).digest('hex') } } catch {}
+        const withProof = (url) => { if (!appProof) return url; const sep = url.includes('?') ? '&' : '?'; const idp = appId ? `&app_id=${encodeURIComponent(appId)}` : ''; return `${url}${sep}appsecret_proof=${appProof}${idp}` }
+        const res = await fetch(withProof(`${endpoint}?fields=${encodeURIComponent(fields)}`), { headers: { Authorization: `Bearer ${token}` } })
         const json = await res.json()
         if (res.ok) phoneInfo = json
       } catch {}
