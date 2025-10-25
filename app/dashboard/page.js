@@ -432,8 +432,7 @@ export default function DashboardPage() {
               </div>
             )}
         </div>
-        {/* Criador de gráficos movido para o botão/diálogo acima */}
-
+        
         {/* Saved charts grid */}
         <div className="mt-8">
           <Card>
@@ -524,6 +523,7 @@ export default function DashboardPage() {
     </div>
   )
 }
+
 
 
 
