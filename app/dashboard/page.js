@@ -62,7 +62,7 @@ export default function DashboardPage() {
   const [openCreate, setOpenCreate] = useState(false)
   const [showTable, setShowTable] = useState(false)
   const [userId, setUserId] = useState('')
-  const [csvRows, setCsvRows] = useState([])
+  // Consulta em lote removida do dashboard
 
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserId(data?.user?.id || '')) }, [])
 
@@ -179,47 +179,7 @@ export default function DashboardPage() {
     } catch { setError('Falha ao criar gráfico') }
   }
 
-  // CSV helpers (Consulta em lote)
-  function parseCsv(text) {
-    if (!text) return []
-    text = text.replace(/^\uFEFF/, '')
-    const rawLines = text.split(/\r?\n/).filter(l => l.trim().length > 0)
-    if (!rawLines.length) return []
-    const candidates = [',',';','\t','|']
-    function score(d){ return rawLines.slice(0,Math.min(3,rawLines.length)).reduce((a,l)=>a+(l.split(d).length-1),0) }
-    let delim = candidates.reduce((best,c)=> (score(c)>score(best)?c:best), ',')
-    function splitLine(line){
-      const out = []; let cur = ''; let q=false
-      for (let i=0;i<line.length;i++){
-        const ch=line[i]
-        if (ch==='"') { if (q && line[i+1]==='"'){ cur+='"'; i++ } else { q=!q } }
-        else if (ch===delim && !q){ out.push(cur); cur='' }
-        else { cur+=ch }
-      }
-      out.push(cur)
-      return out
-    }
-    const header = splitLine(rawLines[0]).map(h=>h.trim().toLowerCase())
-    const rows = []
-    for (let i=1;i<rawLines.length;i++){
-      const cols = splitLine(rawLines[i])
-      const obj = {}
-      header.forEach((h,idx)=> obj[h] = (cols[idx] ?? '').toString().trim())
-      if (Object.keys(obj).length) rows.push(obj)
-    }
-    return rows
-  }
-  const onCsvFile = async (e) => {
-    const f = e.target.files?.[0]; if (!f) return
-    const text = await f.text(); setCsvRows(parseCsv(text))
-  }
-  const downloadCsvModel = () => {
-    const sample = 'nome,telefone,cpf\nJoao,11999999999,12345678901\nMaria,11988888888,10987654321\n'
-    const blob = new Blob([sample], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = 'modelo.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
-  }
+  // (Removido) Auxiliares de CSV para consulta em lote
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
@@ -451,49 +411,7 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Consulta em lote (CSV) */}
-        <div className="mt-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Consulta em lote</CardTitle>
-              <CardDescription>Importe um CSV com as colunas: nome, telefone, cpf</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Button variant="outline" onClick={downloadCsvModel}>Modelo</Button>
-                <Input type="file" accept=".csv,text/csv" onChange={onCsvFile} className="max-w-xs" />
-                {csvRows.length > 0 && (
-                  <Button variant="outline" onClick={()=>setCsvRows([])}>Limpar</Button>
-                )}
-              </div>
-              {csvRows.length > 0 && (
-                <div className="border rounded overflow-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Telefone</TableHead>
-                        <TableHead>CPF</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {csvRows.slice(0,50).map((r,idx)=> (
-                        <TableRow key={idx}>
-                          <TableCell>{r.nome || r.name || ''}</TableCell>
-                          <TableCell>{r.telefone || r.phone || ''}</TableCell>
-                          <TableCell>{r.cpf || ''}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-              {csvRows.length > 50 && (
-                <div className="text-xs text-muted-foreground">Exibindo 50 de {csvRows.length} linhas.</div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        {/* (Removido) Consulta em lote (CSV) */}
       </div>
     </div>
   )

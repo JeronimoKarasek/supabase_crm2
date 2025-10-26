@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
 
 export default function ConsultaLotePage() {
   const [items, setItems] = useState([])
@@ -12,6 +14,14 @@ export default function ConsultaLotePage() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState({}) // id -> true (para reprocessar/excluir)
+  const [banks, setBanks] = useState([])
+  const [products, setProducts] = useState([])
+  const [sendBank, setSendBank] = useState('')
+  const [sendProduct, setSendProduct] = useState('')
+  const [csvText, setCsvText] = useState('')
+  const [fileName, setFileName] = useState('')
+  const [sending, setSending] = useState(false)
+  const [canSendBatch, setCanSendBatch] = useState(false)
 
   const loadItems = async () => {
     try {
@@ -31,6 +41,81 @@ export default function ConsultaLotePage() {
   }
 
   useEffect(() => { loadItems() }, [])
+
+  // Carregar bancos e produtos
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const res = await fetch('/api/global-settings')
+        const json = await res.json().catch(() => ({}))
+        if (res.ok) {
+          const allBanks = Array.isArray(json?.settings?.banks) ? json.settings.banks : []
+          const allProducts = Array.isArray(json?.settings?.products) ? json.settings.products : []
+          setBanks(allBanks.filter(b => !!b.forBatch))
+          setProducts(allProducts.filter(p => (typeof p === 'string' ? true : !!p.forBatch)))
+        }
+      } catch {}
+    })()
+  }, [])
+
+  // Permissão para envio em lote
+  useEffect(() => {
+    let active = true
+    const norm = (s) => { try { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() } catch { return String(s || '').toLowerCase() } }
+    const check = async () => {
+      try {
+        const { data } = await supabase.auth.getUser()
+        const user = data?.user
+        const role = user?.user_metadata?.role || 'viewer'
+        const sectors = Array.isArray(user?.user_metadata?.sectors) ? user.user_metadata.sectors : []
+        const has = sectors.some((s) => norm(s) === norm('Consulta em lote'))
+        if (active) setCanSendBatch(role === 'admin' || has)
+      } catch { if (active) setCanSendBatch(false) }
+    }
+    check()
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      const user = session?.user
+      const role = user?.user_metadata?.role || 'viewer'
+      const sectors = Array.isArray(user?.user_metadata?.sectors) ? user.user_metadata.sectors : []
+      const has = sectors.some((s) => norm(s) === norm('Consulta em lote'))
+      if (active) setCanSendBatch(role === 'admin' || has)
+    })
+    return () => { active = false; sub?.subscription?.unsubscribe?.() }
+  }, [])
+
+  const onFileChange = async (e) => {
+    try {
+      const f = e?.target?.files?.[0]
+      if (!f) { setFileName(''); setCsvText(''); return }
+      setFileName(f.name)
+      const text = await f.text().catch(() => '')
+      setCsvText(text || '')
+    } catch {
+      setFileName('')
+      setCsvText('')
+    }
+  }
+
+  const onSend = async () => {
+    if (!csvText || !sendProduct || !sendBank) return
+    try {
+      setSending(true)
+      setError('')
+      setMessage('')
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const res = await fetch('/api/importar', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ csv: csvText, produto: sendProduct, banco: sendBank }) })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'Falha ao enviar lote')
+      setMessage('Lote enviado para processamento.')
+      setCsvText(''); setFileName(''); setSendBank(''); setSendProduct('')
+      loadItems()
+    } catch (e) {
+      setError(e?.message || 'Falha ao enviar lote')
+    } finally {
+      setSending(false)
+    }
+  }
 
   const onDownload = async (id) => {
     try {
@@ -96,12 +181,58 @@ export default function ConsultaLotePage() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={loadItems} disabled={loading}>Atualizar</Button>
-          <Button asChild variant="secondary"><a href="/clientes">Enviar novo lote</a></Button>
+          <Button asChild variant="secondary"><a href="/clientes">Enviar via Clientes</a></Button>
         </div>
       </div>
 
       {message ? <div className="text-green-600 text-sm">{message}</div> : null}
       {error ? <div className="text-red-600 text-sm">{error}</div> : null}
+
+      {canSendBatch && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Enviar novo lote</CardTitle>
+            <CardDescription>Selecione o produto, o banco e envie um arquivo CSV com colunas nome, telefone, cpf.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+              <div className="space-y-1">
+                <div className="text-xs text-muted-foreground">Produto</div>
+                <Select value={sendProduct} onValueChange={setSendProduct}>
+                  <SelectTrigger><SelectValue placeholder="Produto" /></SelectTrigger>
+                  <SelectContent>
+                    {products.map((p, i) => {
+                      const name = typeof p === 'string' ? p : (p?.name || '')
+                      if (!name) return null
+                      return (<SelectItem key={i} value={name}>{name}</SelectItem>)
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs text-muted-foreground">Banco</div>
+                <Select value={sendBank} onValueChange={setSendBank}>
+                  <SelectTrigger><SelectValue placeholder="Banco" /></SelectTrigger>
+                  <SelectContent>
+                    {banks.map((b) => (
+                      <SelectItem key={b.key} value={b.key}>{b.name || b.key}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <div className="text-xs text-muted-foreground">Arquivo CSV</div>
+                <Input type="file" accept=".csv,text/csv" onChange={onFileChange} />
+                {fileName ? <div className="text-xs text-muted-foreground">Selecionado: {fileName}</div> : null}
+              </div>
+              <div className="md:col-span-4 flex gap-2">
+                <Button onClick={onSend} disabled={sending || !csvText || !sendProduct || !sendBank}>{sending ? 'Enviando...' : 'Enviar'}</Button>
+                <Button variant="outline" onClick={() => { setCsvText(''); setFileName(''); }} disabled={!csvText}>Limpar arquivo</Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -153,4 +284,3 @@ export default function ConsultaLotePage() {
     </div>
   )
 }
-
