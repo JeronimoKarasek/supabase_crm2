@@ -32,6 +32,7 @@ export default function ConfiguracaoPage() {
   const [mercadopagoPublicKey, setMercadopagoPublicKey] = useState('')
   const [creditsWebhook, setCreditsWebhook] = useState('')
   const [addCreditsWebhook, setAddCreditsWebhook] = useState('')
+  const [adminEmails, setAdminEmails] = useState('')
 
   const [message, setMessage] = useState('')
 
@@ -87,6 +88,9 @@ export default function ConfiguracaoPage() {
           if (typeof p.mercadopagoPublicKey === 'string') setMercadopagoPublicKey(p.mercadopagoPublicKey)
           if (typeof p.creditsWebhook === 'string') setCreditsWebhook(p.creditsWebhook)
           if (typeof p.addCreditsWebhook === 'string') setAddCreditsWebhook(p.addCreditsWebhook)
+          // adminEmails: lista de emails separados por vírgula ou array
+          if (Array.isArray(s.adminEmails)) setAdminEmails(s.adminEmails.join(', '))
+          else if (typeof s.adminEmails === 'string') setAdminEmails(s.adminEmails)
         }
       } catch {}
     })()
@@ -139,6 +143,19 @@ export default function ConfiguracaoPage() {
         })
       })
       if (res.ok) { setMessage('Configuracoes salvas'); setTimeout(()=>setMessage(''), 2000) }
+    } catch {}
+  }
+
+  const saveAdminEmails = async () => {
+    try {
+      // Converte string separada por vírgula em array
+      const emailsArray = adminEmails.split(',').map(e => e.trim()).filter(Boolean)
+      const res = await fetch('/api/global-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminEmails: emailsArray })
+      })
+      if (res.ok) { setMessage('Admins salvos com sucesso'); setTimeout(()=>setMessage(''), 2000) }
     } catch {}
   }
 
@@ -425,6 +442,30 @@ export default function ConfiguracaoPage() {
             </div>
             <div className="flex justify-end">
               <Button onClick={savePayments}>Salvar pagamentos</Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card de Admin Emails */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Administradores do Sistema</CardTitle>
+            <CardDescription>Configure quais e-mails podem adicionar créditos manualmente para usuários</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <div className="text-sm font-medium mb-2">E-mails dos Administradores</div>
+              <Input 
+                value={adminEmails} 
+                onChange={(e)=> setAdminEmails(e.target.value)} 
+                placeholder="admin@dominio.com, outro@dominio.com"
+              />
+              <div className="text-xs text-muted-foreground mt-1">
+                Separe múltiplos e-mails por vírgula. Usuários com estes e-mails poderão adicionar créditos na página de Usuários.
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={saveAdminEmails}>Salvar administradores</Button>
             </div>
           </CardContent>
         </Card>

@@ -440,6 +440,19 @@ export default function UsuariosPage() {
           </CardContent>
         </Card>
 
+        {/* Admin: Adicionar Créditos para um usuário */}
+        <div className="mt-8">
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle>Adicionar Créditos para Usuário (Admin)</CardTitle>
+              <CardDescription>Informe o ID do usuário ou e-mail e o valor em reais</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AdminAddCreditsForm />
+            </CardContent>
+          </Card>
+        </div>
+
         <div className="mt-8">
           <Card>
             <CardHeader>
@@ -604,6 +617,59 @@ export default function UsuariosPage() {
             </Card>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+function AdminAddCreditsForm(){
+  const [userId, setUserId] = useState('')
+  const [email, setEmail] = useState('')
+  const [amount, setAmount] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [err, setErr] = useState('')
+
+  const submit = async () => {
+    setLoading(true); setMsg(''); setErr('')
+    try{
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const res = await fetch('/api/credits/admin-add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ userId: userId || undefined, email: email || undefined, amount })
+      })
+      const j = await res.json()
+      if (!res.ok) {
+        setErr(j?.error || 'Falha ao adicionar créditos')
+      } else {
+        setMsg(`Novo saldo: ${j.balanceBRL}`)
+        setUserId(''); setEmail(''); setAmount('')
+      }
+    } catch(e){
+      setErr('Erro inesperado')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Input placeholder="ID do usuário (UUID)" value={userId} onChange={(e)=> setUserId(e.target.value)} />
+        <Input placeholder="ou e-mail do usuário" value={email} onChange={(e)=> setEmail(e.target.value)} />
+        <Input placeholder="Valor em R$ (ex: 50,00)" value={amount} onChange={(e)=> setAmount(e.target.value)} />
+      </div>
+      <div className="flex gap-2">
+        <Button onClick={submit} disabled={loading || (!userId && !email) || !amount}>
+          {loading ? 'Processando...' : 'Adicionar Créditos'}
+        </Button>
+        {msg && <div className="text-emerald-700 dark:text-emerald-300 text-sm self-center">{msg}</div>}
+        {err && <div className="text-red-600 dark:text-red-400 text-sm self-center">{err}</div>}
+      </div>
+      <div className="text-xs text-muted-foreground">
+        Para liberar esta função, adicione seu e-mail em Configuração &gt; adminEmails (em global settings). Caso contrário, retorno será 403.
       </div>
     </div>
   )

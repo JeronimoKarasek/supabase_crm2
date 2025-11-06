@@ -44,6 +44,9 @@ export async function PUT(request) {
     if (typeof body.siteSubtitle === 'string') next.siteSubtitle = body.siteSubtitle
     if (typeof body.logoUrl === 'string') next.logoUrl = body.logoUrl
     if (Array.isArray(body.valorPagoList)) next.valorPagoList = body.valorPagoList
+    if (Array.isArray(body.adminEmails)) {
+      next.adminEmails = body.adminEmails.filter(e => typeof e === 'string' && e.length > 0)
+    }
     if (Array.isArray(body.products)) {
       next.products = body.products.map(p => (typeof p === 'string' ? { name: p, forBatch: true, forSimular: true } : { name: p.name, forBatch: !!p.forBatch, forSimular: !!p.forSimular }))
     }
@@ -106,6 +109,9 @@ export async function POST(request) {
     if (typeof body.siteSubtitle === 'string') next.siteSubtitle = body.siteSubtitle
     if (typeof body.logoUrl === 'string') next.logoUrl = body.logoUrl
     if (Array.isArray(body.valorPagoList)) next.valorPagoList = body.valorPagoList
+    if (Array.isArray(body.adminEmails)) {
+      next.adminEmails = body.adminEmails.filter(e => typeof e === 'string' && e.length > 0)
+    }
     if (Array.isArray(body.products)) { next.products = body.products.map(p => (typeof p === "string" ? { name: p, forBatch: true, forSimular: true } : { name: p.name, forBatch: !!p.forBatch, forSimular: !!p.forSimular })) }
     if (Array.isArray(body.banks)) {
       next.banks = body.banks.map(b => ({

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+const credits = require('@/lib/credits')
 import { setNX } from '@/lib/redis'
 
 /**
@@ -123,6 +124,15 @@ export async function POST(request) {
                 } catch (webhookError) {
                   console.error('Erro ao chamar webhook de créditos:', webhookError)
                 }
+              }
+
+              // Atualiza créditos no Redis (independente do webhook externo)
+              try {
+                const cents = Math.round(Number(amount) * 100)
+                await credits.addCents(user.id, cents)
+                console.log('[MP Webhook] Créditos somados no Redis:', user.id, cents)
+              } catch (err) {
+                console.error('Erro ao somar créditos no Redis:', err)
               }
             }
           }

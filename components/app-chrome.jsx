@@ -29,6 +29,7 @@ export default function AppChrome({ children }) {
   const isLogin = pathname === '/login'
   const [branding, setBranding] = useState({ siteName: 'FarolTech', siteSubtitle: 'Iluminando seu caminho', logoUrl: '' })
   const [loadingCredits, setLoadingCredits] = useState(false)
+  const [creditsBRL, setCreditsBRL] = useState('R$ 0,00')
   const [loadingAddCredits, setLoadingAddCredits] = useState(false)
   const [creditsDialog, setCreditsDialog] = useState({ open: false, data: null, error: null })
   const [addCreditsDialog, setAddCreditsDialog] = useState({ open: false, data: null, error: null, step: 'form' })
@@ -51,27 +52,26 @@ export default function AppChrome({ children }) {
   const consultarCreditos = async () => {
     try {
       setLoadingCredits(true)
-      setCreditsDialog({ open: false, data: null, error: null })
-      
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch('/api/payments/credits', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      const res = await fetch('/api/credits', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
       const json = await res.json()
-      
-      if (!res.ok) {
-        setCreditsDialog({ open: true, data: null, error: json?.error || 'Falha ao consultar créditos' })
-        return
+      if (res.ok) {
+        setCreditsBRL(json?.balanceBRL || 'R$ 0,00')
       }
-      
-      // Extrai os dados do webhook
-      const webhookData = json?.data || json
-      setCreditsDialog({ open: true, data: webhookData, error: null })
     } catch (e) {
-      setCreditsDialog({ open: true, data: null, error: 'Erro ao consultar créditos' })
+      // silencioso no cabeçalho
     } finally {
       setLoadingCredits(false)
     }
   }
+
+  useEffect(() => {
+    // carrega saldo ao entrar e a cada 20s
+    consultarCreditos()
+    const id = setInterval(consultarCreditos, 20000)
+    return () => clearInterval(id)
+  }, [])
 
   const adicionarCreditos = async () => {
     // Abre o dialog no step de formulário
@@ -154,8 +154,11 @@ export default function AppChrome({ children }) {
             <span className="text-sm text-muted-foreground">Menu</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={consultarCreditos} disabled={loadingCredits} className="border-emerald-600 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950">
-              {loadingCredits ? 'Consultando...' : 'Consultar créditos'}
+            <div className="text-sm text-emerald-800 dark:text-emerald-300 font-semibold px-2">
+              Crédito: {creditsBRL}
+            </div>
+            <Button size="icon" variant="outline" onClick={consultarCreditos} disabled={loadingCredits} className="border-emerald-600 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950 h-8 w-8" title="Atualizar saldo">
+              ↻
             </Button>
             <Button size="sm" variant="outline" onClick={adicionarCreditos} disabled={loadingAddCredits} className="border-blue-600 text-blue-700 hover:bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-950">
               {loadingAddCredits ? 'Processando...' : 'Add créditos'}
