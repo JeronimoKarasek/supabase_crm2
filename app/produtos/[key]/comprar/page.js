@@ -20,7 +20,7 @@ export default function ComprarProdutoPage() {
     ;(async () => {
       try {
         if (!key) return
-        const res = await fetch(/api/products/public?key=$\{encodeURIComponent(key)})
+        const res = await fetch(`/api/products/public?key=${encodeURIComponent(key)}`)
         const json = await res.json()
         setProduct(json.product || null)
       } catch {}
@@ -33,10 +33,10 @@ export default function ComprarProdutoPage() {
     if (!product) return
     setSubmitting(true)
     try {
-      const referenceId = $\{key}_$\{Date.now()}
+      const referenceId = `${key}_${Date.now()}`
       const body = {
         productKey: key,
-        returnPath: /produtos/$\{key}/comprar,
+        returnPath: `/produtos/${key}/comprar`,
         amount: Number(basePrice.toFixed(2)),
         referenceId,
         buyer: {
@@ -51,7 +51,7 @@ export default function ComprarProdutoPage() {
       }
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch('/api/payments/add-credits', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: Bearer $\{token} } : {}) }, body: JSON.stringify(body) })
+  const res = await fetch('/api/payments/add-credits', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Falha ao iniciar pagamento')
       setPayment({ qrCode: json.qrCode, qrCodeBase64: json.qrCodeBase64, paymentId: json.paymentId })
@@ -64,12 +64,12 @@ export default function ComprarProdutoPage() {
   const checkStatus = async () => {
     if (!payment?.paymentId) return
     try {
-      const res = await fetch(https://api.mercadopago.com/v1/payments/$\{payment.paymentId}, {
-        headers: { 'Authorization': Bearer $\{process.env.NEXT_PUBLIC_MERCADOPAGO_ACCESS_TOKEN || ''} }
+      const res = await fetch(`https://api.mercadopago.com/v1/payments/${payment.paymentId}`, {
+        headers: { 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_MERCADOPAGO_ACCESS_TOKEN || ''}` }
       })
       const json = await res.json()
       if (json.status === 'approved') setMessage('Pagamento confirmado!')
-      else { setMessage(Status: $\{json.status}); setTimeout(()=>setMessage(''), 2000) }
+      else { setMessage(`Status: ${json.status}`); setTimeout(()=>setMessage(''), 2000) }
     } catch {
       setMessage('Erro ao verificar status')
       setTimeout(() => setMessage(''), 2000)
@@ -101,7 +101,7 @@ export default function ComprarProdutoPage() {
             </div>
             <div className="flex items-center justify-between">
               <div className="text-lg">Valor</div>
-              <div className="text-2xl font-bold">R$\{basePrice.toFixed(2)}</div>
+              <div className="text-2xl font-bold">R$ {basePrice.toFixed(2)}</div>
             </div>
             <div className="flex justify-end">
               <Button onClick={concluir} disabled={isSubmitting || !(basePrice > 0)}>{isSubmitting ? 'Processando...' : 'Concluir'}</Button>
@@ -111,7 +111,7 @@ export default function ComprarProdutoPage() {
                 <div className="text-sm font-medium">Escaneie o QR Code para pagar via PIX</div>
                 {payment.qrCodeBase64 && (
                   <div className="flex flex-col items-center gap-3 bg-white p-4 rounded">
-                    <img src={data:image/png;base64,$\{payment.qrCodeBase64}} alt="QR Code PIX" className="w-64 h-64" />
+                    <img src={`data:image/png;base64,${payment.qrCodeBase64}`} alt="QR Code PIX" className="w-64 h-64" />
                     <div className="text-xs text-muted-foreground text-center max-w-sm break-all">
                       {payment.qrCode}
                     </div>
