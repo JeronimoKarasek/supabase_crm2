@@ -22,7 +22,13 @@ export async function GET(request){
 
     // Allow S2S with INTERNAL_API_KEY to query any user
     const apiKey = getApiKey(request)
-    if (apiKey && process.env.INTERNAL_API_KEY && apiKey === process.env.INTERNAL_API_KEY) {
+    if (apiKey) {
+      if (!process.env.INTERNAL_API_KEY) {
+        return NextResponse.json({ error: 'Unauthorized (server missing INTERNAL_API_KEY)' }, { status: 401 })
+      }
+      if (apiKey !== process.env.INTERNAL_API_KEY) {
+        return NextResponse.json({ error: 'Unauthorized (invalid x-api-key)' }, { status: 401 })
+      }
       if (!queryUserId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
       const cents = await credits.getBalanceCents(queryUserId)
       return NextResponse.json({ userId: queryUserId, balanceCents: cents, balanceBRL: credits.formatBRL(cents) })

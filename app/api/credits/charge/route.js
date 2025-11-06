@@ -21,7 +21,14 @@ export async function POST(request){
     let { userId, amount, cents } = body
 
     const apiKey = getApiKey(request)
-    if (apiKey && process.env.INTERNAL_API_KEY && apiKey === process.env.INTERNAL_API_KEY) {
+    // S2S path using x-api-key
+    if (apiKey) {
+      if (!process.env.INTERNAL_API_KEY) {
+        return NextResponse.json({ error: 'Unauthorized (server missing INTERNAL_API_KEY)' }, { status: 401 })
+      }
+      if (apiKey !== process.env.INTERNAL_API_KEY) {
+        return NextResponse.json({ error: 'Unauthorized (invalid x-api-key)' }, { status: 401 })
+      }
       if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
       const valueCents = typeof cents === 'number' ? Math.round(cents) : credits.toCents(amount)
       if (!Number.isFinite(valueCents) || valueCents <= 0) return NextResponse.json({ error: 'amount invalid' }, { status: 400 })
