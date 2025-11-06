@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+
+export const dynamic = 'force-dynamic'
 const credits = require('@/lib/credits')
 import { setNX } from '@/lib/redis'
 
+
+export const dynamic = 'force-dynamic'
 /**
  * Mercado Pago Webhook
  * 

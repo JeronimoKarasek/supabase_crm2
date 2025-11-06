@@ -14,6 +14,7 @@ CREATE INDEX IF NOT EXISTS idx_user_credits_updated_at ON user_credits(updated_a
 ALTER TABLE user_credits ENABLE ROW LEVEL SECURITY;
 
 -- Política: usuários autenticados podem ler seu próprio saldo
+DROP POLICY IF EXISTS "Users can read own balance" ON user_credits;
 CREATE POLICY "Users can read own balance"
   ON user_credits
   FOR SELECT

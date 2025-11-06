@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 const credits = require('@/lib/credits')
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Endpoint para processar cobranças mensais de assinaturas
  * Deve ser chamado via cron job ou webhook externo diariamente

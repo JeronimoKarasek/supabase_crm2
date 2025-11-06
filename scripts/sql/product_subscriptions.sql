@@ -28,6 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_product_subscriptions_status ON product_subscript
 ALTER TABLE product_subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- Política: usuários podem ler suas próprias assinaturas
+DROP POLICY IF EXISTS "Users can read own subscriptions" ON product_subscriptions;
 CREATE POLICY "Users can read own subscriptions"
   ON product_subscriptions
   FOR SELECT

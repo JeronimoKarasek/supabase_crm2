@@ -19,16 +19,20 @@ create table if not exists whatsapp_credentials (
 
 alter table whatsapp_credentials enable row level security;
 
-create policy if not exists whatsapp_credentials_is_owner_select on whatsapp_credentials
+drop policy if exists whatsapp_credentials_is_owner_select on whatsapp_credentials;
+create policy whatsapp_credentials_is_owner_select on whatsapp_credentials
   for select using (auth.uid() = user_id);
 
-create policy if not exists whatsapp_credentials_is_owner_ins on whatsapp_credentials
+drop policy if exists whatsapp_credentials_is_owner_ins on whatsapp_credentials;
+create policy whatsapp_credentials_is_owner_ins on whatsapp_credentials
   for insert with check (auth.uid() = user_id);
 
-create policy if not exists whatsapp_credentials_is_owner_upd on whatsapp_credentials
+drop policy if exists whatsapp_credentials_is_owner_upd on whatsapp_credentials;
+create policy whatsapp_credentials_is_owner_upd on whatsapp_credentials
   for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-create policy if not exists whatsapp_credentials_is_owner_del on whatsapp_credentials
+drop policy if exists whatsapp_credentials_is_owner_del on whatsapp_credentials;
+create policy whatsapp_credentials_is_owner_del on whatsapp_credentials
   for delete using (auth.uid() = user_id);
 
 -- Telefones disponibilizados pelo WABA (opcional, para cache/localização)
@@ -49,16 +53,20 @@ create table if not exists whatsapp_phone_numbers (
 
 alter table whatsapp_phone_numbers enable row level security;
 
-create policy if not exists phone_numbers_is_owner_select on whatsapp_phone_numbers
+drop policy if exists phone_numbers_is_owner_select on whatsapp_phone_numbers;
+create policy phone_numbers_is_owner_select on whatsapp_phone_numbers
   for select using (auth.uid() = user_id);
 
-create policy if not exists phone_numbers_is_owner_ins on whatsapp_phone_numbers
+drop policy if exists phone_numbers_is_owner_ins on whatsapp_phone_numbers;
+create policy phone_numbers_is_owner_ins on whatsapp_phone_numbers
   for insert with check (auth.uid() = user_id);
 
-create policy if not exists phone_numbers_is_owner_upd on whatsapp_phone_numbers
+drop policy if exists phone_numbers_is_owner_upd on whatsapp_phone_numbers;
+create policy phone_numbers_is_owner_upd on whatsapp_phone_numbers
   for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-create policy if not exists phone_numbers_is_owner_del on whatsapp_phone_numbers
+drop policy if exists phone_numbers_is_owner_del on whatsapp_phone_numbers;
+create policy phone_numbers_is_owner_del on whatsapp_phone_numbers
   for delete using (auth.uid() = user_id);
 
 -- Templates disponíveis (opcional, para cache)
@@ -79,16 +87,20 @@ create table if not exists whatsapp_templates (
 
 alter table whatsapp_templates enable row level security;
 
-create policy if not exists templates_is_owner_select on whatsapp_templates
+drop policy if exists templates_is_owner_select on whatsapp_templates;
+create policy templates_is_owner_select on whatsapp_templates
   for select using (auth.uid() = user_id);
 
-create policy if not exists templates_is_owner_ins on whatsapp_templates
+drop policy if exists templates_is_owner_ins on whatsapp_templates;
+create policy templates_is_owner_ins on whatsapp_templates
   for insert with check (auth.uid() = user_id);
 
-create policy if not exists templates_is_owner_upd on whatsapp_templates
+drop policy if exists templates_is_owner_upd on whatsapp_templates;
+create policy templates_is_owner_upd on whatsapp_templates
   for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-create policy if not exists templates_is_owner_del on whatsapp_templates
+drop policy if exists templates_is_owner_del on whatsapp_templates;
+create policy templates_is_owner_del on whatsapp_templates
   for delete using (auth.uid() = user_id);
 
 -- Base de disparo (lotes)
@@ -124,16 +136,20 @@ create index if not exists idx_disparo_cred on disparo_crm_api(credential_id);
 
 alter table disparo_crm_api enable row level security;
 
-create policy if not exists disparo_is_owner_select on disparo_crm_api
+drop policy if exists disparo_is_owner_select on disparo_crm_api;
+create policy disparo_is_owner_select on disparo_crm_api
   for select using (auth.uid() = user_id);
 
-create policy if not exists disparo_is_owner_insert on disparo_crm_api
+drop policy if exists disparo_is_owner_insert on disparo_crm_api;
+create policy disparo_is_owner_insert on disparo_crm_api
   for insert with check (auth.uid() = user_id);
 
-create policy if not exists disparo_is_owner_update on disparo_crm_api
+drop policy if exists disparo_is_owner_update on disparo_crm_api;
+create policy disparo_is_owner_update on disparo_crm_api
   for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-create policy if not exists disparo_is_owner_delete on disparo_crm_api
+drop policy if exists disparo_is_owner_delete on disparo_crm_api;
+create policy disparo_is_owner_delete on disparo_crm_api
   for delete using (auth.uid() = user_id);
 
 -- Função de updated_at
@@ -187,10 +203,12 @@ create index if not exists idx_inbound_received_at on whatsapp_inbound(received_
 
 alter table whatsapp_inbound enable row level security;
 
-create policy if not exists inbound_is_owner_select on whatsapp_inbound
+drop policy if exists inbound_is_owner_select on whatsapp_inbound;
+create policy inbound_is_owner_select on whatsapp_inbound
   for select using (auth.uid() = user_id);
 
-create policy if not exists inbound_is_owner_ins on whatsapp_inbound
+drop policy if exists inbound_is_owner_ins on whatsapp_inbound;
+create policy inbound_is_owner_ins on whatsapp_inbound
   for insert with check (auth.uid() = user_id);
 
 -- Status events table (captures Meta webhook statuses even fora do CRM)
@@ -201,7 +219,6 @@ create table if not exists whatsapp_status_events (
   phone_number_id text,
   message_id text,
   status text,
-  -- novos campos para cálculos de pagas/grátis e categorias
   pricing_category text,
   pricing_billable boolean,
   conversation_id text,
@@ -211,6 +228,27 @@ create table if not exists whatsapp_status_events (
   unique (message_id, status)
 );
 
+-- Migração: adicionar colunas se não existirem (para bancos que já têm a tabela)
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_name = 'whatsapp_status_events' and column_name = 'pricing_category') then
+    alter table whatsapp_status_events add column pricing_category text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'whatsapp_status_events' and column_name = 'pricing_billable') then
+    alter table whatsapp_status_events add column pricing_billable boolean;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'whatsapp_status_events' and column_name = 'conversation_id') then
+    alter table whatsapp_status_events add column conversation_id text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'whatsapp_status_events' and column_name = 'conversation_category') then
+    alter table whatsapp_status_events add column conversation_category text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'whatsapp_status_events' and column_name = 'conversation_origin') then
+    alter table whatsapp_status_events add column conversation_origin text;
+  end if;
+end $$;
+
+-- Índices (só criar após garantir que as colunas existem)
 create index if not exists idx_status_user on whatsapp_status_events(user_id);
 create index if not exists idx_status_phone on whatsapp_status_events(phone_number_id);
 create index if not exists idx_status_ts on whatsapp_status_events(event_ts);
@@ -219,17 +257,10 @@ create index if not exists idx_status_pricing_category on whatsapp_status_events
 
 alter table whatsapp_status_events enable row level security;
 
-create policy if not exists status_is_owner_select on whatsapp_status_events
+drop policy if exists status_is_owner_select on whatsapp_status_events;
+create policy status_is_owner_select on whatsapp_status_events
   for select using (auth.uid() = user_id);
 
-create policy if not exists status_is_owner_ins on whatsapp_status_events
+drop policy if exists status_is_owner_ins on whatsapp_status_events;
+create policy status_is_owner_ins on whatsapp_status_events
   for insert with check (auth.uid() = user_id);
-
--- Migração segura: adicionar colunas se ainda não existirem
-alter table if exists whatsapp_status_events add column if not exists pricing_category text;
-alter table if exists whatsapp_status_events add column if not exists pricing_billable boolean;
-alter table if exists whatsapp_status_events add column if not exists conversation_id text;
-alter table if exists whatsapp_status_events add column if not exists conversation_category text;
-alter table if exists whatsapp_status_events add column if not exists conversation_origin text;
-create index if not exists idx_status_pricing_billable on whatsapp_status_events(pricing_billable);
-create index if not exists idx_status_pricing_category on whatsapp_status_events(pricing_category);

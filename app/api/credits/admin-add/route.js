@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+
+export const dynamic = 'force-dynamic'
 const credits = require('@/lib/credits')
 
 async function getUserFromAuth(request){

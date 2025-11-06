@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import fs from 'fs'
+
+export const dynamic = 'force-dynamic'
 import path from 'path'
+
+export const dynamic = 'force-dynamic'
 import { supabaseAdmin } from '../../../lib/supabase-admin.js'
 
+
+export const dynamic = 'force-dynamic'
 const storePath = path.join(process.cwd(), '.emergent', 'importar.json')
 function ensureDir() { const dir = path.dirname(storePath); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }) }
 function readStore() { try { ensureDir(); if (!fs.existsSync(storePath)) return { items: [] }; return JSON.parse(fs.readFileSync(storePath,'utf8')) } catch { return { items: [] } } }

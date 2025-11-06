@@ -1,6 +1,10 @@
-ï»¿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+
+export const dynamic = 'force-dynamic'
 function unauthorized(msg = 'Unauthorized') { return NextResponse.json({ error: msg }, { status: 401 }) }
 
 async function getUserFromRequest(request) {
@@ -71,7 +75,7 @@ export async function GET(request) {
     const phone_number_id = searchParams.get('phone_number_id')
     const startParam = searchParams.get('start')
     const endParam = searchParams.get('end')
-    if (!credential_id) return NextResponse.json({ error: 'credential_id obrigatÃ³rio' }, { status: 400 })
+    if (!credential_id) return NextResponse.json({ error: 'credential_id obrigatório' }, { status: 400 })
 
     // Resolve credential
     const { data: credRow, error: credErr } = await supabaseAdmin
@@ -80,7 +84,7 @@ export async function GET(request) {
       .eq('id', credential_id)
       .eq('user_id', user.id)
       .single()
-    if (credErr || !credRow?.access_token) return NextResponse.json({ error: 'Credencial nÃƒÂ£o encontrada ou sem token' }, { status: 404 })
+    if (credErr || !credRow?.access_token) return NextResponse.json({ error: 'Credencial nÃ£o encontrada ou sem token' }, { status: 404 })
 
     const token = credRow.access_token
     const appId = credRow.app_id || null
@@ -108,9 +112,9 @@ export async function GET(request) {
 
     const errors = []
     const totals = { sent: 0, delivered: 0, received: 0 }
-    // categorias pagas (para refletir o cartÃ£o "Mensagens pagas entregues")
+    // categorias pagas (para refletir o cartão "Mensagens pagas entregues")
     const categories = { marketing: 0, service: 0, authentication: 0, authentication_international: 0, utility: 0 }
-    // contadores de conversas grÃ¡tis (para refletir o cartÃ£o "Mensagens grÃ¡tis entregues")
+    // contadores de conversas grátis (para refletir o cartão "Mensagens grátis entregues")
     const free = { support_free: 0, entry_point_free: 0 }
     // totais derivados de conversation_analytics
     let delivered_free = 0
@@ -133,7 +137,7 @@ export async function GET(request) {
         }
       } catch (e) { errors.push(e.message) }
 
-      // Fallback: WABA-level insights (messages metric) com dimensÃµes por nÃºmero
+      // Fallback: WABA-level insights (messages metric) com dimensões por número
       try {
         const dims = encodeURIComponent('["PHONE_NUMBER"]')
         const url2 = withProof(`https://graph.facebook.com/v19.0/${encodeURIComponent(wabaId)}/insights?metric=messages&since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}&granularity=DAILY&dimensions=${dims}`)
@@ -201,7 +205,7 @@ export async function GET(request) {
           const ep = (val?.conversation_entry_point || val?.entry_point || '').toString().toLowerCase()
           const isFree = ep.includes('free')
           if (isFree) {
-            // grÃ¡tis
+            // grátis
             delivered_free += count
             if (ep.includes('support') || ep.includes('customer')) free.support_free += count
             else free.entry_point_free += count
@@ -281,7 +285,7 @@ export async function GET(request) {
         const deliveredEv = await countStatus('delivered')
         const readEv = await countStatus('read')
 
-        // Derivar pagas/grÃ¡tis e categorias a partir de status_events (quando possÃ­vel)
+        // Derivar pagas/grátis e categorias a partir de status_events (quando possível)
         try {
           let qe = supabaseAdmin
             .from('whatsapp_status_events')
@@ -317,7 +321,7 @@ export async function GET(request) {
       errors.push('CRM fallback failed: ' + (e?.message || e))
     }
 
-    // entregue total (quando possÃ­vel, usar soma paid+free para ficar consistente com o Manager)
+    // entregue total (quando possível, usar soma paid+free para ficar consistente com o Manager)
     const deliveredFromConv = delivered_paid + delivered_free
     if (deliveredFromConv > 0) totals.delivered = deliveredFromConv
 

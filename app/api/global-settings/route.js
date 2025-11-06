@@ -1,6 +1,10 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import { supabaseAdmin } from '@/lib/supabase-admin.js'
 
+
+export const dynamic = 'force-dynamic'
 async function getUserFromRequest(request) {
   const auth = request.headers.get('authorization') || request.headers.get('Authorization')
   if (!auth || !auth.toLowerCase().startsWith('bearer ')) return null
@@ -28,7 +32,7 @@ async function writeSettingsToDb(obj) {
 }
 
 export async function GET() {
-  // Always return full site-wide settings so ConfiguraÃ§Ã£o works on Vercel
+  // Always return full site-wide settings so Configuração works on Vercel
   const settings = await readSettingsFromDb()
   return NextResponse.json({ settings })
 }

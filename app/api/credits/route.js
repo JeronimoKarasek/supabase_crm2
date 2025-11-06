@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 const credits = require('@/lib/credits')
 
+export const dynamic = 'force-dynamic'
+
 function getApiKey(request){
   return request.headers.get('x-api-key') || request.headers.get('X-Api-Key') || ''
 }

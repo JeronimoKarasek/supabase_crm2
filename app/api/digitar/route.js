@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 import { supabaseAdmin } from '../../../lib/supabase-admin.js'
 
+
+export const dynamic = 'force-dynamic'
 async function getUserFromRequest(request) {
   const auth = request.headers.get('authorization') || request.headers.get('Authorization')
   if (!auth || !auth.toLowerCase().startsWith('bearer ')) return null
