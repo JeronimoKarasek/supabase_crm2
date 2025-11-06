@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server'
-
-export const dynamic = 'force-dynamic'
 import fs from 'fs'
 
 export const dynamic = 'force-dynamic'

@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server'
-
-export const dynamic = 'force-dynamic'
 import { supabaseAdmin } from '@/lib/supabase-admin.js'
 
-
 export const dynamic = 'force-dynamic'
+
 function unauthorized(msg = 'Unauthorized') { return NextResponse.json({ error: msg }, { status: 401 }) }
 function forbidden(msg = 'Forbidden') { return NextResponse.json({ error: msg }, { status: 403 }) }
 

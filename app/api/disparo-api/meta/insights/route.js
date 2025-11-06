@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server'
-
-export const dynamic = 'force-dynamic'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-
 export const dynamic = 'force-dynamic'
+
 function unauthorized(msg = 'Unauthorized') { return NextResponse.json({ error: msg }, { status: 401 }) }
 
 async function getUserFromRequest(request) {
@@ -75,7 +73,7 @@ export async function GET(request) {
     const phone_number_id = searchParams.get('phone_number_id')
     const startParam = searchParams.get('start')
     const endParam = searchParams.get('end')
-    if (!credential_id) return NextResponse.json({ error: 'credential_id obrigatório' }, { status: 400 })
+    if (!credential_id) return NextResponse.json({ error: 'credential_id obrigatï¿½rio' }, { status: 400 })
 
     // Resolve credential
     const { data: credRow, error: credErr } = await supabaseAdmin
@@ -112,9 +110,9 @@ export async function GET(request) {
 
     const errors = []
     const totals = { sent: 0, delivered: 0, received: 0 }
-    // categorias pagas (para refletir o cartão "Mensagens pagas entregues")
+    // categorias pagas (para refletir o cartï¿½o "Mensagens pagas entregues")
     const categories = { marketing: 0, service: 0, authentication: 0, authentication_international: 0, utility: 0 }
-    // contadores de conversas grátis (para refletir o cartão "Mensagens grátis entregues")
+    // contadores de conversas grï¿½tis (para refletir o cartï¿½o "Mensagens grï¿½tis entregues")
     const free = { support_free: 0, entry_point_free: 0 }
     // totais derivados de conversation_analytics
     let delivered_free = 0
@@ -137,7 +135,7 @@ export async function GET(request) {
         }
       } catch (e) { errors.push(e.message) }
 
-      // Fallback: WABA-level insights (messages metric) com dimensões por número
+      // Fallback: WABA-level insights (messages metric) com dimensï¿½es por nï¿½mero
       try {
         const dims = encodeURIComponent('["PHONE_NUMBER"]')
         const url2 = withProof(`https://graph.facebook.com/v19.0/${encodeURIComponent(wabaId)}/insights?metric=messages&since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}&granularity=DAILY&dimensions=${dims}`)
@@ -205,7 +203,7 @@ export async function GET(request) {
           const ep = (val?.conversation_entry_point || val?.entry_point || '').toString().toLowerCase()
           const isFree = ep.includes('free')
           if (isFree) {
-            // grátis
+            // grï¿½tis
             delivered_free += count
             if (ep.includes('support') || ep.includes('customer')) free.support_free += count
             else free.entry_point_free += count
@@ -285,7 +283,7 @@ export async function GET(request) {
         const deliveredEv = await countStatus('delivered')
         const readEv = await countStatus('read')
 
-        // Derivar pagas/grátis e categorias a partir de status_events (quando possível)
+        // Derivar pagas/grï¿½tis e categorias a partir de status_events (quando possï¿½vel)
         try {
           let qe = supabaseAdmin
             .from('whatsapp_status_events')
@@ -321,7 +319,7 @@ export async function GET(request) {
       errors.push('CRM fallback failed: ' + (e?.message || e))
     }
 
-    // entregue total (quando possível, usar soma paid+free para ficar consistente com o Manager)
+    // entregue total (quando possï¿½vel, usar soma paid+free para ficar consistente com o Manager)
     const deliveredFromConv = delivered_paid + delivered_free
     if (deliveredFromConv > 0) totals.delivered = deliveredFromConv
 
