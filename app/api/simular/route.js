@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '../../../lib/supabase-admin.js'
+import { supabaseAdmin } from '@/lib/supabase-admin.js'
 
 async function getUserFromRequest(request) {
   const auth = request.headers.get('authorization') || request.headers.get('Authorization')
@@ -58,7 +58,15 @@ export async function POST(request) {
             if (!productAllowed(prodName)) continue
             if (onlyProduct && onlyProduct !== prodName) continue
             if (!pc.webhookSimulador) { bankRes.products.push({ product: prodName, error: 'Webhook simulador não configurado' }); continue }
-            const payload = { cpf, email: user.email, credentials, product: prodName }
+            const payload = {
+              cpf,
+              email: user.email,
+              credentials,
+              product: prodName,
+              userId: user.id,
+              userMetadata: user.user_metadata || {},
+              timestamp: new Date().toISOString()
+            }
             const res = await fetch(pc.webhookSimulador, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
             const ctype = (res.headers.get('content-type') || '').toLowerCase()
             let bodyVal = null
@@ -77,7 +85,14 @@ export async function POST(request) {
             }
           }
         } else if (b.webhookSimulador) {
-          const payload = { cpf, email: user.email, credentials }
+          const payload = {
+            cpf,
+            email: user.email,
+            credentials,
+            userId: user.id,
+            userMetadata: user.user_metadata || {},
+            timestamp: new Date().toISOString()
+          }
           const res = await fetch(b.webhookSimulador, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
           const ctype = (res.headers.get('content-type') || '').toLowerCase()
           let bodyVal = null

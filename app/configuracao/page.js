@@ -26,6 +26,12 @@ export default function ConfiguracaoPage() {
 
   const [payProvider, setPayProvider] = useState('picpay')
   const [picpayToken, setPicpayToken] = useState('')
+  const [picpayClientId, setPicpayClientId] = useState('')
+  const [picpayClientSecret, setPicpayClientSecret] = useState('')
+  const [mercadopagoAccessToken, setMercadopagoAccessToken] = useState('')
+  const [mercadopagoPublicKey, setMercadopagoPublicKey] = useState('')
+  const [creditsWebhook, setCreditsWebhook] = useState('')
+  const [addCreditsWebhook, setAddCreditsWebhook] = useState('')
 
   const [message, setMessage] = useState('')
 
@@ -75,6 +81,12 @@ export default function ConfiguracaoPage() {
           const p = s.payments || {}
           if (typeof p.provider === 'string') setPayProvider(p.provider)
           if (typeof p.picpaySellerToken === 'string') setPicpayToken(p.picpaySellerToken)
+          if (typeof p.picpayClientId === 'string') setPicpayClientId(p.picpayClientId)
+          if (typeof p.picpayClientSecret === 'string') setPicpayClientSecret(p.picpayClientSecret)
+          if (typeof p.mercadopagoAccessToken === 'string') setMercadopagoAccessToken(p.mercadopagoAccessToken)
+          if (typeof p.mercadopagoPublicKey === 'string') setMercadopagoPublicKey(p.mercadopagoPublicKey)
+          if (typeof p.creditsWebhook === 'string') setCreditsWebhook(p.creditsWebhook)
+          if (typeof p.addCreditsWebhook === 'string') setAddCreditsWebhook(p.addCreditsWebhook)
         }
       } catch {}
     })()
@@ -110,7 +122,22 @@ export default function ConfiguracaoPage() {
 
   const savePayments = async () => {
     try {
-      const res = await fetch('/api/global-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payments: { provider: payProvider, picpaySellerToken: picpayToken } }) })
+      const res = await fetch('/api/global-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payments: {
+            provider: payProvider,
+            picpaySellerToken: picpayToken,
+            picpayClientId,
+            picpayClientSecret,
+            mercadopagoAccessToken,
+            mercadopagoPublicKey,
+            creditsWebhook,
+            addCreditsWebhook
+          }
+        })
+      })
       if (res.ok) { setMessage('Configuracoes salvas'); setTimeout(()=>setMessage(''), 2000) }
     } catch {}
   }
@@ -320,17 +347,80 @@ export default function ConfiguracaoPage() {
         <Card>
           <CardHeader>
             <CardTitle>Pagamentos</CardTitle>
-            <CardDescription>Configuracoes de pagamento dos produtos</CardDescription>
+            <CardDescription>Configuracoes de pagamento dos produtos e consulta de creditos</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
               <div>
-                <div className="text-sm font-medium">Provider</div>
-                <Input value={payProvider} onChange={(e)=> setPayProvider(e.target.value)} placeholder="picpay" />
+                <div className="text-sm font-medium mb-1">Provedor de Pagamento</div>
+                <Select value={payProvider} onValueChange={setPayProvider}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o provedor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="picpay">PicPay</SelectItem>
+                    <SelectItem value="mercadopago">Mercado Pago</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="md:col-span-2">
-                <div className="text-sm font-medium">PicPay seller token</div>
-                <Input value={picpayToken} onChange={(e)=> setPicpayToken(e.target.value)} placeholder="PICPAY_SELLER_TOKEN" />
+            </div>
+
+            {/* Credenciais PicPay */}
+            {payProvider === 'picpay' && (
+              <div className="space-y-3 p-4 border rounded-lg bg-slate-50 dark:bg-slate-900">
+                <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">Credenciais PicPay</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-sm font-medium">PicPay Seller Token</div>
+                    <Input value={picpayToken} onChange={(e)=> setPicpayToken(e.target.value)} placeholder="Token de vendedor" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">PicPay Client ID</div>
+                    <Input value={picpayClientId} onChange={(e)=> setPicpayClientId(e.target.value)} placeholder="OAuth2 Client ID (opcional)" />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium">PicPay Client Secret</div>
+                  <Input type="password" value={picpayClientSecret} onChange={(e)=> setPicpayClientSecret(e.target.value)} placeholder="OAuth2 Client Secret (opcional)" />
+                </div>
+              </div>
+            )}
+
+            {/* Credenciais Mercado Pago */}
+            {payProvider === 'mercadopago' && (
+              <div className="space-y-3 p-4 border rounded-lg bg-blue-50 dark:bg-blue-950">
+                <div className="text-sm font-semibold text-blue-700 dark:text-blue-300">Credenciais Mercado Pago</div>
+                <div>
+                  <div className="text-sm font-medium">Access Token (Server-side)</div>
+                  <Input 
+                    type="password" 
+                    value={mercadopagoAccessToken} 
+                    onChange={(e)=> setMercadopagoAccessToken(e.target.value)} 
+                    placeholder="APP_USR-XXXX-XXXX-XXXX" 
+                  />
+                  <div className="text-xs text-slate-500 mt-1">Token privado usado no backend para criar pagamentos</div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Public Key (opcional)</div>
+                  <Input 
+                    value={mercadopagoPublicKey} 
+                    onChange={(e)=> setMercadopagoPublicKey(e.target.value)} 
+                    placeholder="APP_USR-XXXX-XXXX-XXXX-pub" 
+                  />
+                  <div className="text-xs text-slate-500 mt-1">Chave pública para uso no frontend (se necessário)</div>
+                </div>
+              </div>
+            )}
+
+            {/* Webhooks */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div className="text-sm font-medium">Webhook Consulta de Créditos</div>
+                <Input value={creditsWebhook} onChange={(e)=> setCreditsWebhook(e.target.value)} placeholder="https://..." />
+              </div>
+              <div>
+                <div className="text-sm font-medium">Webhook Adicionar Créditos</div>
+                <Input value={addCreditsWebhook} onChange={(e)=> setAddCreditsWebhook(e.target.value)} placeholder="https://..." />
               </div>
             </div>
             <div className="flex justify-end">

@@ -2,6 +2,22 @@ import { NextResponse } from 'next/server'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+/**
+ * PicPay Checkout API
+ * 
+ * Fluxo de pagamento:
+ * 1. Cliente chama POST /api/picpay/checkout com dados do produto e comprador
+ * 2. Backend cria referenceId único e persiste em product_purchases
+ * 3. Chama API PicPay para gerar link de pagamento (não precisa de token)
+ * 4. Retorna paymentUrl e qrcode para o cliente
+ * 5. Cliente redireciona usuário para paymentUrl
+ * 6. PicPay envia webhook para /api/picpay/callback quando pagamento é confirmado
+ * 7. Callback atualiza status da compra e concede setores ao usuário
+ * 
+ * Nota: Token do PicPay é usado apenas para consultar status do pagamento, 
+ * não para criar o link de pagamento (endpoint público)
+ */
+
 async function getUser(request){
   const auth = request.headers.get('authorization') || request.headers.get('Authorization')
   if(!auth || !auth.toLowerCase().startsWith('bearer ')) return null
@@ -14,25 +30,19 @@ async function getUser(request){
 export async function POST(request) {
   try {
     const body = await request.json()
-    let token = process.env.PICPAY_SELLER_TOKEN
-    if (!token) {
-      try {
-        const { data } = await supabaseAdmin.from('global_settings').select('data').eq('id','global').single()
-        token = data?.data?.payments?.picpaySellerToken || ''
-      } catch {}
-    }
-    if (!token) return NextResponse.json({ error: 'PicPay seller token not configured' }, { status: 500 })
 
+    // Prepara payload para API do PicPay (não precisa de token para criar pagamento)
     const baseUrl = process.env.APP_BASE_URL || new URL(request.url).origin
     const payload = {
       referenceId: body.referenceId,
-      callbackUrl: `${baseUrl}/api/picpay/callback`,
-      returnUrl: `${baseUrl}${body.returnPath || '/produtos'}`,
+      callbackUrl: `${baseUrl}/api/picpay/callback`, // PicPay enviará notificações de status aqui
+      returnUrl: `${baseUrl}${body.returnPath || '/produtos'}`, // Usuário volta aqui após pagamento
       value: Number(body.amount || 0),
       buyer: body.buyer || {},
     }
     if (!payload.referenceId || !(payload.value > 0)) return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
-    // persist purchase (productKey optional)
+    
+    // Persiste compra no banco antes de chamar PicPay
     const user = await getUser(request)
     const productKey = body.productKey || null
     if(user && productKey){
@@ -50,13 +60,16 @@ export async function POST(request) {
       }
     }
 
+    // Chama API do PicPay para criar link de pagamento (não precisa de token)
     const res = await fetch('https://appws.picpay.com/ecommerce/public/payments', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-picpay-token': token },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
     const json = await res.json()
     if (!res.ok) return NextResponse.json({ error: json?.message || 'PicPay error', details: json }, { status: res.status })
+    
+    // Retorna paymentUrl e qrcode para o cliente redirecionar o usuário
     return NextResponse.json(json)
   } catch (e) {
     return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })

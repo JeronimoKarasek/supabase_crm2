@@ -23,7 +23,11 @@ export async function GET(request){
   const user = await getUser(request)
   if(!user) return unauthorized()
   if(!isAdminOrBuilder(user)) return forbidden()
-  const { data, error } = await supabaseAdmin.from('products').select('*').order('created_at', { ascending: false })
+  // Especificar colunas explicitamente para evitar problemas de cache do PostgREST
+  const { data, error } = await supabaseAdmin
+    .from('products')
+    .select('id,key,name,description,learn_more_url,webhook_url,sectors,pricing,created_at,updated_at')
+    .order('created_at', { ascending: false })
   if(error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ products: data || [] })
 }
@@ -42,10 +46,15 @@ export async function POST(request){
       webhook_url: body.webhook_url || null,
       sectors: Array.isArray(body.sectors) ? body.sectors : [],
       pricing: body.pricing || null,
-      active: body.active !== false,
     }
+    // Não incluir 'active' para evitar erro de schema cache
     if(!row.key || !row.name) return NextResponse.json({ error: 'key e name são obrigatórios' }, { status: 400 })
-    const { data, error } = await supabaseAdmin.from('products').insert(row).select('*').single()
+    // Especificar colunas explicitamente no select
+    const { data, error } = await supabaseAdmin
+      .from('products')
+      .insert(row)
+      .select('id,key,name,description,learn_more_url,webhook_url,sectors,pricing,created_at,updated_at')
+      .single()
     if(error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ product: data })
   }catch(e){
@@ -62,9 +71,16 @@ export async function PUT(request){
     const id = body.id
     if(!id) return NextResponse.json({ error: 'id é obrigatório' }, { status: 400 })
     const patch = {}
-    ;['key','name','description','learn_more_url','webhook_url','pricing','active'].forEach(f=>{ if(typeof body[f] !== 'undefined') patch[f]=body[f] })
+    // Remover 'active' da lista para evitar erro de schema cache
+    ;['key','name','description','learn_more_url','webhook_url','pricing'].forEach(f=>{ if(typeof body[f] !== 'undefined') patch[f]=body[f] })
     if(Array.isArray(body.sectors)) patch.sectors = body.sectors
-    const { data, error } = await supabaseAdmin.from('products').update(patch).eq('id', id).select('*').single()
+    // Especificar colunas explicitamente no select
+    const { data, error } = await supabaseAdmin
+      .from('products')
+      .update(patch)
+      .eq('id', id)
+      .select('id,key,name,description,learn_more_url,webhook_url,sectors,pricing,created_at,updated_at')
+      .single()
     if(error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ product: data })
   }catch(e){

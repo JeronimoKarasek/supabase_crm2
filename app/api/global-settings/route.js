@@ -1,5 +1,5 @@
 ﻿import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '../../../lib/supabase-admin.js'
+import { supabaseAdmin } from '@/lib/supabase-admin.js'
 
 async function getUserFromRequest(request) {
   const auth = request.headers.get('authorization') || request.headers.get('Authorization')
@@ -75,7 +75,19 @@ export async function PUT(request) {
         connectionPrice: toNumber(fc.connectionPrice),
       }
     }
-    if (typeof body.payments === 'object' && body.payments !== null) { const pay = body.payments; next.payments = { provider: (typeof pay.provider === 'string' ? pay.provider : (next.payments?.provider || 'picpay')), picpaySellerToken: (typeof pay.picpaySellerToken === 'string' ? pay.picpaySellerToken : (next.payments?.picpaySellerToken || '')) }; }
+    if (typeof body.payments === 'object' && body.payments !== null) {
+      const pay = body.payments
+      next.payments = {
+        provider: typeof pay.provider === 'string' ? pay.provider : (next.payments?.provider || 'picpay'),
+        picpaySellerToken: typeof pay.picpaySellerToken === 'string' ? pay.picpaySellerToken : (next.payments?.picpaySellerToken || ''),
+        picpayClientId: typeof pay.picpayClientId === 'string' ? pay.picpayClientId : (next.payments?.picpayClientId || ''),
+        picpayClientSecret: typeof pay.picpayClientSecret === 'string' ? pay.picpayClientSecret : (next.payments?.picpayClientSecret || ''),
+        mercadopagoAccessToken: typeof pay.mercadopagoAccessToken === 'string' ? pay.mercadopagoAccessToken : (next.payments?.mercadopagoAccessToken || ''),
+        mercadopagoPublicKey: typeof pay.mercadopagoPublicKey === 'string' ? pay.mercadopagoPublicKey : (next.payments?.mercadopagoPublicKey || ''),
+        creditsWebhook: typeof pay.creditsWebhook === 'string' ? pay.creditsWebhook : (next.payments?.creditsWebhook || ''),
+        addCreditsWebhook: typeof pay.addCreditsWebhook === 'string' ? pay.addCreditsWebhook : (next.payments?.addCreditsWebhook || ''),
+      }
+    }
     await writeSettingsToDb(next)
     const sanitized = { ...next, banks: (next.banks || []).map(b => ({ key: b.key, name: b.name, fields: b.fields })) }
     return NextResponse.json({ settings: sanitized })
@@ -122,7 +134,19 @@ export async function POST(request) {
         connectionPrice: toNumber(fc.connectionPrice),
       }
     }
-    if (typeof body.payments === 'object' && body.payments !== null) { const pay = body.payments; next.payments = { provider: (typeof pay.provider === 'string' ? pay.provider : (next.payments?.provider || 'picpay')), picpaySellerToken: (typeof pay.picpaySellerToken === 'string' ? pay.picpaySellerToken : (next.payments?.picpaySellerToken || '')) }; }
+    if (typeof body.payments === 'object' && body.payments !== null) {
+      const pay = body.payments
+      next.payments = {
+        provider: typeof pay.provider === 'string' ? pay.provider : (next.payments?.provider || 'picpay'),
+        picpaySellerToken: typeof pay.picpaySellerToken === 'string' ? pay.picpaySellerToken : (next.payments?.picpaySellerToken || ''),
+        picpayClientId: typeof pay.picpayClientId === 'string' ? pay.picpayClientId : (next.payments?.picpayClientId || ''),
+        picpayClientSecret: typeof pay.picpayClientSecret === 'string' ? pay.picpayClientSecret : (next.payments?.picpayClientSecret || ''),
+        mercadopagoAccessToken: typeof pay.mercadopagoAccessToken === 'string' ? pay.mercadopagoAccessToken : (next.payments?.mercadopagoAccessToken || ''),
+        mercadopagoPublicKey: typeof pay.mercadopagoPublicKey === 'string' ? pay.mercadopagoPublicKey : (next.payments?.mercadopagoPublicKey || ''),
+        creditsWebhook: typeof pay.creditsWebhook === 'string' ? pay.creditsWebhook : (next.payments?.creditsWebhook || ''),
+        addCreditsWebhook: typeof pay.addCreditsWebhook === 'string' ? pay.addCreditsWebhook : (next.payments?.addCreditsWebhook || ''),
+      }
+    }
     await writeSettingsToDb(next)
     const sanitized = { ...next, banks: (next.banks || []).map(b => ({ key: b.key, name: b.name, fields: b.fields })) }
     return NextResponse.json({ settings: sanitized })

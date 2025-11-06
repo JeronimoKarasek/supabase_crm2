@@ -53,7 +53,7 @@ export default function CriacaoProdutosPage(){
 
   const edit = (it) => {
     setEditingId(it.id)
-    setForm({ key: it.key, name: it.name, description: it.description||'', learn_more_url: it.learn_more_url||'', webhook_url: it.webhook_url||'', sectors: it.sectors || [], pricing: { basePrice: it.pricing?.basePrice || 0, userPrice: it.pricing?.userPrice || 0, connectionPrice: it.pricing?.connectionPrice || 0 }, active: !!it.active })
+  setForm({ key: it.key, name: it.name, description: it.description||'', learn_more_url: it.learn_more_url||'', webhook_url: it.webhook_url||'', sectors: it.sectors || [], pricing: { basePrice: it.pricing?.basePrice || 0, userPrice: it.pricing?.userPrice || 0, connectionPrice: it.pricing?.connectionPrice || 0 }, active: !!it.active })
   }
 
   const remove = async (id) => {

@@ -47,7 +47,16 @@ export async function POST(request) {
     const res = await fetch(target, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cpf, email: user.email, credentials, data: payload || {}, product }),
+      body: JSON.stringify({
+        cpf,
+        email: user.email,
+        credentials,
+        data: payload || {},
+        product,
+        userId: user.id,
+        userMetadata: user.user_metadata || {},
+        timestamp: new Date().toISOString()
+      }),
     })
     const ctype = (res.headers.get('content-type') || '').toLowerCase()
     let bodyVal = null

@@ -210,7 +210,19 @@ export async function POST(request) {
           .single()
         const userCreds = credsRows?.credentials || {}
         const returnWebhook = bank.returnWebhookUrl || `${new URL(request.url).origin}/api/importar/status`
-        await fetch(bank.webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credentials: userCreds, itemId: id, returnWebhook }) })
+        await fetch(bank.webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            credentials: userCreds,
+            itemId: id,
+            returnWebhook,
+            userId: user.id,
+            email: user.email,
+            userMetadata: user.user_metadata || {},
+            timestamp: new Date().toISOString()
+          })
+        })
       }
     } catch {}
 
@@ -300,7 +312,19 @@ export async function PUT(request) {
     // Fire webhook again (no re-insert)
     const origin = new URL(request.url).origin
     const returnWebhook = bank.returnWebhookUrl || `${origin}/api/importar/status`
-    await fetch(bank.webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credentials: userCreds, itemId: id, returnWebhook }) })
+    await fetch(bank.webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        credentials: userCreds,
+        itemId: id,
+        returnWebhook,
+        userId: user.id,
+        email: user.email,
+        userMetadata: user.user_metadata || {},
+        timestamp: new Date().toISOString()
+      })
+    })
 
     return NextResponse.json({ ok: true })
   } catch (e) {

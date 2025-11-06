@@ -15,6 +15,23 @@ create table if not exists products (
   updated_at timestamptz default now()
 );
 
+-- Adicionar coluna 'key' se não existir (para bancos já criados)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'products' AND column_name = 'key'
+    ) THEN
+        ALTER TABLE products ADD COLUMN key text;
+        ALTER TABLE products ADD CONSTRAINT products_key_unique UNIQUE (key);
+        -- Gera keys para registros existentes
+        UPDATE products 
+        SET key = LOWER(REGEXP_REPLACE(name, '[^a-zA-Z0-9]+', '-', 'g'))
+        WHERE key IS NULL;
+        ALTER TABLE products ALTER COLUMN key SET NOT NULL;
+    END IF;
+END $$;
+
 alter table products enable row level security;
 
 -- allow public SELECT for listing

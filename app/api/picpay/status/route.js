@@ -1,8 +1,31 @@
 import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+
+/**
+ * PicPay Status API
+ * 
+ * Consulta o status de um pagamento no PicPay
+ * 
+ * Uso: GET /api/picpay/status?ref=REFERENCE_ID
+ * 
+ * Retorna o status atual do pagamento:
+ * - created: Pagamento criado, aguardando
+ * - expired: Pagamento expirou
+ * - paid: Pagamento confirmado
+ * - completed: Pagamento completado
+ * - refunded: Pagamento estornado
+ * - chargeback: Chargeback solicitado
+ */
 
 export async function GET(request) {
   try {
-    const token = process.env.PICPAY_SELLER_TOKEN
+    let token = process.env.PICPAY_SELLER_TOKEN
+    if (!token) {
+      try {
+        const { data } = await supabaseAdmin.from('global_settings').select('data').eq('id','global').single()
+        token = data?.data?.payments?.picpaySellerToken || ''
+      } catch {}
+    }
     if (!token) return NextResponse.json({ error: 'PicPay seller token not configured' }, { status: 500 })
     const ref = new URL(request.url).searchParams.get('ref')
     if (!ref) return NextResponse.json({ error: 'Missing ref' }, { status: 400 })

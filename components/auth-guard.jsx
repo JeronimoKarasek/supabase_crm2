@@ -121,6 +121,12 @@ export default function AuthGuard({ children }) {
     return () => { mounted = false; sub.subscription.unsubscribe() }
   }, [pathname, router])
 
-  if (!checked) return null
+  if (!checked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+        <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-sky-500" />
+      </div>
+    )
+  }
   return children
 }
