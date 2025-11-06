@@ -166,7 +166,7 @@ export default function DisparoApiPage() {
       if (res.ok) {
         setCredentials(Array.isArray(data?.credentials) ? data.credentials : [])
       } else if (data?.missingTable) {
-        setError('Tabela whatsapp_credentials nÃ£o encontrada. Execute o SQL sugerido abaixo em seu Supabase.')
+        setError('Tabela whatsapp_credentials não encontrada. Execute o SQL sugerido abaixo em seu Supabase.')
       }
     } catch (e) {
       setError('Falha ao buscar credenciais')
@@ -242,7 +242,7 @@ export default function DisparoApiPage() {
 
   const importRows = async () => {
     if (!selectedCredentialId || !selectedPhoneNumberId || !templateName || !csvRows.length) {
-      setError('Selecione credencial, nÃºmero, template e carregue o CSV.')
+      setError('Selecione credencial, número, template e carregue o CSV.')
       return
     }
     try {
@@ -251,7 +251,7 @@ export default function DisparoApiPage() {
       setMessage('')
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      // normaliza phones (remove nÃ£o-dÃ­gitos e prefixa cÃ³digo do paÃ­s se necessÃ¡rio)
+      // normaliza phones (remove não-dígitos e prefixa código do país se necessário)
       const sciToIntString = (val) => {
         const s = String(val || '').trim()
         const m = s.match(/^([0-9]+(?:\.[0-9]+)?)e([+-]?[0-9]+)$/i)
@@ -299,7 +299,7 @@ export default function DisparoApiPage() {
       const res = await fetch('/api/disparo-api/import', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(payload) })
       const data = await res.json()
       if (res.ok) {
-        setMessage(`ImportaÃ§Ã£o concluÃ­da. ${data.inserted || 0} registros. Batch: ${data.batch_id}`)
+        setMessage(`Importação concluída. ${data.inserted || 0} registros. Batch: ${data.batch_id}`)
         setBatchId(data.batch_id)
         setCampaignsRefreshKey(k => k + 1)
       } else {
@@ -476,7 +476,7 @@ export default function DisparoApiPage() {
 
   useEffect(() => { loadCreds() }, [])
 
-  // quando selecionar credencial, buscar nÃºmeros e templates
+  // quando selecionar credencial, buscar números e templates
   useEffect(() => {
     ;(async () => {
       if (!selectedCredentialId) { setPhoneNumbers([]); setTemplates([]); setSelectedPhoneNumberId(''); setTemplateName(''); return }
@@ -496,17 +496,18 @@ export default function DisparoApiPage() {
   }, [selectedCredentialId])
 
   return (
-    <div className="space-y-4">
+    <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
+      <div className="py-6 px-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Disparo API</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Disparo API</h1>
           <p className="text-sm text-muted-foreground">Envie mensagens via WhatsApp Cloud API (Meta)</p>
         </div>
       </div>
       {message ? <div className="text-green-600 text-sm">{message}</div> : null}
       {error ? <div className="text-red-600 text-sm">{error}</div> : null}
 
-      <Tabs defaultValue="credenciais">
+  <Tabs defaultValue="credenciais">
         <TabsList>
           <TabsTrigger value="credenciais">Credenciais</TabsTrigger>
           <TabsTrigger value="disparo">Disparo</TabsTrigger>
@@ -516,12 +517,12 @@ export default function DisparoApiPage() {
         </TabsList>
 
         <TabsContent value="credenciais">
-          <Card>
-            <CardHeader>
+          <Card className="bg-muted/30">
+            <CardHeader className="bg-muted/50 rounded-t-xl">
               <CardTitle>Credenciais WhatsApp (Meta)</CardTitle>
               <CardDescription>Use WABA ID e Token permanente. Você pode adicionar múltiplas credenciais.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 bg-muted/20 rounded-b-xl">
               <div className="space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <div className="space-y-1">
@@ -569,7 +570,7 @@ export default function DisparoApiPage() {
                       </div>
                       <div className="text-xs text-muted-foreground">Webhook URL: {`${BASE_URL}/api/disparo-api/webhook/${c.waba_id}`}</div>
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={() => updateCredential(c)}>Salvar alteraÃ§Ãµes</Button>
+                        <Button size="sm" onClick={() => updateCredential(c)}>Salvar alterações</Button>
                         <Button size="sm" variant="destructive" onClick={() => removeCredential(c.id)}>Remover</Button>
                       </div>
                     </div>
@@ -578,19 +579,19 @@ export default function DisparoApiPage() {
               </div>
               <Separator />
               <div>
-                <p className="text-sm text-muted-foreground">Se as tabelas nÃ£o existirem, rode o SQL em scripts/sql/disparo_api.sql no Supabase.</p>
+                <p className="text-sm text-muted-foreground">Se as tabelas não existirem, rode o SQL em scripts/sql/disparo_api.sql no Supabase.</p>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="disparo">
-          <Card>
-            <CardHeader>
+          <Card className="bg-muted/30">
+            <CardHeader className="bg-muted/50 rounded-t-xl">
               <CardTitle>Base de disparo</CardTitle>
               <CardDescription>Baixe o modelo, importe sua base e selecione o template e número.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 bg-muted/20 rounded-b-xl">
               <div className="flex gap-2">
                 <Button onClick={downloadModel} variant="outline">Baixar modelo CSV</Button>
                 <Input type="file" accept=".csv" onChange={onFile} />
@@ -653,7 +654,7 @@ export default function DisparoApiPage() {
                 <Button onClick={importRows} disabled={loading || !csvRows.length || !selectedCredentialId || !selectedPhoneNumberId || !templateName}>Importar</Button>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">PrÃ©via: {csvRows.length} linhas</div>
+                <div className="text-sm text-muted-foreground">Prévia: {csvRows.length} linhas</div>
                 <div className="max-h-64 overflow-auto border rounded">
                   <Table>
                     <TableHeader>
@@ -692,12 +693,12 @@ export default function DisparoApiPage() {
         </TabsContent>
 
         <TabsContent value="Relatórios">
-          <Card>
-            <CardHeader>
+          <Card className="bg-muted/30">
+            <CardHeader className="bg-muted/50 rounded-t-xl">
               <CardTitle>Relatórios</CardTitle>
               <CardDescription>Qualidade do número e estatísticas dos envios.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 bg-muted/20 rounded-b-xl">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Credencial</Label>
@@ -886,23 +887,23 @@ export default function DisparoApiPage() {
         </TabsContent>
 
         <TabsContent value="qualidade">
-          <Card>
-            <CardHeader>
-              <CardTitle>Qualidade do nÃºmero</CardTitle>
-              <CardDescription>Todos os nÃºmeros de todas as credenciais, com qualidade e envios de hoje.</CardDescription>
+          <Card className="bg-muted/30">
+            <CardHeader className="bg-muted/50 rounded-t-xl">
+              <CardTitle>Qualidade do número</CardTitle>
+              <CardDescription>Todos os números de todas as credenciais, com qualidade e envios de hoje.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 bg-muted/20 rounded-b-xl">
               <QualityAcrossCredentials credentials={credentials} />
             </CardContent>
           </Card>
         </TabsContent>
         <TabsContent value="grafico">
-          <Card>
-            <CardHeader>
+          <Card className="bg-muted/30">
+            <CardHeader className="bg-muted/50 rounded-t-xl">
               <CardTitle>Gráficos</CardTitle>
               <CardDescription>Visualizações dos envios e números do WhatsApp API</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 bg-muted/20 rounded-b-xl">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Credencial</Label>
@@ -1132,6 +1133,7 @@ export default function DisparoApiPage() {
           </Card>
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   )
 }

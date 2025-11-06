@@ -18,15 +18,15 @@ export default function ProdutosPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto py-8 px-4 space-y-4">
+    <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
+      <div className="container mx-auto py-6 px-6 space-y-4">
         {products.map((p) => (
-          <Card key={p.id} className="shadow-sm">
-            <CardHeader>
+          <Card key={p.id} className="shadow-sm bg-muted/30">
+            <CardHeader className="bg-muted/50 rounded-t-xl">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <CardTitle className="text-2xl">{p.name}</CardTitle>
-                  <CardDescription>{p.description || '-'}</CardDescription>
+                  <CardTitle className="text-2xl text-black dark:text-white">{p.name}</CardTitle>
+                  <CardDescription className="text-black/70 dark:text-white/70">{p.description || '-'}</CardDescription>
                 </div>
                 <div className="flex gap-2">
                   {p.learn_more_url ? (
@@ -46,7 +46,7 @@ export default function ProdutosPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="bg-muted/20 rounded-b-xl">
               <div className="text-xs text-muted-foreground">Secoes liberadas: {(p.sectors || []).join(', ') || '-'}</div>
             </CardContent>
           </Card>

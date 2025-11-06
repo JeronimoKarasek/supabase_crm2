@@ -79,21 +79,22 @@ export default function CriacaoProdutosPage(){
   const toggleSector = (s) => setForm(prev => ({ ...prev, sectors: prev.sectors.includes(s) ? prev.sectors.filter(x=>x!==s) : [...prev.sectors, s] }))
 
   return (
-    <div className="space-y-4">
+    <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
+      <div className="space-y-4 py-6 px-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Criação de produtos</h1>
-          <p className="text-sm text-muted-foreground">Cadastre e gerencie produtos; ao comprar, o usuário recebe acesso às seções selecionadas e disparamos o webhook.</p>
+            <h1 className="text-2xl font-semibold text-foreground">Criação de produtos</h1>
+            <p className="text-sm text-muted-foreground">Cadastre e gerencie produtos; ao comprar, o usuário recebe acesso às seções selecionadas e disparamos o webhook.</p>
         </div>
       </div>
       {message && <div className="text-sm text-amber-600">{message}</div>}
 
-      <Card>
-        <CardHeader>
+  <Card className="bg-muted/30">
+        <CardHeader className="bg-muted/50 rounded-t-xl">
           <CardTitle>{editingId ? 'Editar produto' : 'Criar novo produto'}</CardTitle>
           <CardDescription>Defina nome, preços e seções liberadas após compra.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 bg-muted/20 rounded-b-xl">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <Label>Chave (slug)</Label>
@@ -180,8 +181,8 @@ export default function CriacaoProdutosPage(){
                       </div>
                     </div>
                   </div>
-                  <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded border border-blue-200 dark:border-blue-800">
-                    <div className="text-xs text-blue-800 dark:text-blue-200">
+                  <div className="p-3 rounded border bg-muted/40 border-border/60">
+                    <div className="text-xs text-muted-foreground">
                       ℹ️ <strong>Como funciona:</strong> O sistema verifica automaticamente todo mês se o usuário tem saldo suficiente. 
                       Se tiver, desconta os créditos e mantém a assinatura ativa. Se não tiver, a assinatura é pausada até adicionar créditos.
                     </div>
@@ -198,12 +199,12 @@ export default function CriacaoProdutosPage(){
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+  <Card className="bg-muted/30">
+        <CardHeader className="bg-muted/50 rounded-t-xl">
           <CardTitle>Produtos</CardTitle>
           <CardDescription>Lista de produtos cadastrados</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-2 bg-muted/20 rounded-b-xl">
           {items.map(it => (
             <div key={it.id} className="border rounded p-3 flex items-center justify-between">
               <div>
@@ -219,6 +220,7 @@ export default function CriacaoProdutosPage(){
           {items.length === 0 && <div className="text-sm text-muted-foreground">Nenhum produto cadastrado.</div>}
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

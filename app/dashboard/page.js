@@ -182,8 +182,8 @@ export default function DashboardPage() {
   // (Removido) Auxiliares de CSV para consulta em lote
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto py-8 px-4">
+  <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
+      <div className="container mx-auto py-6 px-6">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <Database className="h-8 w-8 text-primary" />
@@ -196,7 +196,7 @@ export default function DashboardPage() {
               <Input type="date" value={periodEnd} onChange={(e)=>setPeriodEnd(e.target.value)} className="h-8 w-auto" />
             </div>
             <div className="flex items-center gap-3">
-              <div className="text-sm font-medium">Total Pago: <span className="font-semibold">{fmtBRL(valorPago)}</span></div>
+              <div className="text-sm font-medium">Total Pago: <span className="font-semibold text-success">{fmtBRL(valorPago)}</span></div>
               <Dialog open={openCreate} onOpenChange={setOpenCreate}>
                 <Button variant="outline" onClick={()=>setOpenCreate(true)}>Criar gráfico</Button>
                 <DialogContent className="max-w-5xl">
@@ -347,14 +347,14 @@ export default function DashboardPage() {
         </div>
 
         <div className="mt-8">
-          <Card>
-            <CardHeader>
+          <Card className="bg-muted/30">
+            <CardHeader className="bg-muted/50 rounded-t-xl">
               <CardTitle>Meus gráficos</CardTitle>
               <CardDescription>Arraste para reordenar. Clique em excluir para remover.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="bg-muted/20 rounded-b-xl">
               {saved.length === 0 ? (
-                <div className="text-sm text-muted-foreground">Nenhum gráfico salvo ainda.</div>
+                <div className="text-sm text-black/70 dark:text-white/70">Nenhum gráfico salvo ainda.</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {saved.map((c, idx) => (

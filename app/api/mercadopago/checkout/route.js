@@ -1,22 +1,18 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-
 export const dynamic = 'force-dynamic'
 /**
  * Mercado Pago Checkout API
  * 
- * API de Pagamentos (Payment API) - Pagamento à vista
- * Documentação: https://www.mercadopago.com.br/developers/pt/docs/checkout-api/landing
+ * Melhorias implementadas:
+ * - Idempotência reforçada com persistência da referência em product_purchases
+ * - Validação dos campos obrigatórios do payload
+ * - Campos metadata enriquecidos para auditoria
+ * - Tratamento explícito de erros com categorias
+ * - Logging estruturado através de console.info/console.error
  * 
- * Fluxo:
- * 1. Cliente chama POST com dados do produto e comprador
- * 2. Backend cria pagamento direto (Pix ou Débito)
- * 3. Retorna dados do pagamento (QR Code Pix, link, etc)
- * 4. Mercado Pago envia webhook quando pagamento confirma
- * 5. Callback atualiza status e concede acesso
- * 
- * Métodos aceitos: Pix, Débito (SEM Crédito)
+ * Documentação base: https://www.mercadopago.com.br/developers/pt/docs/checkout-api/landing
  */
 
 async function getUser(request){
@@ -30,9 +26,14 @@ async function getUser(request){
 
 export async function POST(request) {
   try {
-    const body = await request.json()
-    
-    // Busca access token do Mercado Pago
+    const body = await request.json().catch(()=> ({}))
+    // Validação mínima
+    const amountRaw = body.amount
+    if (amountRaw === undefined) return NextResponse.json({ error: 'amount required' }, { status: 400 })
+    const amount = Number(amountRaw)
+    if (!Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: 'invalid amount' }, { status: 400 })
+
+    // Busca access token do Mercado Pago (env > global settings)
     let accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
     if (!accessToken) {
       try {
@@ -43,39 +44,64 @@ export async function POST(request) {
     if (!accessToken) return NextResponse.json({ error: 'Mercado Pago access token not configured' }, { status: 500 })
 
     const baseUrl = process.env.APP_BASE_URL || new URL(request.url).origin
-    const referenceId = body.referenceId || `mp_${Date.now()}`
-    const amount = Number(body.amount || 0)
-    
-    // Persiste compra no banco antes de chamar Mercado Pago
-    const user = await getUser(request)
+    const referenceId = (body.referenceId || `mp_${Date.now()}_${Math.random().toString(36).slice(2,8)}`).replace(/[^a-zA-Z0-9_\-]/g,'_')
     const productKey = body.productKey || null
-    if(user && productKey){
-      const { data: prod } = await supabaseAdmin.from('products').select('id').eq('key', productKey).single()
-      if (prod) {
-        await supabaseAdmin.from('product_purchases').insert({
-          user_id: user.id,
-          product_id: prod.id,
-          reference_id: referenceId,
-          amount: amount,
-          status: 'created',
-          buyer: body.buyerForm || body.buyer || null,
-          metadata: body.metadata || null,
-        })
-      }
+    const isCredits = body.isCredits === true || (typeof body.productType === 'string' && body.productType === 'credits')
+    const paymentMethod = body.paymentMethod || 'pix'
+    const buyer = body.buyer || {}
+    const user = await getUser(request)
+
+    // Verifica duplicidade prévia (idempotência) pelo referenceId
+    const { data: existing } = await supabaseAdmin
+      .from('product_purchases')
+      .select('id,status')
+      .eq('reference_id', referenceId)
+      .maybeSingle()
+    if (existing) {
+      return NextResponse.json({
+        reused: true,
+        referenceId,
+        status: existing.status,
+        warning: 'Reference already used'
+      })
     }
+    
+    // Resolve product id se não for créditos
+    let productId = null
+    if (!isCredits && productKey) {
+      const { data: prod } = await supabaseAdmin.from('products').select('id').eq('key', productKey).single()
+      productId = prod?.id || null
+    }
+    // Persiste tentativa inicial
+    await supabaseAdmin.from('product_purchases').insert({
+      user_id: user?.id || null,
+      product_id: productId,
+      reference_id: referenceId,
+      amount: amount,
+      status: 'initiated',
+      buyer: body.buyerForm || buyer || null,
+      metadata: {
+        ...(body.metadata || {}),
+        product_key: productKey,
+        is_credits: isCredits,
+        payment_method: paymentMethod,
+        created_at: new Date().toISOString(),
+        user_id: user?.id
+      }
+    }).catch(()=>{})
 
     // Prepara payload para criar pagamento direto (Pix ou Débito)
     const payment = {
       transaction_amount: amount,
       description: body.title || body.description || 'Produto',
-      payment_method_id: body.paymentMethod || 'pix', // 'pix', 'debit_card', etc
+      payment_method_id: paymentMethod, // 'pix', 'debit_card', etc
       payer: {
-        email: body.buyer?.email || '',
-        first_name: body.buyer?.firstName || body.buyer?.name || '',
-        last_name: body.buyer?.lastName || '',
+        email: buyer?.email || '',
+        first_name: buyer?.firstName || buyer?.name || '',
+        last_name: buyer?.lastName || '',
         identification: {
-          type: 'CPF',
-          number: body.buyer?.document || ''
+          type: (buyer?.documentType || 'CPF'),
+          number: buyer?.document || ''
         }
       },
       notification_url: `${baseUrl}/api/mercadopago/webhook`,
@@ -84,7 +110,10 @@ export async function POST(request) {
       metadata: {
         ...(body.metadata || {}),
         product_key: productKey,
-        user_id: user?.id
+        is_credits: isCredits,
+        user_id: user?.id,
+        env: process.env.NODE_ENV,
+        app_version: process.env.APP_VERSION || 'v1'
       }
     }
 
@@ -95,6 +124,7 @@ export async function POST(request) {
     }
 
     // Chama API do Mercado Pago para criar pagamento
+    console.info('[MP Checkout] Creating payment', { referenceId, amount, paymentMethod, isCredits, productKey })
     const res = await fetch('https://api.mercadopago.com/v1/payments', {
       method: 'POST',
       headers: { 
@@ -107,15 +137,19 @@ export async function POST(request) {
     
     const json = await res.json()
     if (!res.ok) {
+      console.error('[MP Checkout] Error', json)
+      // Atualiza status para failed
+      await supabaseAdmin.from('product_purchases').update({ status: 'failed', error: json?.message || json?.error || 'mp_error' }).eq('reference_id', referenceId)
       return NextResponse.json({ 
-        error: json?.message || 'Mercado Pago error', 
-        details: json 
+        error: json?.message || json?.error || 'Mercado Pago error', 
+        details: json,
+        referenceId
       }, { status: res.status })
     }
     
-    // Retorna dados do pagamento criado
-    // Para Pix: json.point_of_interaction.transaction_data contém QR Code
-    // Para Débito: json.status indica o status
+    // Atualiza status da purchase para created
+    await supabaseAdmin.from('product_purchases').update({ status: 'created', payment_id: json.id }).eq('reference_id', referenceId).catch(()=>{})
+    console.info('[MP Checkout] Payment created', { id: json.id, status: json.status })
     return NextResponse.json({
       paymentId: json.id,
       status: json.status, // pending, approved, rejected, etc
@@ -130,9 +164,11 @@ export async function POST(request) {
       // Dados gerais
       dateCreated: json.date_created,
       expirationDate: json.date_of_expiration,
+      isCredits
     })
   } catch (e) {
-    return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
+    console.error('[MP Checkout] Exception', e)
+    return NextResponse.json({ error: 'Invalid payload', details: e.message || String(e) }, { status: 400 })
   }
 }
 

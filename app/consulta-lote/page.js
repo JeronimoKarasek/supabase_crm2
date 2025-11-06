@@ -153,30 +153,14 @@ export default function ConsultaLotePage() {
     }
   }
 
-  const onDelete = async (id) => {
-    try {
-      setBusy(prev => ({ ...prev, [id]: true }))
-      setError('')
-      setMessage('')
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData?.session?.access_token
-      const res = await fetch('/api/importar', { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id }) })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(json?.error || 'Falha ao excluir lote')
-      setMessage('Lote excluído.')
-      setItems(prev => prev.filter(it => it.id !== id))
-    } catch (e) {
-      setError(e?.message || 'Falha ao excluir lote')
-    } finally {
-      setBusy(prev => ({ ...prev, [id]: false }))
-    }
-  }
+  // Removido: ação de excluir lote (solicitado para retirar a opção de exclusão na lista)
 
   return (
-    <div className="space-y-4">
+    <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
+      <div className="py-6 px-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Consulta em lote</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Consulta em lote</h1>
           <p className="text-sm text-muted-foreground">Acompanhe os lotes enviados e seu progresso.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -189,12 +173,12 @@ export default function ConsultaLotePage() {
       {error ? <div className="text-red-600 text-sm">{error}</div> : null}
 
       {canSendBatch && (
-        <Card>
-          <CardHeader>
+        <Card className="bg-muted/30">
+          <CardHeader className="bg-muted/50 rounded-t-xl">
             <CardTitle>Enviar novo lote</CardTitle>
               <CardDescription>Selecione o produto, o banco e envie um arquivo CSV com colunas nome, telefone, cpf, nb.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="bg-muted/20 rounded-b-xl">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
               <div className="space-y-1">
                 <div className="text-xs text-muted-foreground">Produto</div>
@@ -234,12 +218,12 @@ export default function ConsultaLotePage() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
+      <Card className="bg-muted/30">
+        <CardHeader className="bg-muted/50 rounded-t-xl">
           <CardTitle>Lotes</CardTitle>
           <CardDescription>Listagem de lotes por usuário e status de processamento.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="bg-muted/20 rounded-b-xl">
           <div className="border rounded overflow-auto">
             <Table>
               <TableHeader>
@@ -269,7 +253,6 @@ export default function ConsultaLotePage() {
                     <TableCell className="space-x-2 whitespace-nowrap">
                       <Button size="sm" variant="outline" onClick={() => onDownload(it.id)}>Baixar</Button>
                       <Button size="sm" variant="outline" onClick={() => onReprocess(it.id)} disabled={!!busy[it.id]}>Reprocessar</Button>
-                      <Button size="sm" variant="destructive" onClick={() => onDelete(it.id)} disabled={!!busy[it.id]}>Excluir</Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -281,6 +264,7 @@ export default function ConsultaLotePage() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

@@ -162,12 +162,12 @@ export default function ConfiguracaoPage() {
   const clearInputs = () => { setTable(''); setSumColumn(''); setCondColumn(''); setCondType('contains'); setCondValue('') }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto py-8 px-4 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Configuracao</CardTitle>
-            <CardDescription>Defina nome do site, subtitulo e logo</CardDescription>
+    <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
+      <div className="container mx-auto py-6 px-6 space-y-6">
+        <Card className="bg-card">
+          <CardHeader className="bg-muted/40 rounded-t-lg">
+            <CardTitle className="text-foreground">Configuração</CardTitle>
+            <CardDescription className="text-muted-foreground">Defina nome do site, subtítulo e logo</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -182,7 +182,7 @@ export default function ConfiguracaoPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-card">
           <CardHeader>
             <CardTitle>Valor Pago</CardTitle>
             <CardDescription>Monte regras de soma por tabela</CardDescription>
@@ -247,7 +247,7 @@ export default function ConfiguracaoPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-card">
           <CardHeader>
             <CardTitle>Configurar Bancos</CardTitle>
             <CardDescription>Defina campos de credenciais e webhooks</CardDescription>
@@ -256,7 +256,7 @@ export default function ConfiguracaoPage() {
             <Button variant="outline" onClick={() => setBanks(prev => [...prev, { key: `bank_${Date.now()}`, name: '', fields: [{ key: 'usuario', label: 'Usuario', required: false }, { key: 'senha', label: 'Senha', required: false }], digitarFields: [], webhookUrl: '', forBatch: true, forSimular: true, productConfigs: [] }])}>Adicionar banco</Button>
             <div className="space-y-4">
               {banks.map((b, idx) => (
-                <div key={b.key || idx} className="p-3 border rounded space-y-2">
+                <div key={b.key || idx} className="p-3 border rounded space-y-2 bg-muted/50">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <Input placeholder="Nome do banco" value={b.name} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, name: e.target.value } : x))} />
                     <Input placeholder="Webhook (consulta em lote)" value={b.webhookUrl || ''} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookUrl: e.target.value } : x))} />
@@ -265,7 +265,7 @@ export default function ConfiguracaoPage() {
                       <label className="flex items-center gap-2"><input type="checkbox" checked={!!b.forSimular} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, forSimular: e.target.checked } : x))} /> Simular/Digitar</label>
                     </div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 bg-card/70 p-3 rounded border border-border/50">
                     <div className="text-sm font-medium">Campos de credenciais</div>
                     {(b.fields || []).map((f, fi) => (
                       <div key={fi} className="space-y-1">
@@ -287,7 +287,7 @@ export default function ConfiguracaoPage() {
                       <Button size="sm" variant="destructive" onClick={()=> setBanks(prev => prev.filter((_,i)=> i!==idx))}>Remover banco</Button>
                     </div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 bg-card/70 p-3 rounded border border-border/50">
                     <div className="text-sm font-medium">Campos para Digitar</div>
                     {(b.digitarFields || []).map((f, fi) => (
                       <div key={fi} className="space-y-1">
@@ -308,7 +308,7 @@ export default function ConfiguracaoPage() {
                       <Button size="sm" variant="outline" onClick={()=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, digitarFields: [ ...(x.digitarFields || []), { key: '', label: '' } ] } : x))}>Adicionar campo</Button>
                     </div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 bg-card/70 p-3 rounded border border-border/50">
                     <div className="text-sm font-medium">Produtos deste banco</div>
                     {(products || []).map((p, pi) => {
                       const name = typeof p === 'string' ? p : (p?.name || '')
@@ -335,7 +335,7 @@ export default function ConfiguracaoPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-card">
           <CardHeader>
             <CardTitle>Configurar Produtos</CardTitle>
             <CardDescription>Defina produtos e sua utilizacao</CardDescription>
@@ -361,7 +361,7 @@ export default function ConfiguracaoPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-card">
           <CardHeader>
             <CardTitle>Pagamentos</CardTitle>
             <CardDescription>Configuracoes de pagamento dos produtos e consulta de creditos</CardDescription>
@@ -405,8 +405,8 @@ export default function ConfiguracaoPage() {
 
             {/* Credenciais Mercado Pago */}
             {payProvider === 'mercadopago' && (
-              <div className="space-y-3 p-4 border rounded-lg bg-blue-50 dark:bg-blue-950">
-                <div className="text-sm font-semibold text-blue-700 dark:text-blue-300">Credenciais Mercado Pago</div>
+              <div className="space-y-3 p-4 border rounded-lg bg-muted/40">
+                <div className="text-sm font-semibold text-foreground">Credenciais Mercado Pago</div>
                 <div>
                   <div className="text-sm font-medium">Access Token (Server-side)</div>
                   <Input 
@@ -447,7 +447,7 @@ export default function ConfiguracaoPage() {
         </Card>
 
         {/* Card de Admin Emails */}
-        <Card>
+        <Card className="bg-card">
           <CardHeader>
             <CardTitle>Administradores do Sistema</CardTitle>
             <CardDescription>Configure quais e-mails podem adicionar créditos manualmente para usuários</CardDescription>

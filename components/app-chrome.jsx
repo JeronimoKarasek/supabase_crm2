@@ -154,14 +154,16 @@ export default function AppChrome({ children }) {
             <span className="text-sm text-muted-foreground">Menu</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="text-sm text-emerald-800 dark:text-emerald-300 font-semibold px-2">
-              Crédito: {creditsBRL}
-            </div>
-            <Button size="icon" variant="outline" onClick={consultarCreditos} disabled={loadingCredits} className="border-emerald-600 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950 h-8 w-8" title="Atualizar saldo">
-              ↻
-            </Button>
-            <Button size="sm" variant="outline" onClick={adicionarCreditos} disabled={loadingAddCredits} className="border-blue-600 text-blue-700 hover:bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-950">
-              {loadingAddCredits ? 'Processando...' : 'Add créditos'}
+            <div className="text-sm font-semibold px-2 text-success dark:text-success">Crédito: {creditsBRL}</div>
+            {/* Botão de atualizar saldo removido (auto refresh já implementado) */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={adicionarCreditos}
+              disabled={loadingAddCredits}
+              className="border-primary text-primary hover:bg-muted dark:border-primary dark:text-primary h-8"
+            >
+              {loadingAddCredits ? 'Processando...' : 'Adicionar créditos'}
             </Button>
             <ThemeToggle />
             <SignOutButton />
@@ -190,9 +192,9 @@ export default function AppChrome({ children }) {
             </div>
           ) : creditsDialog.data ? (
             <div className="space-y-4">
-              <div className="p-6 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950 dark:to-teal-950 border border-emerald-200 dark:border-emerald-800 rounded-lg">
-                <div className="text-sm text-emerald-700 dark:text-emerald-300 font-medium mb-2">Saldo Disponível</div>
-                <div className="text-4xl font-bold text-emerald-900 dark:text-emerald-100">
+              <div className="p-6 rounded-lg border border-border bg-card">
+                <div className="text-sm font-medium mb-2 text-success">Saldo Disponível</div>
+                <div className="text-4xl font-bold text-foreground">
                   {creditsDialog.data.credits !== undefined ? creditsDialog.data.credits : 
                    creditsDialog.data.saldo !== undefined ? creditsDialog.data.saldo :
                    creditsDialog.data.balance !== undefined ? creditsDialog.data.balance : 
@@ -200,7 +202,7 @@ export default function AppChrome({ children }) {
                    'N/A'}
                 </div>
                 {(creditsDialog.data.currency || creditsDialog.data.moeda) && (
-                  <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                  <div className="text-xs text-muted-foreground mt-1">
                     {creditsDialog.data.currency || creditsDialog.data.moeda}
                   </div>
                 )}
@@ -212,7 +214,7 @@ export default function AppChrome({ children }) {
               ).length > 0 && (
                 <div className="space-y-2">
                   <div className="text-sm font-medium text-muted-foreground">Informações Adicionais</div>
-                  <div className="p-3 bg-slate-50 dark:bg-slate-900 border rounded-lg space-y-1 text-sm">
+                  <div className="p-3 bg-muted border rounded-lg space-y-1 text-sm">
                     {Object.entries(creditsDialog.data).map(([key, value]) => {
                       if (['credits', 'saldo', 'balance', 'valor', 'currency', 'moeda'].includes(key)) return null
                       return (

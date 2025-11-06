@@ -94,12 +94,12 @@ export default function AssinarFarolChat() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto py-8 px-4">
+    <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
+      <div className="container mx-auto py-6 px-6">
         <Card className="max-w-3xl mx-auto">
           <CardHeader>
-            <CardTitle>Assinar FarolChat</CardTitle>
-            <CardDescription>Complete seu cadastro e finalize a assinatura</CardDescription>
+            <CardTitle className="text-foreground">Assinar FarolChat</CardTitle>
+            <CardDescription className="text-muted-foreground">Complete seu cadastro e finalize a assinatura</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {message && <div className="text-amber-600 text-sm">{message}</div>}

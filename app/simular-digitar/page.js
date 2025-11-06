@@ -202,14 +202,14 @@ export default function SimularDigitarPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto py-8 px-4 space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Simular/Digitar</CardTitle>
-            <CardDescription>Informe o CPF e consulte em todos os bancos habilitados</CardDescription>
+    <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
+      <div className="container mx-auto py-6 px-6 space-y-4">
+        <Card className="bg-muted/30">
+          <CardHeader className="bg-muted/50 rounded-t-xl">
+            <CardTitle className="text-foreground">Simular/Digitar</CardTitle>
+            <CardDescription className="text-muted-foreground">Informe o CPF e consulte em todos os bancos habilitados</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="bg-muted/20 rounded-b-xl">
             <div className="flex flex-col md:flex-row gap-3 items-start md:items-end">
               <div className="flex-1">
                 <Input placeholder="CPF" value={cpf} onChange={(e)=> setCpf(e.target.value)} onKeyDown={(e)=> { if (e.key==='Enter') callAllStreaming() }} />
@@ -222,8 +222,8 @@ export default function SimularDigitarPage() {
 
         <div className="space-y-3">
           {results.map((r, i) => (
-            <Card key={r.bankKey || i}>
-              <CardHeader>
+            <Card key={r.bankKey || i} className="bg-muted/30">
+              <CardHeader className="bg-muted/50 rounded-t-xl">
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>{r.bankName}</CardTitle>
@@ -231,7 +231,7 @@ export default function SimularDigitarPage() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="bg-muted/20 rounded-b-xl">
                 {r.error && <div className="text-destructive">{r.error}</div>}
                 <div className="space-y-3">
                   {(r.products || []).map((item, idx) => {

@@ -36,8 +36,8 @@ async function grantSectorsToUser(userId, sectors){
 export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}))
-    // Log básico para rastrear notificações recebidas (safe)
-    console.log('[MP Webhook] Received:', JSON.stringify({ type: body?.type || body?.topic, id: body?.data?.id || body?.id }, null, 2))
+    // Log seguro e estruturado
+    console.info('[MP Webhook] Received', { type: body?.type || body?.topic, id: body?.data?.id || body?.id })
     const notificationType = body?.type || body?.topic
     const dataId = body?.data?.id || body?.id
     
@@ -61,7 +61,7 @@ export async function POST(request) {
       const dedupeKey = `mp:payment:${dataId}`
       const firstTime = await setNX(dedupeKey, 60 * 60 * 24) // 24h
       if (!firstTime) {
-        console.log('[MP Webhook] Duplicate payment notification ignored:', dataId)
+        console.info('[MP Webhook] Duplicate payment notification ignored', { paymentId: dataId })
         return NextResponse.json({ ok: true })
       }
 
@@ -75,6 +75,8 @@ export async function POST(request) {
       const payment = await paymentRes.json()
       const externalReference = payment.external_reference
       const status = payment.status // approved, pending, in_process, rejected, cancelled, refunded, charged_back
+      const statusDetail = payment.status_detail
+      console.info('[MP Webhook] Payment detail', { externalReference, status, statusDetail })
       
       if (!externalReference) return NextResponse.json({ ok: true })
 
@@ -116,15 +118,15 @@ export async function POST(request) {
                     paymentId: dataId,
                     provider: 'mercadopago'
                   }
-                  console.log('[MP Webhook] Calling addCreditsWebhook:', addCreditsWebhook, webhookPayload)
+                  console.info('[MP Webhook] Calling addCreditsWebhook', { url: addCreditsWebhook, payload: webhookPayload })
                   const whRes = await fetch(addCreditsWebhook, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(webhookPayload)
                   })
-                  console.log('[MP Webhook] Webhook response status:', whRes.status)
+                  console.info('[MP Webhook] Webhook response', { status: whRes.status })
                 } catch (webhookError) {
-                  console.error('Erro ao chamar webhook de créditos:', webhookError)
+                  console.error('[MP Webhook] Error calling addCreditsWebhook', webhookError)
                 }
               }
 
@@ -132,14 +134,14 @@ export async function POST(request) {
               try {
                 const cents = Math.round(Number(amount) * 100)
                 await credits.addCents(user.id, cents)
-                console.log('[MP Webhook] Créditos somados no Redis:', user.id, cents)
+                console.info('[MP Webhook] Credits added to balance', { userId: user.id, cents })
               } catch (err) {
-                console.error('Erro ao somar créditos no Redis:', err)
+                console.error('[MP Webhook] Error adding credits', err)
               }
             }
           }
         } catch (creditsError) {
-          console.error('Erro ao processar adição de créditos:', creditsError)
+          console.error('[MP Webhook] Error processing credits add', creditsError)
         }
         
         return NextResponse.json({ ok: true })
@@ -167,7 +169,7 @@ export async function POST(request) {
         // Atualiza status da compra
         await supabaseAdmin
           .from('product_purchases')
-          .update({ status: dbStatus })
+          .update({ status: dbStatus, status_detail: statusDetail })
           .eq('id', purchase.id)
         
         // Se pagamento aprovado, concede acesso ao produto
@@ -226,7 +228,7 @@ export async function POST(request) {
     
     return NextResponse.json({ ok: true })
   } catch (e) {
-    console.error('Webhook error:', e)
+    console.error('[MP Webhook] Exception', e)
     return NextResponse.json({ ok: true }) // Sempre retorna 200 para evitar reenvios
   }
 }
