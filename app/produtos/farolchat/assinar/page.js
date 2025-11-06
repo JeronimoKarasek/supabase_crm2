@@ -12,7 +12,7 @@ export default function AssinarFarolChat() {
   const [pricing, setPricing] = useState({ userPrice: 0, connectionPrice: 0 })
   const [qty, setQty] = useState({ users: 1, connections: 1 })
   const [isSubmitting, setSubmitting] = useState(false)
-  const [payment, setPayment] = useState(null) // { paymentUrl, qrcode }
+  const [payment, setPayment] = useState(null)
   const [message, setMessage] = useState('')
 
   useEffect(() => {
@@ -62,11 +62,10 @@ export default function AssinarFarolChat() {
       }
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch('/api/picpay/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) })
+      const res = await fetch('/api/payments/add-credits', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Falha ao iniciar pagamento')
-      setPayment({ paymentUrl: json.paymentUrl, qrcode: json.qrcode })
-      window.open(json.paymentUrl, '_blank', 'noopener')
+      setPayment({ qrCode: json.qrCode, qrCodeBase64: json.qrCodeBase64, paymentId: json.paymentId })
     } catch (e) {
       setMessage(e?.message || 'Erro ao criar pagamento')
       setTimeout(() => setMessage(''), 3000)
@@ -76,19 +75,22 @@ export default function AssinarFarolChat() {
   }
 
   const checkStatus = async () => {
-    if (!payment) return
+    if (!payment?.paymentId) return
     try {
-      const url = new URL(payment.paymentUrl)
-      const ref = new URLSearchParams(url.search).get('referenceId') || ''
-      const res = await fetch(`/api/picpay/status?ref=${encodeURIComponent(ref)}`)
+      const res = await fetch(`https://api.mercadopago.com/v1/payments/${payment.paymentId}`, {
+        headers: { 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_MERCADOPAGO_ACCESS_TOKEN || ''}` }
+      })
       const json = await res.json()
-      if (json.status === 'paid') {
+      if (json.status === 'approved') {
         setStep(3)
       } else {
         setMessage(`Status: ${json.status}`)
         setTimeout(() => setMessage(''), 2000)
       }
-    } catch {}
+    } catch {
+      setMessage('Erro ao verificar status')
+      setTimeout(() => setMessage(''), 2000)
+    }
   }
 
   return (
@@ -109,7 +111,7 @@ export default function AssinarFarolChat() {
                 <Input placeholder="Email" type="email" value={form.email} onChange={(e)=> setForm(prev => ({...prev, email: e.target.value}))} />
                 <Input placeholder="Nome da empresa" className="md:col-span-2" value={form.empresa} onChange={(e)=> setForm(prev => ({...prev, empresa: e.target.value}))} />
                 <div className="md:col-span-2 flex justify-end">
-                  <Button onClick={onNext}>PrÃ³ximo</Button>
+                  <Button onClick={onNext}>Próximo</Button>
                 </div>
               </div>
             )}
@@ -117,15 +119,15 @@ export default function AssinarFarolChat() {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
                   <div>
-                    <div className="text-sm font-medium">UsuÃ¡rios</div>
+                    <div className="text-sm font-medium">Usuários</div>
                     <Input type="number" min={0} value={qty.users} onChange={(e)=> setQty(prev => ({...prev, users: Number(e.target.value || 0)}))} />
                   </div>
-                  <div className="text-right text-sm">R$ {pricing.userPrice?.toFixed?.(2) || Number(pricing.userPrice).toFixed(2)} cada â€” Total: <span className="font-medium">R$ {totalUsers.toFixed(2)}</span></div>
+                  <div className="text-right text-sm">R$ {pricing.userPrice?.toFixed?.(2) || Number(pricing.userPrice).toFixed(2)} cada  Total: <span className="font-medium">R$ {totalUsers.toFixed(2)}</span></div>
                   <div>
-                    <div className="text-sm font-medium">ConexÃµes</div>
+                    <div className="text-sm font-medium">Conexões</div>
                     <Input type="number" min={0} value={qty.connections} onChange={(e)=> setQty(prev => ({...prev, connections: Number(e.target.value || 0)}))} />
                   </div>
-                  <div className="text-right text-sm">R$ {pricing.connectionPrice?.toFixed?.(2) || Number(pricing.connectionPrice).toFixed(2)} cada â€” Total: <span className="font-medium">R$ {totalConnections.toFixed(2)}</span></div>
+                  <div className="text-right text-sm">R$ {pricing.connectionPrice?.toFixed?.(2) || Number(pricing.connectionPrice).toFixed(2)} cada  Total: <span className="font-medium">R$ {totalConnections.toFixed(2)}</span></div>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="text-lg">Valor total</div>
@@ -136,18 +138,27 @@ export default function AssinarFarolChat() {
                   <Button onClick={concluir} disabled={isSubmitting || total <= 0}>{isSubmitting ? 'Processando...' : 'Concluir'}</Button>
                 </div>
                 {payment && (
-                  <div className="border rounded p-3 space-y-2">
-                    <div className="text-sm">Abra o PicPay no link gerado. ApÃ³s o pagamento, clique em "Verificar".</div>
-                    {payment.qrcode?.base64 && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={`data:image/png;base64,${payment.qrcode.base64}`} alt="QR" className="w-48 h-48" />
+                  <div className="border rounded p-3 space-y-3">
+                    <div className="text-sm font-medium">Escaneie o QR Code para pagar via PIX</div>
+                    {payment.qrCodeBase64 && (
+                      <div className="flex flex-col items-center gap-3 bg-white p-4 rounded">
+                        <img src={`data:image/png;base64,${payment.qrCodeBase64}`} alt="QR Code PIX" className="w-64 h-64" />
+                        <div className="text-xs text-muted-foreground text-center max-w-sm break-all">
+                          {payment.qrCode}
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => {
+                          navigator.clipboard.writeText(payment.qrCode)
+                          setMessage('Código PIX copiado!')
+                          setTimeout(() => setMessage(''), 2000)
+                        }}>
+                          Copiar código PIX
+                        </Button>
+                      </div>
                     )}
-                    <div className="flex gap-2">
-                      <Button variant="outline" asChild>
-                        <a href={payment.paymentUrl} target="_blank" rel="noopener">Abrir no PicPay</a>
-                      </Button>
-                      <Button variant="secondary" onClick={checkStatus}>Verificar</Button>
+                    <div className="text-xs text-muted-foreground">
+                      Após efetuar o pagamento, clique em "Verificar Status" ou aguarde a confirmação automática.
                     </div>
+                    <Button variant="secondary" onClick={checkStatus} className="w-full">Verificar Status</Button>
                   </div>
                 )}
               </div>
@@ -155,7 +166,7 @@ export default function AssinarFarolChat() {
             {step === 3 && (
               <div className="space-y-2">
                 <div className="text-xl font-semibold">Tudo certo!</div>
-                <div className="text-muted-foreground">Recebemos sua confirmaÃ§Ã£o. Vamos entrar em contato enviando as credenciais.</div>
+                <div className="text-muted-foreground">Recebemos sua confirmação. Vamos entrar em contato enviando as credenciais.</div>
               </div>
             )}
           </CardContent>
@@ -164,13 +175,3 @@ export default function AssinarFarolChat() {
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-

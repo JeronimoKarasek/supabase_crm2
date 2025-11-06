@@ -15,7 +15,7 @@ export default function CriacaoProdutosPage(){
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
-  const empty = { key:'', name:'', description:'', learn_more_url:'', webhook_url:'', sectors:[], pricing:{ basePrice: 0, userPrice: 0, connectionPrice: 0 }, active:true }
+  const empty = { key:'', name:'', description:'', learn_more_url:'', webhook_url:'', sectors:[], pricing:{ basePrice: 0, userPrice: 0, connectionPrice: 0 }, active:true, useCredits: false, creditPrice: 0 }
   const [form, setForm] = useState(empty)
   const [editingId, setEditingId] = useState('')
 
@@ -53,7 +53,22 @@ export default function CriacaoProdutosPage(){
 
   const edit = (it) => {
     setEditingId(it.id)
-  setForm({ key: it.key, name: it.name, description: it.description||'', learn_more_url: it.learn_more_url||'', webhook_url: it.webhook_url||'', sectors: it.sectors || [], pricing: { basePrice: it.pricing?.basePrice || 0, userPrice: it.pricing?.userPrice || 0, connectionPrice: it.pricing?.connectionPrice || 0 }, active: !!it.active })
+  setForm({ 
+    key: it.key, 
+    name: it.name, 
+    description: it.description||'', 
+    learn_more_url: it.learn_more_url||'', 
+    webhook_url: it.webhook_url||'', 
+    sectors: it.sectors || [], 
+    pricing: { 
+      basePrice: it.pricing?.basePrice || 0, 
+      userPrice: it.pricing?.userPrice || 0, 
+      connectionPrice: it.pricing?.connectionPrice || 0 
+    }, 
+    active: !!it.active,
+    useCredits: !!it.useCredits,
+    creditPrice: it.creditPrice || 0
+  })
   }
 
   const remove = async (id) => {
@@ -126,6 +141,56 @@ export default function CriacaoProdutosPage(){
               ))}
             </div>
           </div>
+          
+          {/* Configuração de Créditos para Assinatura */}
+          <div className="border-t pt-4 mt-4">
+            <div className="mb-3">
+              <Label className="text-base font-semibold">Cobrança por Créditos (Assinatura Mensal)</Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                Se ativado, este produto será uma assinatura que desconta créditos automaticamente todo mês
+              </p>
+            </div>
+            
+            <div className="space-y-3">
+              <label className="flex items-center gap-3">
+                <Checkbox 
+                  checked={form.useCredits} 
+                  onCheckedChange={(checked)=> setForm(prev => ({...prev, useCredits: !!checked}))} 
+                />
+                <div>
+                  <div className="font-medium text-sm">Usar sistema de créditos</div>
+                  <div className="text-xs text-muted-foreground">Cliente paga com créditos ao invés de dinheiro</div>
+                </div>
+              </label>
+              
+              {form.useCredits && (
+                <div className="ml-7 space-y-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <Label>Valor mensal em créditos (R$)</Label>
+                      <Input 
+                        type="number" 
+                        step="0.01" 
+                        value={form.creditPrice} 
+                        onChange={(e)=> setForm(prev => ({...prev, creditPrice: e.target.value}))} 
+                        placeholder="Ex: 50.00"
+                      />
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Este valor será descontado mensalmente do saldo do usuário
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded border border-blue-200 dark:border-blue-800">
+                    <div className="text-xs text-blue-800 dark:text-blue-200">
+                      ℹ️ <strong>Como funciona:</strong> O sistema verifica automaticamente todo mês se o usuário tem saldo suficiente. 
+                      Se tiver, desconta os créditos e mantém a assinatura ativa. Se não tiver, a assinatura é pausada até adicionar créditos.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          
           <div className="flex gap-2">
             <Button onClick={save} disabled={loading || !form.key || !form.name}>{editingId ? 'Salvar' : 'Criar produto'}</Button>
             {editingId ? <Button variant="secondary" onClick={()=>{ setEditingId(''); setForm(empty) }}>Cancelar</Button> : null}

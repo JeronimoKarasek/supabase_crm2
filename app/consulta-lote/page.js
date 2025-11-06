@@ -192,7 +192,7 @@ export default function ConsultaLotePage() {
         <Card>
           <CardHeader>
             <CardTitle>Enviar novo lote</CardTitle>
-            <CardDescription>Selecione o produto, o banco e envie um arquivo CSV com colunas nome, telefone, cpf.</CardDescription>
+              <CardDescription>Selecione o produto, o banco e envie um arquivo CSV com colunas nome, telefone, cpf, nb.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">

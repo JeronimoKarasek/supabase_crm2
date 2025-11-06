@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
@@ -20,7 +20,7 @@ export default function ComprarProdutoPage() {
     ;(async () => {
       try {
         if (!key) return
-        const res = await fetch(`/api/products/public?key=${encodeURIComponent(key)}`)
+        const res = await fetch(/api/products/public?key=$\{encodeURIComponent(key)})
         const json = await res.json()
         setProduct(json.product || null)
       } catch {}
@@ -33,10 +33,10 @@ export default function ComprarProdutoPage() {
     if (!product) return
     setSubmitting(true)
     try {
-      const referenceId = `${key}_${Date.now()}`
+      const referenceId = $\{key}_$\{Date.now()}
       const body = {
         productKey: key,
-        returnPath: `/produtos/${key}/comprar`,
+        returnPath: /produtos/$\{key}/comprar,
         amount: Number(basePrice.toFixed(2)),
         referenceId,
         buyer: {
@@ -51,11 +51,10 @@ export default function ComprarProdutoPage() {
       }
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch('/api/picpay/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) })
+      const res = await fetch('/api/payments/add-credits', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: Bearer $\{token} } : {}) }, body: JSON.stringify(body) })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Falha ao iniciar pagamento')
-      setPayment({ paymentUrl: json.paymentUrl, qrcode: json.qrcode })
-      window.open(json.paymentUrl, '_blank', 'noopener')
+      setPayment({ qrCode: json.qrCode, qrCodeBase64: json.qrCodeBase64, paymentId: json.paymentId })
     } catch (e) {
       setMessage(e?.message || 'Erro ao criar pagamento')
       setTimeout(() => setMessage(''), 3000)
@@ -63,15 +62,18 @@ export default function ComprarProdutoPage() {
   }
 
   const checkStatus = async () => {
-    if (!payment) return
+    if (!payment?.paymentId) return
     try {
-      const url = new URL(payment.paymentUrl)
-      const ref = new URLSearchParams(url.search).get('referenceId') || ''
-      const res = await fetch(`/api/picpay/status?ref=${encodeURIComponent(ref)}`)
+      const res = await fetch(https://api.mercadopago.com/v1/payments/$\{payment.paymentId}, {
+        headers: { 'Authorization': Bearer $\{process.env.NEXT_PUBLIC_MERCADOPAGO_ACCESS_TOKEN || ''} }
+      })
       const json = await res.json()
-      if (json.status === 'paid') setMessage('Pagamento confirmado!')
-      else { setMessage(`Status: ${json.status}`); setTimeout(()=>setMessage(''), 2000) }
-    } catch {}
+      if (json.status === 'approved') setMessage('Pagamento confirmado!')
+      else { setMessage(Status: $\{json.status}); setTimeout(()=>setMessage(''), 2000) }
+    } catch {
+      setMessage('Erro ao verificar status')
+      setTimeout(() => setMessage(''), 2000)
+    }
   }
 
   if (!product) return (
@@ -99,24 +101,33 @@ export default function ComprarProdutoPage() {
             </div>
             <div className="flex items-center justify-between">
               <div className="text-lg">Valor</div>
-              <div className="text-2xl font-bold">R$ {basePrice.toFixed(2)}</div>
+              <div className="text-2xl font-bold">R$\{basePrice.toFixed(2)}</div>
             </div>
             <div className="flex justify-end">
               <Button onClick={concluir} disabled={isSubmitting || !(basePrice > 0)}>{isSubmitting ? 'Processando...' : 'Concluir'}</Button>
             </div>
             {payment && (
-              <div className="border rounded p-3 space-y-2">
-                <div className="text-sm">Abra o PicPay no link gerado. Após o pagamento, clique em "Verificar".</div>
-                {payment.qrcode?.base64 && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={`data:image/png;base64,${payment.qrcode.base64}`} alt="QR" className="w-48 h-48" />
+              <div className="border rounded p-3 space-y-3">
+                <div className="text-sm font-medium">Escaneie o QR Code para pagar via PIX</div>
+                {payment.qrCodeBase64 && (
+                  <div className="flex flex-col items-center gap-3 bg-white p-4 rounded">
+                    <img src={data:image/png;base64,$\{payment.qrCodeBase64}} alt="QR Code PIX" className="w-64 h-64" />
+                    <div className="text-xs text-muted-foreground text-center max-w-sm break-all">
+                      {payment.qrCode}
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => {
+                      navigator.clipboard.writeText(payment.qrCode)
+                      setMessage('Código PIX copiado!')
+                      setTimeout(() => setMessage(''), 2000)
+                    }}>
+                      Copiar código PIX
+                    </Button>
+                  </div>
                 )}
-                <div className="flex gap-2">
-                  <Button variant="outline" asChild>
-                    <a href={payment.paymentUrl} target="_blank" rel="noopener">Abrir no PicPay</a>
-                  </Button>
-                  <Button variant="secondary" onClick={checkStatus}>Verificar</Button>
+                <div className="text-xs text-muted-foreground">
+                  Após efetuar o pagamento, clique em "Verificar Status" ou aguarde a confirmação automática.
                 </div>
+                <Button variant="secondary" onClick={checkStatus} className="w-full">Verificar Status</Button>
               </div>
             )}
           </CardContent>
@@ -125,4 +136,3 @@ export default function ComprarProdutoPage() {
     </div>
   )
 }
-
