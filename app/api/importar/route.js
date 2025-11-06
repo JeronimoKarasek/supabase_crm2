@@ -1,14 +1,10 @@
 import { NextResponse } from 'next/server'
 import fs from 'fs'
-
-export const dynamic = 'force-dynamic'
 import path from 'path'
-
-export const dynamic = 'force-dynamic'
 import { supabaseAdmin } from '../../../lib/supabase-admin.js'
 
-
 export const dynamic = 'force-dynamic'
+
 const storePath = path.join(process.cwd(), '.emergent', 'importar.json')
 function ensureDir() { const dir = path.dirname(storePath); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }) }
 function readStore() { try { ensureDir(); if (!fs.existsSync(storePath)) return { items: [] }; return JSON.parse(fs.readFileSync(storePath,'utf8')) } catch { return { items: [] } } }
@@ -61,19 +57,21 @@ function parseCsv(text) {
     headers.forEach((h, i) => { obj[h] = (cols[i] ?? '').toString().trim() })
     rows.push(obj)
   }
-  // Attempt to normalize keys for nome/telefone/cpf
+  // Attempt to normalize keys for nome/telefone/cpf/nb
   const headerMap = {}
   headers.forEach((h) => {
     const hn = norm(h).toLowerCase()
     if (hn.includes('nome') && !headerMap.nome) headerMap.nome = h
     if ((hn.includes('telefone') || hn.includes('celular') || hn === 'fone' || hn.includes('phone')) && !headerMap.telefone) headerMap.telefone = h
     if (hn === 'cpf' && !headerMap.cpf) headerMap.cpf = h
+    if (hn === 'nb' && !headerMap.nb) headerMap.nb = h
   })
   return rows.map(r => ({
     ...r,
     __nome: headerMap.nome ? r[headerMap.nome] : (r.nome ?? ''),
     __telefone: headerMap.telefone ? r[headerMap.telefone] : (r.telefone ?? ''),
     __cpf: headerMap.cpf ? r[headerMap.cpf] : (r.cpf ?? ''),
+    __nb: headerMap.nb ? r[headerMap.nb] : (r.nb ?? ''),
   }))
 }
 
@@ -186,6 +184,7 @@ export async function POST(request) {
       nome: (r.__nome ?? r.nome ?? '').toString(),
       telefone: (r.__telefone ?? r.telefone ?? '').toString(),
       cpf: (r.__cpf ?? r.cpf ?? '').toString(),
+      nb: (r.__nb ?? r.nb ?? '').toString(),
       cliente: user.email,
       produto,
       banco_simulado: bancoName,
