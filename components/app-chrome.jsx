@@ -30,6 +30,8 @@ export default function AppChrome({ children }) {
   const [branding, setBranding] = useState({ siteName: 'FarolTech', siteSubtitle: 'Iluminando seu caminho', logoUrl: '' })
   const [loadingCredits, setLoadingCredits] = useState(false)
   const [creditsBRL, setCreditsBRL] = useState('R$ 0,00')
+  const [smsBalance, setSmsBalance] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
   const [loadingAddCredits, setLoadingAddCredits] = useState(false)
   const [creditsDialog, setCreditsDialog] = useState({ open: false, data: null, error: null })
   const [addCreditsDialog, setAddCreditsDialog] = useState({ open: false, data: null, error: null, step: 'form' })
@@ -70,6 +72,27 @@ export default function AppChrome({ children }) {
     // carrega saldo ao entrar e a cada 20s
     consultarCreditos()
     const id = setInterval(consultarCreditos, 20000)
+    return () => clearInterval(id)
+  }, [])
+
+  const loadUserAndSmsBalance = async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const user = sessionData?.session?.user
+      const role = user?.user_metadata?.role || ''
+      setIsAdmin(role === 'admin')
+      if (role === 'admin') {
+        const token = sessionData?.session?.access_token
+        const res = await fetch('/api/disparo-sms/balance', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        const js = await res.json()
+        if (res.ok) setSmsBalance(js?.balance || '')
+      }
+    } catch {}
+  }
+
+  useEffect(() => {
+    loadUserAndSmsBalance()
+    const id = setInterval(loadUserAndSmsBalance, 25000)
     return () => clearInterval(id)
   }, [])
 
@@ -155,6 +178,9 @@ export default function AppChrome({ children }) {
           </div>
           <div className="flex items-center gap-2">
             <div className="text-sm font-semibold px-2 text-success dark:text-success">Crédito: {creditsBRL}</div>
+            {isAdmin && smsBalance && (
+              <div className="text-xs font-medium px-2 py-1 rounded bg-muted border">SMS: {smsBalance}</div>
+            )}
             {/* Botão de atualizar saldo removido (auto refresh já implementado) */}
             <Button
               size="sm"

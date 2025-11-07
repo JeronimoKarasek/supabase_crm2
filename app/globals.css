@@ -91,15 +91,16 @@ code {
         --chart-4: 152 56% 46%;
         --chart-5: 43 87% 55%;
                 --radius: 0.5rem;
-                /* Sidebar adaptada à paleta */
-        --sidebar-background: 185 33% 97%;
-        --sidebar-foreground: 189 33% 16%;
-        --sidebar-primary: 187 63% 43%;
-        --sidebar-primary-foreground: 189 59% 7%;
-        --sidebar-accent: 186 26% 94%;
-        --sidebar-accent-foreground: 189 33% 16%;
-        --sidebar-border: 190 27% 86%;
-        --sidebar-ring: 184 53% 67%;
+            /* Sidebar final (claro: #1B3135) */
+            /* #1B3135 -> HSL approx: 189 33% 16% já usado em foreground, manter texto claro dentro */
+            --sidebar-background: 189 33% 16%; /* #1B3135 */
+            --sidebar-foreground: 185 36% 90%; /* texto claro sobre o fundo escuro */
+            --sidebar-primary: 187 63% 43%;
+            --sidebar-primary-foreground: 189 59% 7%;
+            --sidebar-accent: 186 26% 94%;
+            --sidebar-accent-foreground: 189 33% 16%;
+            --sidebar-border: 189 33% 22%; /* leve variação mais clara para borda */
+            --sidebar-ring: 184 53% 67%;
     }
   .dark {
         /* Tons neutros escuros para o site */
@@ -133,15 +134,15 @@ code {
         --chart-3: 202 56% 38%;
         --chart-4: 152 56% 46%;
         --chart-5: 43 87% 55%;
-        /* Sidebar mantém a cor #0B1F22 */
-        --sidebar-background: 188 49% 9%;  /* #0B1F22 - Background da paleta */
-        --sidebar-foreground: 185 36% 90%;
-        --sidebar-primary: 184 53% 67%; /* #7ED4D8 */
-        --sidebar-primary-foreground: 189 59% 7%;
-        --sidebar-accent: 189 45% 13%; /* #10292D */
-        --sidebar-accent-foreground: 185 36% 90%;
-        --sidebar-border: 189 33% 16%; /* #1B3135 */
-        --sidebar-ring: 184 53% 67%;
+    /* Sidebar final dark (#0B1F22) */
+    --sidebar-background: 188 49% 9%;  /* #0B1F22 */
+    --sidebar-foreground: 185 36% 90%;
+    --sidebar-primary: 184 53% 67%;
+    --sidebar-primary-foreground: 189 59% 7%;
+    --sidebar-accent: 189 45% 13%; /* #10292D */
+    --sidebar-accent-foreground: 185 36% 90%;
+    --sidebar-border: 189 33% 16%; /* #1B3135 como borda no dark */
+    --sidebar-ring: 184 53% 67%;
     }
 }
 

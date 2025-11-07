@@ -23,7 +23,8 @@ export async function POST(request) {
   try {
     const body = await request.json()
     const batch_id = body?.batch_id || ''
-    const includeFailed = !!body?.include_failed
+  const includeFailed = !!body?.include_failed
+  const limit = Math.min(Math.max(parseInt(body?.limit || '1000', 10) || 1000, 1), 1000)
 
     if (!batch_id) {
       return NextResponse.json({ error: 'batch_id obrigatório' }, { status: 400 })
@@ -42,7 +43,7 @@ export async function POST(request) {
       query = query.eq('status', 'queued')
     }
 
-    query = query.limit(1000)
+  query = query.limit(limit)
 
     const { data: rows, error } = await query
 

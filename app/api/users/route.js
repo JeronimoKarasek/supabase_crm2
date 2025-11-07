@@ -25,17 +25,56 @@ export async function GET(request) {
   try {
     const caller = await getUserFromRequest(request)
     if (!caller) return unauthorized()
-    const role = caller.user_metadata?.role || 'viewer'
-    const sectors = Array.isArray(caller.user_metadata?.sectors) && caller.user_metadata.sectors.length > 0 ? caller.user_metadata.sectors : ['Clientes', 'Usuários']
-    if (!(role === 'admin' || sectors.includes('Usuários'))) return forbidden('Acesso ao setor Usuários não permitido')
+    const role = caller.user_metadata?.role || 'user'
+    // Hierarquia:
+    // admin -> todos os usuários
+    // gestor -> somente usuários da mesma empresa
+    // user   -> apenas ele mesmo
 
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 })
-    if (error) {
-      console.error('Error listing users:', error)
-      return NextResponse.json({ error: 'Failed to list users', details: error.message }, { status: 500 })
+    // Garantir promoção se estiver em adminEmails
+    try {
+      const { data: gsRow } = await supabaseAdmin.from('global_settings').select('data').eq('id','global').single()
+      const adminEmails = gsRow?.data?.adminEmails || []
+      if (adminEmails.includes(caller.email) && role !== 'admin') {
+        await supabaseAdmin.auth.admin.updateUserById(caller.id, { user_metadata: { ...caller.user_metadata, role: 'admin' } })
+      }
+    } catch {}
+
+    if (role === 'admin') {
+      // Admin: listar todos
+      const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 500 })
+      if (error) {
+        console.error('Error listing users:', error)
+        return NextResponse.json({ error: 'Failed to list users', details: error.message }, { status: 500 })
+      }
+      const users = data?.users?.map(u => ({ id: u.id, email: u.email, user_metadata: u.user_metadata })) || []
+      return NextResponse.json({ users })
     }
-    const users = data?.users?.map(u => ({ id: u.id, email: u.email, user_metadata: u.user_metadata })) || []
-    return NextResponse.json({ users })
+
+    if (role === 'gestor') {
+      // Gestor: obter empresa do caller
+      const { data: link, error: linkErr } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', caller.id).single()
+      if (linkErr || !link?.empresa_id) {
+        return NextResponse.json({ users: [] })
+      }
+      const empresaId = link.empresa_id
+      const { data: rels, error: usersRelErr } = await supabaseAdmin.from('empresa_users').select('user_id').eq('empresa_id', empresaId)
+      if (usersRelErr) return NextResponse.json({ users: [] })
+      const ids = (rels || []).map(r => r.user_id)
+      const out = []
+      for (const id of ids) {
+        try {
+          const { data: udata, error: uerr } = await supabaseAdmin.auth.admin.getUserById(id)
+          if (!uerr && udata?.user) {
+            out.push({ id: udata.user.id, email: udata.user.email, user_metadata: udata.user.user_metadata })
+          }
+        } catch {}
+      }
+      return NextResponse.json({ users: out })
+    }
+
+    // user comum: retorna apenas ele mesmo
+    return NextResponse.json({ users: [ { id: caller.id, email: caller.email, user_metadata: caller.user_metadata } ] })
   } catch (err) {
     console.error('Unexpected error listing users:', err)
     return NextResponse.json({ error: 'Internal server error', details: err.message }, { status: 500 })
@@ -50,8 +89,8 @@ export async function POST(request) {
     const sectorsCaller = Array.isArray(caller.user_metadata?.sectors) && caller.user_metadata.sectors.length > 0 ? caller.user_metadata.sectors : ['Clientes', 'Usuários']
     if (!(roleCaller === 'admin' || sectorsCaller.includes('Usuários'))) return forbidden('Acesso ao setor Usuários não permitido')
 
-    const body = await request.json()
-    const { email, password, role = 'viewer', allowedTables = [], filter = null, filters, filtersByTable, sectors } = body || {}
+  const body = await request.json()
+  const { email, password, role = 'viewer', allowedTables = [], filter = null, filters, filtersByTable, sectors, empresaId } = body || {}
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email e senha são obrigatórios' }, { status: 400 })
@@ -81,6 +120,7 @@ export async function POST(request) {
       email_confirm: true,
       user_metadata: { 
         role,
+        ...(empresaId ? { empresaId } : {}),
         permissions: {
           allowedTables: Array.isArray(allowedTables) ? allowedTables : [],
           // keep legacy field for backward compatibility, but prefer filtersByTable
@@ -97,6 +137,15 @@ export async function POST(request) {
     }
 
     const user = data?.user ? { id: data.user.id, email: data.user.email, user_metadata: data.user.user_metadata } : null
+
+    // Vincular empresa ao usuário (empresa_users)
+    if (user && empresaId) {
+      try {
+        await supabaseAdmin.from('empresa_users').upsert({ user_id: user.id, empresa_id: empresaId, role: role || 'user' }, { onConflict: 'user_id' })
+      } catch (e) {
+        console.error('Falha ao vincular empresa ao usuário:', e)
+      }
+    }
     return NextResponse.json({ user })
   } catch (err) {
     console.error('Unexpected error creating user:', err)
@@ -112,8 +161,8 @@ export async function PUT(request) {
     const sectorsCaller = Array.isArray(caller.user_metadata?.sectors) && caller.user_metadata.sectors.length > 0 ? caller.user_metadata.sectors : ['Clientes', 'Usuários']
     if (!(roleCaller === 'admin' || sectorsCaller.includes('Usuários'))) return forbidden('Acesso ao setor Usuários não permitido')
 
-    const body = await request.json()
-    const { id, role, allowedTables, filter, filters, filtersByTable, sectors, password } = body || {}
+  const body = await request.json()
+  const { id, role, allowedTables, filter, filters, filtersByTable, sectors, password, empresaId } = body || {}
 
     if (!id) {
       return NextResponse.json({ error: 'ID do usuário é obrigatório' }, { status: 400 })
@@ -149,6 +198,7 @@ export async function PUT(request) {
     const newMeta = {
       ...currentMeta,
       ...(role ? { role } : {}),
+      ...(empresaId ? { empresaId } : {}),
       permissions: {
         allowedTables: Array.isArray(allowedTables) ? allowedTables : (currentMeta?.permissions?.allowedTables || []),
         // keep legacy
@@ -162,7 +212,7 @@ export async function PUT(request) {
     if (typeof password === 'string' && password.length >= 8) {
       updatePayload.password = password
     }
-    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(id, updatePayload)
+  const { data, error } = await supabaseAdmin.auth.admin.updateUserById(id, updatePayload)
 
     if (error) {
       console.error('Error updating user:', error)
@@ -170,6 +220,20 @@ export async function PUT(request) {
     }
 
     const user = data?.user ? { id: data.user.id, email: data.user.email, user_metadata: data.user.user_metadata } : null
+
+    // Atualizar vínculo empresa_users se fornecido
+    if (user && (empresaId !== undefined)) {
+      try {
+        if (empresaId) {
+          await supabaseAdmin.from('empresa_users').upsert({ user_id: user.id, empresa_id: empresaId, role: (role || user.user_metadata?.role || 'user') }, { onConflict: 'user_id' })
+        } else {
+          // se empresaId vazio, desvincula
+          await supabaseAdmin.from('empresa_users').delete().eq('user_id', user.id)
+        }
+      } catch (e) {
+        console.error('Falha ao atualizar vínculo empresa_users:', e)
+      }
+    }
     return NextResponse.json({ user })
   } catch (err) {
     console.error('Unexpected error updating user:', err)

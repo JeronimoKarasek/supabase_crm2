@@ -24,13 +24,19 @@ export default function DisparoSmsPage() {
   // Disparo
   const [segments, setSegments] = useState([])
   const [selectedSegmentId, setSelectedSegmentId] = useState('default')
-  const [balance, setBalance] = useState('')
+  const [balance, setBalance] = useState('') // saldo agora exibido fora (navbar) apenas para admin
   const [messageTemplate, setMessageTemplate] = useState('')
   const [referencePrefix, setReferencePrefix] = useState('')
   const [csvText, setCsvText] = useState('')
   const [csvRows, setCsvRows] = useState([])
   const [batchId, setBatchId] = useState('')
   const [campaignsRefreshKey, setCampaignsRefreshKey] = useState(0)
+  // Retorno WhatsApp e agendamento
+  const [returnNumber, setReturnNumber] = useState('')
+  const [scheduleAt, setScheduleAt] = useState('') // datetime-local
+  const [chunkSize, setChunkSize] = useState('') // tamanho por lote (cliente)
+  const [chunkIntervalSec, setChunkIntervalSec] = useState('') // segundos entre lotes (cliente)
+  const [sendingScheduler, setSendingScheduler] = useState({ active: false, nextAt: null, intervalId: null })
 
   // Parse CSV
   const parseCsv = (text) => {
@@ -225,6 +231,42 @@ export default function DisparoSmsPage() {
     }
   }
 
+  // Envio agendado em lotes (frontend). Requer manter a aba aberta.
+  const enviarAgendado = async () => {
+    if (!batchId) { setError('Nenhum batch selecionado ou importado.'); return }
+    const size = Math.max(1, Math.min(parseInt(chunkSize || '0', 10) || 0, 1000))
+    const gap = Math.max(1, parseInt(chunkIntervalSec || '0', 10) || 0)
+    if (!size || !gap) { setError('Defina tamanho do lote e intervalo (s).'); return }
+    try {
+      // espera até scheduleAt, se definido e futuro
+      let delayMs = 0
+      if (scheduleAt) {
+        const ts = new Date(scheduleAt).getTime()
+        const now = Date.now()
+        delayMs = Math.max(0, ts - now)
+      }
+      setMessage('Agendamento iniciado. Mantenha esta aba aberta até finalizar.')
+      // primeira execução após delay
+      setTimeout(async () => {
+        // dispara imediatamente um primeiro lote
+        await enviar(batchId, false)
+        // agendar execuções subsequentes
+        const id = setInterval(async () => {
+          await enviar(batchId, false)
+        }, gap * 1000)
+        setSendingScheduler({ active: true, nextAt: new Date(Date.now() + gap * 1000).toISOString(), intervalId: id })
+      }, delayMs)
+    } catch (e) {
+      setError('Falha ao iniciar agendamento')
+    }
+  }
+
+  const cancelarAgendamento = () => {
+    if (sendingScheduler?.intervalId) clearInterval(sendingScheduler.intervalId)
+    setSendingScheduler({ active: false, nextAt: null, intervalId: null })
+    setMessage('Agendamento cancelado')
+  }
+
   useEffect(() => {
     loadSettings()
     loadSegments()
@@ -286,15 +328,34 @@ export default function DisparoSmsPage() {
                 </div>
               </div>
 
-              {balance && (
-                <div className="p-3 bg-muted rounded">
-                  <span className="text-sm font-medium">Saldo disponível: </span>
-                  <Badge variant="outline">{balance} SMS</Badge>
-                </div>
-              )}
+              {/* Saldo SMS movido para cabeçalho (app-chrome) quando admin */}
 
               <div className="space-y-2">
                 <Label>Mensagem SMS</Label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+                  <div className="md:col-span-2 space-y-2">
+                    <Label className="text-xs">Número para retorno (WhatsApp)</Label>
+                    <Input placeholder="Ex: 5599999999999" value={returnNumber} onChange={(e)=> setReturnNumber(e.target.value)} />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" onClick={() => {
+                      if (!returnNumber) { alert('Informe o número para retorno'); return }
+                      // Gera link com a primeira linha como exemplo de variáveis
+                      let text = messageTemplate || ''
+                      if (csvRows.length) {
+                        const sample = csvRows[0]
+                        Object.keys(sample).forEach(k => {
+                          const regex = new RegExp(`\\{\\{${k}\\}\\}`, 'gi')
+                          text = text.replace(regex, sample[k] ?? '')
+                        })
+                      }
+                      const encoded = encodeURIComponent(text)
+                      const url = `https://wa.me/${returnNumber}?text=${encoded}`
+                      // Insere no final da mensagem
+                      setMessageTemplate(prev => (prev ? prev + "\n" + url : url))
+                    }}>Inserir link WhatsApp</Button>
+                  </div>
+                </div>
                 <Textarea 
                   placeholder="Digite sua mensagem aqui. Use {{nome}}, {{cpf}}, {{valor}} etc. para variáveis." 
                   value={messageTemplate} 
@@ -312,6 +373,21 @@ export default function DisparoSmsPage() {
               <div className="space-y-2">
                 <Label>Prefixo de Referência (opcional)</Label>
                 <Input placeholder="Ex: campanha_natal" value={referencePrefix} onChange={(e) => setReferencePrefix(e.target.value)} />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Agendar envio (data e hora)</Label>
+                  <Input type="datetime-local" value={scheduleAt} onChange={(e)=> setScheduleAt(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tamanho do lote</Label>
+                  <Input type="number" min="1" max="1000" placeholder="Ex: 200" value={chunkSize} onChange={(e)=> setChunkSize(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Intervalo entre lotes (segundos)</Label>
+                  <Input type="number" min="1" placeholder="Ex: 60" value={chunkIntervalSec} onChange={(e)=> setChunkIntervalSec(e.target.value)} />
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -376,13 +452,32 @@ export default function DisparoSmsPage() {
                   <Upload className="h-4 w-4 mr-2" />
                   {!hasToken ? 'Configure o token SMS' : !messageTemplate ? 'Escreva a mensagem' : !csvRows.length ? 'Carregue o CSV' : 'Importar Campanha'}
                 </Button>
+                <Button type="button" variant="outline" onClick={enviarAgendado} disabled={!batchId || !chunkSize || !chunkIntervalSec}>
+                  Agendar envio em lotes (cliente)
+                </Button>
+                {sendingScheduler.active && (
+                  <Button type="button" variant="destructive" onClick={cancelarAgendamento}>Cancelar agendamento</Button>
+                )}
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Campanhas Importadas</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Campanhas Importadas</CardTitle>
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <div><strong>Legenda:</strong></div>
+                  <div className="flex flex-wrap gap-3">
+                    <span><strong>T</strong>: Total</span>
+                    <span><strong>Q</strong>: Na fila</span>
+                    <span><strong>S</strong>: Enviadas</span>
+                    <span><strong>F</strong>: Falhas</span>
+                    <span><strong>B</strong>: Blacklist</span>
+                    <span><strong>N</strong>: Não perturbe</span>
+                  </div>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <CampaignsList
@@ -434,7 +529,7 @@ function CampaignsList({ selectedBatchId, onSend, refreshKey }) {
               <TableCell className="font-mono text-xs">{b.batch_id.slice(0, 8)}</TableCell>
               <TableCell>
                 <span className="text-xs">
-                  T:{b.counts.total} Q:{b.counts.queued} S:{b.counts.sent} F:{b.counts.failed} B:{b.counts.blacklist} N:{b.counts.not_disturb}
+                  Tot:{b.counts.total} Fila:{b.counts.queued} Env:{b.counts.sent} Fal:{b.counts.failed} Bl:{b.counts.blacklist} NP:{b.counts.not_disturb}
                 </span>
               </TableCell>
               <TableCell>
