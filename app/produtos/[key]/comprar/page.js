@@ -64,14 +64,13 @@ export default function ComprarProdutoPage() {
   const checkStatus = async () => {
     if (!payment?.paymentId) return
     try {
-      const res = await fetch(`https://api.mercadopago.com/v1/payments/${payment.paymentId}`, {
-        headers: { 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_MERCADOPAGO_ACCESS_TOKEN || ''}` }
-      })
-      const json = await res.json()
+      const res = await fetch(`/api/mercadopago/status?paymentId=${encodeURIComponent(payment.paymentId)}`)
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'Falha ao verificar status')
       if (json.status === 'approved') setMessage('Pagamento confirmado!')
       else { setMessage(`Status: ${json.status}`); setTimeout(()=>setMessage(''), 2000) }
-    } catch {
-      setMessage('Erro ao verificar status')
+    } catch (e) {
+      setMessage(e?.message || 'Erro ao verificar status')
       setTimeout(() => setMessage(''), 2000)
     }
   }
