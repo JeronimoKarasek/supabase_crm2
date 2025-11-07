@@ -39,19 +39,50 @@ export async function GET(request) {
     const list = (json?.data || []).map(t => {
       // conta variáveis {{1}}, {{2}} etc no body component
       let paramCount = 0
+      let bodyText = ''
+      let headerText = ''
+      let headerType = null
+      let footerText = ''
+      let buttons = []
+      
       if (Array.isArray(t.components)) {
+        // HEADER
+        const headerComp = t.components.find(c => c.type === 'HEADER')
+        if (headerComp) {
+          headerType = headerComp.format || null
+          if (headerComp.text) headerText = headerComp.text
+        }
+        
+        // BODY
         const bodyComp = t.components.find(c => c.type === 'BODY')
         if (bodyComp?.text) {
+          bodyText = bodyComp.text
           const matches = bodyComp.text.match(/\{\{(\d+)\}\}/g)
           paramCount = matches ? matches.length : 0
         }
+        
+        // FOOTER
+        const footerComp = t.components.find(c => c.type === 'FOOTER')
+        if (footerComp?.text) footerText = footerComp.text
+        
+        // BUTTONS
+        const buttonComp = t.components.find(c => c.type === 'BUTTONS')
+        if (buttonComp?.buttons) buttons = buttonComp.buttons
       }
+      
       return { 
         name: t.name, 
         language: t.language, 
         status: t.status, 
         category: t.category,
-        param_count: paramCount
+        param_count: paramCount,
+        body: bodyText,
+        header: {
+          type: headerType,
+          text: headerText
+        },
+        footer: footerText,
+        buttons: buttons
       }
     })
     return NextResponse.json({ templates: list })

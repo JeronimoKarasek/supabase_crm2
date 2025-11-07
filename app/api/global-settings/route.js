@@ -80,6 +80,17 @@ export async function PUT(request) {
         connectionPrice: toNumber(fc.connectionPrice),
       }
     }
+    // SMS (credencial única e valor por mensagem)
+    if (typeof body.smsApiToken === 'string') next.smsApiToken = body.smsApiToken.trim()
+    if (typeof body.smsApiId === 'string' || typeof body.smsApiId === 'number') {
+      const smsApiIdNum = Number(body.smsApiId)
+      if (Number.isFinite(smsApiIdNum) && smsApiIdNum >= 0) next.smsApiId = smsApiIdNum
+    }
+    if (typeof body.smsWebhookUrl === 'string') next.smsWebhookUrl = body.smsWebhookUrl.trim()
+    if (typeof body.smsMessageValue === 'string' || typeof body.smsMessageValue === 'number') {
+      const mv = typeof body.smsMessageValue === 'string' ? parseFloat(body.smsMessageValue.replace(',', '.')) : Number(body.smsMessageValue)
+      next.smsMessageValue = Number.isFinite(mv) && mv >= 0 ? mv : 0
+    }
     if (typeof body.payments === 'object' && body.payments !== null) {
       const pay = body.payments
       next.payments = {
@@ -141,6 +152,17 @@ export async function POST(request) {
         userPrice: toNumber(fc.userPrice),
         connectionPrice: toNumber(fc.connectionPrice),
       }
+    }
+    // SMS (credencial única e valor por mensagem) - POST espelha PUT
+    if (typeof body.smsApiToken === 'string') next.smsApiToken = body.smsApiToken.trim()
+    if (typeof body.smsApiId === 'string' || typeof body.smsApiId === 'number') {
+      const smsApiIdNum = Number(body.smsApiId)
+      if (Number.isFinite(smsApiIdNum) && smsApiIdNum >= 0) next.smsApiId = smsApiIdNum
+    }
+    if (typeof body.smsWebhookUrl === 'string') next.smsWebhookUrl = body.smsWebhookUrl.trim()
+    if (typeof body.smsMessageValue === 'string' || typeof body.smsMessageValue === 'number') {
+      const mv = typeof body.smsMessageValue === 'string' ? parseFloat(body.smsMessageValue.replace(',', '.')) : Number(body.smsMessageValue)
+      next.smsMessageValue = Number.isFinite(mv) && mv >= 0 ? mv : 0
     }
     if (typeof body.payments === 'object' && body.payments !== null) {
       const pay = body.payments

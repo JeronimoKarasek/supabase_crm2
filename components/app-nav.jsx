@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag, FileDigit, Send, PackagePlus } from 'lucide-react'
+import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag, FileDigit, Send, PackagePlus, MessageSquare } from 'lucide-react'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -91,6 +91,12 @@ export default function AppNav() {
       label: 'Disparo API',
       icon: Send,
       isActive: pathname?.startsWith('/disparo-api') ?? false,
+    },
+    (role === 'admin' || can('Disparo SMS')) && {
+      href: '/disparo-sms',
+      label: 'Disparo SMS',
+      icon: MessageSquare,
+      isActive: pathname?.startsWith('/disparo-sms') ?? false,
     },
     // Produtos disponível para todos usuários logados
     {

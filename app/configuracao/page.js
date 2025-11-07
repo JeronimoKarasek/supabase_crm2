@@ -5,7 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { supabase } from '@/lib/supabase'
+import { Plus, Edit, Trash2 } from 'lucide-react'
 
 export default function ConfiguracaoPage() {
   const [tables, setTables] = useState([])
@@ -33,6 +37,12 @@ export default function ConfiguracaoPage() {
   const [creditsWebhook, setCreditsWebhook] = useState('')
   const [addCreditsWebhook, setAddCreditsWebhook] = useState('')
   const [adminEmails, setAdminEmails] = useState('')
+
+  // SMS única credencial
+  const [smsApiToken, setSmsApiToken] = useState('')
+  const [smsApiId, setSmsApiId] = useState('')
+  const [smsWebhookUrl, setSmsWebhookUrl] = useState('')
+  const [smsMessageValue, setSmsMessageValue] = useState('')
 
   const [message, setMessage] = useState('')
 
@@ -94,7 +104,70 @@ export default function ConfiguracaoPage() {
         }
       } catch {}
     })()
+    // Carregar credencial SMS e valor
+    ;(async () => {
+      try {
+        const res = await fetch('/api/global-settings')
+        const json = await res.json()
+        if (res.ok) {
+          const s = json.settings || {}
+          setSmsApiToken(s.smsApiToken || '')
+          setSmsApiId(s.smsApiId || '')
+          setSmsWebhookUrl(s.smsWebhookUrl || '')
+          setSmsMessageValue(s.smsMessageValue || '')
+        }
+      } catch {}
+    })()
   }, [])
+
+  const loadSmsCredentials = async () => {
+    try {
+      const h = await getAuthHeaders()
+      const res = await fetch('/api/disparo-sms/credentials', { headers: h })
+      const data = await res.json()
+      if (res.ok) {
+        setSmsCredentials(Array.isArray(data?.credentials) ? data.credentials : [])
+      }
+    } catch {}
+  }
+
+  const addSmsCredential = async () => {
+    if (!newSmsCred.label || !newSmsCred.api_token) {
+      setMessage('Label e Token são obrigatórios')
+      return
+    }
+    try {
+      const h = await getAuthHeaders()
+      const res = await fetch('/api/disparo-sms/credentials', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json', ...h }, 
+        body: JSON.stringify(newSmsCred) 
+      })
+      if (res.ok) {
+        setMessage('Credencial SMS adicionada.')
+        setTimeout(() => setMessage(''), 2000)
+        setNewSmsCred({ label: '', api_token: '', sms_api_id: '', webhook_url: '' })
+        loadSmsCredentials()
+      }
+    } catch {}
+  }
+
+  const updateSmsCredential = async (cred) => {
+    try {
+      const h = await getAuthHeaders()
+      await fetch('/api/disparo-sms/credentials', { 
+        method: 'PUT', 
+        headers: { 'Content-Type': 'application/json', ...h }, 
+        body: JSON.stringify(cred) 
+      })
+      setEditSmsCred(null)
+      loadSmsCredentials()
+    } catch {}
+  }
+
+  const removeSmsCredential = async (id) => {
+    // removido
+  }
 
   const saveBranding = async () => {
     try {
@@ -467,6 +540,77 @@ export default function ConfiguracaoPage() {
             <div className="flex justify-end">
               <Button onClick={saveAdminEmails}>Salvar administradores</Button>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Card de Credencial SMS única + valor por mensagem */}
+        <Card className="bg-card">
+          <CardHeader>
+            <CardTitle>Credencial SMS (Kolmeya)</CardTitle>
+            <CardDescription>Configure o token único da Kolmeya e o valor cobrado por mensagem enviada.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="sms_api_token">API Token *</Label>
+                <Input 
+                  id="sms_api_token"
+                  type="password"
+                  placeholder="Token da API Kolmeya" 
+                  value={smsApiToken} 
+                  onChange={(e) => setSmsApiToken(e.target.value)} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sms_api_id">SMS API ID (opcional)</Label>
+                <Input 
+                  id="sms_api_id"
+                  type="number" 
+                  placeholder="0" 
+                  value={smsApiId} 
+                  onChange={(e) => setSmsApiId(e.target.value)} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sms_webhook_url">Webhook URL (opcional)</Label>
+                <Input 
+                  id="sms_webhook_url"
+                  placeholder="https://..." 
+                  value={smsWebhookUrl} 
+                  onChange={(e) => setSmsWebhookUrl(e.target.value)} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sms_message_value">Valor por mensagem SMS (R$)</Label>
+                <Input 
+                  id="sms_message_value"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.10" 
+                  value={smsMessageValue} 
+                  onChange={(e) => setSmsMessageValue(e.target.value)} 
+                />
+              </div>
+            </div>
+            <Button onClick={async () => {
+              const body = {
+                smsApiToken,
+                smsApiId,
+                smsWebhookUrl,
+                smsMessageValue
+              }
+              await fetch('/api/global-settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+              })
+              setMessage('Credencial SMS e valor salvos!')
+              setTimeout(() => setMessage(''), 2000)
+            }} disabled={!smsApiToken}>
+              Salvar Credencial SMS
+            </Button>
+            {message && <div className="text-emerald-600 text-sm">{message}</div>}
           </CardContent>
         </Card>
       </div>

@@ -34,6 +34,18 @@ export async function POST(request) {
     const template_name = body?.template_name || ''
     const template_language = body?.template_language || 'pt_BR'
     const template_param_count = parseInt(body?.template_param_count || '0', 10) || 0
+    const header_image_url = body?.header_image_url || null
+    
+    console.log('[DisparoAPI Import] Payload received:', {
+      rows_count: rows.length,
+      credential_id,
+      phone_number_id,
+      template_name,
+      template_language,
+      template_param_count,
+      header_image_url
+    })
+    
     if (!rows.length || !phone_number_id || !template_name || !credential_id) {
       return NextResponse.json({ error: 'Parâmetros insuficientes' }, { status: 400 })
     }
@@ -51,7 +63,8 @@ export async function POST(request) {
         const val = String(r[key] || '').trim()
         components.push({ type: 'text', text: val || `{var${i}}` })
       }
-      return {
+      
+      const rowData = {
         user_id: user.id,
         credential_id,
         batch_id,
@@ -66,17 +79,27 @@ export async function POST(request) {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
+      
+      // Only add header_image_url if it's provided
+      if (header_image_url) {
+        rowData.header_image_url = header_image_url
+      }
+      
+      return rowData
     })
 
     try {
       const { error } = await supabaseAdmin.from('disparo_crm_api').insert(mapped)
-      if (error) {
+        console.log('[DisparoAPI Import] Sample row to insert:', mapped[0])
+        if (error) {
+          console.error('[DisparoAPI Import] Supabase insert error:', JSON.stringify(error, null, 2))
         if (error?.message?.toLowerCase()?.includes('does not exist') || error?.code === '42P01') {
           return NextResponse.json({ error: 'Tabela disparo_crm_api não encontrada. Execute o SQL sugerido.', missingTable: true }, { status: 400 })
         }
-        return NextResponse.json({ error: 'Falha ao inserir base', details: error.message }, { status: 400 })
+        return NextResponse.json({ error: 'Falha ao inserir base', details: error.message, code: error.code, hint: error.hint }, { status: 400 })
       }
     } catch (e) {
+      console.error('[DisparoAPI Import] Exception:', e)
       return NextResponse.json({ error: 'Falha ao inserir base', details: e.message }, { status: 400 })
     }
 

@@ -114,6 +114,7 @@ create table if not exists disparo_crm_api (
   template_name text not null,
   template_language text default 'pt_BR',
   template_components jsonb,
+  header_image_url text,
   phone_number_id text not null,
   message_id text,
   status text default 'queued',

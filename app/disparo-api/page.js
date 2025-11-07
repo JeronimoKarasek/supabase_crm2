@@ -76,6 +76,7 @@ export default function DisparoApiPage() {
   const [templates, setTemplates] = useState([])
   const [templateName, setTemplateName] = useState('')
   const [templateLanguage, setTemplateLanguage] = useState('pt_BR')
+  const [headerImageUrl, setHeaderImageUrl] = useState('')
   const [batchId, setBatchId] = useState('')
   const [campaignsRefreshKey, setCampaignsRefreshKey] = useState(0)
 
@@ -330,7 +331,24 @@ export default function DisparoApiPage() {
       // busca o param_count do template selecionado
       const selectedTemplate = templates.find(t => t.name === templateName && t.language === templateLanguage)
       const templateParamCount = selectedTemplate?.param_count || 0
-      const payload = { credential_id: selectedCredentialId, phone_number_id: selectedPhoneNumberId, template_name: templateName, template_language: templateLanguage, template_param_count: templateParamCount, rows: normalized }
+      const hasImageHeader = selectedTemplate?.header?.type === 'IMAGE'
+      
+      // Validar se header de imagem está preenchido
+      if (hasImageHeader && !headerImageUrl) {
+        setError('Este template requer uma imagem no cabeçalho. Preencha a URL da imagem.')
+        setLoading(false)
+        return
+      }
+      
+      const payload = { 
+        credential_id: selectedCredentialId, 
+        phone_number_id: selectedPhoneNumberId, 
+        template_name: templateName, 
+        template_language: templateLanguage, 
+        template_param_count: templateParamCount,
+        header_image_url: hasImageHeader ? headerImageUrl : null,
+        rows: normalized 
+      }
       const res = await fetch('/api/disparo-api/import', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(payload) })
       const data = await res.json()
       if (res.ok) {
@@ -692,6 +710,94 @@ export default function DisparoApiPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Preview do Template Selecionado */}
+              {templateName && (() => {
+                const selectedTemplate = templates.find(t => t.name === templateName && t.language === templateLanguage)
+                if (!selectedTemplate) return null
+                
+                const hasImageHeader = selectedTemplate.header?.type === 'IMAGE'
+                
+                return (
+                  <div className="space-y-4 p-4 border rounded-lg bg-card">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-semibold">Preview do Template: {selectedTemplate.name}</div>
+                      <div className="text-xs px-2 py-1 rounded bg-muted">
+                        {selectedTemplate.category} • {selectedTemplate.language}
+                      </div>
+                    </div>
+                    
+                    <div className="max-w-md mx-auto space-y-2 p-4 rounded-lg border bg-background shadow-sm">
+                      {/* Header */}
+                      {selectedTemplate.header?.type && (
+                        <div className="space-y-2">
+                          {hasImageHeader && (
+                            <>
+                              <div className="text-xs font-medium text-muted-foreground">Cabeçalho (Imagem)</div>
+                              <div className="space-y-2">
+                                <Input 
+                                  placeholder="URL da imagem (ex: https://exemplo.com/imagem.jpg)"
+                                  value={headerImageUrl}
+                                  onChange={(e) => setHeaderImageUrl(e.target.value)}
+                                  className="text-sm"
+                                />
+                                {headerImageUrl && (
+                                  <div className="relative w-full aspect-video bg-muted rounded overflow-hidden">
+                                    <img 
+                                      src={headerImageUrl} 
+                                      alt="Preview" 
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        e.target.style.display = 'none'
+                                        e.target.parentElement.innerHTML = '<div class="flex items-center justify-center h-full text-xs text-muted-foreground">Erro ao carregar imagem</div>'
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+                          {selectedTemplate.header?.type === 'TEXT' && selectedTemplate.header?.text && (
+                            <div className="font-bold text-sm">{selectedTemplate.header.text}</div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Body */}
+                      {selectedTemplate.body && (
+                        <div className="text-sm whitespace-pre-wrap">
+                          {selectedTemplate.body}
+                        </div>
+                      )}
+                      
+                      {/* Footer */}
+                      {selectedTemplate.footer && (
+                        <div className="text-xs text-muted-foreground pt-2 border-t">
+                          {selectedTemplate.footer}
+                        </div>
+                      )}
+                      
+                      {/* Buttons */}
+                      {selectedTemplate.buttons && selectedTemplate.buttons.length > 0 && (
+                        <div className="space-y-1 pt-2">
+                          {selectedTemplate.buttons.map((btn, idx) => (
+                            <div key={idx} className="text-xs text-center py-2 px-3 rounded bg-primary/10 text-primary font-medium">
+                              {btn.text || btn.type}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {selectedTemplate.param_count > 0 && (
+                      <div className="text-xs text-muted-foreground text-center">
+                        💡 Este template usa {selectedTemplate.param_count} variável{selectedTemplate.param_count > 1 ? 'is' : ''}: {Array.from({length: selectedTemplate.param_count}, (_, i) => `{{${i+1}}}`).join(', ')}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
               <div className="flex gap-2">
                 <Button onClick={importRows} disabled={loading || !csvRows.length || !selectedCredentialId || !selectedPhoneNumberId || !templateName}>Importar</Button>
               </div>

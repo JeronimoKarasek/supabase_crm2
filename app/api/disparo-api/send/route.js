@@ -25,8 +25,35 @@ async function getCreds(userId) {
   return (u?.user?.user_metadata?.whatsapp) || null
 }
 
-async function sendTemplateMessage({ access_token, phone_number_id, to, template_name, template_language, components }) {
+async function sendTemplateMessage({ access_token, phone_number_id, to, template_name, template_language, components, header_image_url }) {
   const endpoint = `https://graph.facebook.com/v19.0/${encodeURIComponent(phone_number_id)}/messages`
+  
+  // Construct template components
+  const templateComponents = []
+  
+  // Add header component if image URL provided
+  if (header_image_url) {
+    templateComponents.push({
+      type: 'header',
+      parameters: [
+        {
+          type: 'image',
+          image: {
+            link: header_image_url
+          }
+        }
+      ]
+    })
+  }
+  
+  // Add body component if parameters exist
+  if (Array.isArray(components) && components.length) {
+    templateComponents.push({
+      type: 'body',
+      parameters: components
+    })
+  }
+  
   const body = {
     messaging_product: 'whatsapp',
     to: String(to || '').startsWith('+') ? String(to) : `+${String(to || '')}`,
@@ -34,7 +61,7 @@ async function sendTemplateMessage({ access_token, phone_number_id, to, template
     template: {
       name: template_name,
       language: { code: template_language || 'pt_BR' },
-      ...(Array.isArray(components) && components.length ? { components: [{ type: 'body', parameters: components }] } : {}),
+      ...(templateComponents.length ? { components: templateComponents } : {}),
     },
   }
   const res = await fetch(endpoint, {
@@ -107,6 +134,7 @@ export async function POST(request) {
           template_name: r.template_name,
           template_language: r.template_language,
           components: comps,
+          header_image_url: r.header_image_url || null,
         })
         const msgId = json?.messages?.[0]?.id || null
         await supabaseAdmin.from('disparo_crm_api').update({ status: 'sent', message_id: msgId, sent_at: new Date().toISOString(), attempt_count: (r.attempt_count || 0) + 1, updated_at: new Date().toISOString() }).eq('id', r.id)
