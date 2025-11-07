@@ -21,6 +21,27 @@ async function getUserFromRequest(request) {
   return data?.user || null
 }
 
+async function getCallerEmpresaId(userId) {
+  const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', userId).single()
+  return link?.empresa_id || null
+}
+
+async function checkEmpresaUserLimit(empresaId) {
+  if (!empresaId) return { allowed: true, count: 0, limit: Infinity }
+  // get limit
+  const { data: emp, error: empErr } = await supabaseAdmin.from('empresa').select('user_limit').eq('id', empresaId).single()
+  if (empErr || !emp) return { allowed: false, count: 0, limit: 0, error: 'Empresa não encontrada' }
+  const limit = Number(emp.user_limit) || 1
+  // count current users in empresa
+  const { count, error: cntErr } = await supabaseAdmin
+    .from('empresa_users')
+    .select('*', { count: 'exact', head: true })
+    .eq('empresa_id', empresaId)
+  if (cntErr) return { allowed: false, count: 0, limit, error: 'Falha ao contar usuários' }
+  const allowed = (count || 0) < limit
+  return { allowed, count: count || 0, limit }
+}
+
 export async function GET(request) {
   try {
     const caller = await getUserFromRequest(request)
@@ -112,7 +133,33 @@ export async function POST(request) {
       normalizedFiltersByTable[filter.table] = [ { column: filter.column, type: filter.type, value: filter.value } ]
     }
 
-    const sectorsArr = Array.isArray(sectors) ? sectors : (role === 'admin' ? ['Clientes', 'Usuários'] : ['Clientes'])
+    // Restrição: gestores não podem criar admin
+    if (roleCaller !== 'admin' && role === 'admin') {
+      return forbidden('Gestor não pode criar usuário admin')
+    }
+
+    // Validar setores: gestores não podem liberar setores que não possuem
+    if (roleCaller !== 'admin' && Array.isArray(sectors) && sectors.length > 0) {
+      const invalid = sectors.filter(s => !(sectorsCaller || []).includes(s))
+      if (invalid.length) {
+        return forbidden(`Gestor não pode liberar setores: ${invalid.join(', ')}`)
+      }
+    }
+
+    const sectorsArr = Array.isArray(sectors) ? (roleCaller === 'admin' ? sectors : sectors.filter(s => (sectorsCaller || []).includes(s))) : (role === 'admin' ? ['Clientes', 'Usuários'] : ['Clientes'])
+
+    // Enforce empresa user_limit if empresaId provided
+    if (empresaId) {
+      // If not admin, force empresaId to caller's empresa
+      if (roleCaller !== 'admin') {
+        const callerEmp = await getCallerEmpresaId(caller.id)
+        if (!callerEmp || callerEmp !== empresaId) return forbidden('Gestor só pode criar usuários para sua própria empresa')
+      }
+      const limitInfo = await checkEmpresaUserLimit(empresaId)
+      if (!limitInfo.allowed) {
+        return forbidden(`Limite de usuários da empresa atingido (${limitInfo.count}/${limitInfo.limit})`)
+      }
+    }
 
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -195,6 +242,19 @@ export async function PUT(request) {
       normalizedFiltersByTable = currentMeta?.permissions?.filtersByTable || {}
     }
 
+    // Restrição: gestores não podem promover a admin
+    if (roleCaller !== 'admin' && role === 'admin') {
+      return forbidden('Gestor não pode promover usuário a admin')
+    }
+
+    // Validar setores: gestores não podem liberar setores que não possuem
+    if (roleCaller !== 'admin' && Array.isArray(sectors) && sectors.length > 0) {
+      const invalid = sectors.filter(s => !(sectorsCaller || []).includes(s))
+      if (invalid.length) {
+        return forbidden(`Gestor não pode liberar setores: ${invalid.join(', ')}`)
+      }
+    }
+
     const newMeta = {
       ...currentMeta,
       ...(role ? { role } : {}),
@@ -205,7 +265,7 @@ export async function PUT(request) {
         filter: filter ?? (currentMeta?.permissions?.filter ?? null),
         filtersByTable: normalizedFiltersByTable,
       },
-      ...(Array.isArray(sectors) ? { sectors } : {}),
+      ...(Array.isArray(sectors) ? { sectors: (roleCaller === 'admin' ? sectors : sectors.filter(s => (sectorsCaller || []).includes(s))) } : {}),
     }
 
     const updatePayload = { user_metadata: newMeta }
@@ -225,6 +285,20 @@ export async function PUT(request) {
     if (user && (empresaId !== undefined)) {
       try {
         if (empresaId) {
+          // If not admin, restrict to caller's empresa
+          if (roleCaller !== 'admin') {
+            const callerEmp = await getCallerEmpresaId(caller.id)
+            if (!callerEmp || callerEmp !== empresaId) return forbidden('Gestor só pode mover usuários para sua própria empresa')
+          }
+          // Check if changing empresa increases usage; enforce limit
+          const { data: currentLink } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', user.id).single()
+          const currentEmp = currentLink?.empresa_id || null
+          if (!currentEmp || currentEmp !== empresaId) {
+            const limitInfo = await checkEmpresaUserLimit(empresaId)
+            if (!limitInfo.allowed) {
+              return forbidden(`Limite de usuários da empresa atingido (${limitInfo.count}/${limitInfo.limit})`)
+            }
+          }
           await supabaseAdmin.from('empresa_users').upsert({ user_id: user.id, empresa_id: empresaId, role: (role || user.user_metadata?.role || 'user') }, { onConflict: 'user_id' })
         } else {
           // se empresaId vazio, desvincula

@@ -214,18 +214,16 @@ export async function POST(request) {
           .eq('bank_key', bancoKey)
           .single()
         const userCreds = credsRows?.credentials || {}
-        const returnWebhook = bank.returnWebhookUrl || `${new URL(request.url).origin}/api/importar/status`
         await fetch(bank.webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            banco: bancoKey,
+            produto,
             credentials: userCreds,
             itemId: id,
-            returnWebhook,
-            userId: user.id,
             email: user.email,
-            userMetadata: user.user_metadata || {},
-            timestamp: new Date().toISOString()
+            userId: user.id
           })
         })
       }
@@ -315,19 +313,17 @@ export async function PUT(request) {
     const userCreds = credsRows?.credentials || {}
 
     // Fire webhook again (no re-insert)
-    const origin = new URL(request.url).origin
-    const returnWebhook = bank.returnWebhookUrl || `${origin}/api/importar/status`
+    const produto = one?.[0]?.produto || ''
     await fetch(bank.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        banco: bankKey,
+        produto,
         credentials: userCreds,
         itemId: id,
-        returnWebhook,
-        userId: user.id,
         email: user.email,
-        userMetadata: user.user_metadata || {},
-        timestamp: new Date().toISOString()
+        userId: user.id
       })
     })
 

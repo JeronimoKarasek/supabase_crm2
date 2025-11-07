@@ -5,10 +5,14 @@ create table if not exists empresa (
   cnpj text,
   responsavel text,
   telefone text,
+  user_limit integer default 1, -- limite de usuarios vinculados (>=1)
   credits_balance_cents bigint default 0, -- saldo compartilhado da empresa
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+-- Garantir que a coluna user_limit exista mesmo se a tabela já existia sem ela
+alter table empresa add column if not exists user_limit integer default 1;
 
 alter table empresa enable row level security;
 
@@ -89,6 +93,7 @@ select au.id as user_id,
        eu.empresa_id,
        coalesce(eu.role, 'user') as role,
        e.credits_balance_cents,
+  e.user_limit,
        e.nome as empresa_nome
 from auth.users au
 left join empresa_users eu on eu.user_id = au.id

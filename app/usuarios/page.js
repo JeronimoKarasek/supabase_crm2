@@ -21,14 +21,17 @@ export default function UsuariosPage() {
   const [empresaTel, setEmpresaTel] = useState('')
   const [empresaMsg, setEmpresaMsg] = useState('')
   const [empresaErr, setEmpresaErr] = useState('')
+  const [empresaUserLimit, setEmpresaUserLimit] = useState('1')
   const [selectedEmpresaId, setSelectedEmpresaId] = useState('')
   // const [editEmpresaId, setEditEmpresaId] = useState('') // duplicado, já declarado abaixo
   const [editEmpresaNome, setEditEmpresaNome] = useState('')
   const [editEmpresaCnpj, setEditEmpresaCnpj] = useState('')
   const [editEmpresaResp, setEditEmpresaResp] = useState('')
   const [editEmpresaTel, setEditEmpresaTel] = useState('')
+  const [editEmpresaUserLimit, setEditEmpresaUserLimit] = useState('1')
   const [editEmpresaMsg, setEditEmpresaMsg] = useState('')
   const [editEmpresaErr, setEditEmpresaErr] = useState('')
+  const [editingEmpresaId, setEditingEmpresaId] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('user')
@@ -36,6 +39,8 @@ export default function UsuariosPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [users, setUsers] = useState([])
+  const [currentUserRole, setCurrentUserRole] = useState('user')
+  const [currentUserSectors, setCurrentUserSectors] = useState([])
   const [tables, setTables] = useState([])
   const [selectedSectorsNew, setSelectedSectorsNew] = useState([])
 
@@ -100,6 +105,17 @@ export default function UsuariosPage() {
         const res = await fetch('/api/empresas', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
         const data = await res.json()
         if (res.ok) setEmpresas(data.empresas || [])
+      } catch {}
+    })()
+    // Carregar role do usuário atual
+    ;(async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData?.session?.access_token
+        if (!token) return
+        const { data: me } = await supabase.auth.getUser()
+        if (me?.user?.user_metadata?.role) setCurrentUserRole(me.user.user_metadata.role)
+        if (Array.isArray(me?.user?.user_metadata?.sectors)) setCurrentUserSectors(me.user.user_metadata.sectors)
       } catch {}
     })()
   }, [])
@@ -327,10 +343,9 @@ export default function UsuariosPage() {
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
       <div className="container mx-auto py-6 px-6">
         <Tabs defaultValue="usuarios" className="space-y-6">
-          <TabsList className="grid grid-cols-3 w-full md:max-w-md mb-6">
+          <TabsList className="grid grid-cols-2 w-full md:max-w-md mb-6">
             <TabsTrigger value="usuarios">Usuários</TabsTrigger>
             <TabsTrigger value="empresas">Empresas</TabsTrigger>
-            <TabsTrigger value="gestores">Gestores</TabsTrigger>
           </TabsList>
 
           {/* Tab Usuários */}
@@ -364,7 +379,7 @@ export default function UsuariosPage() {
                     <SelectContent>
                       <SelectItem value="user">Usuário</SelectItem>
                       <SelectItem value="gestor">Gestor</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
+                        {currentUserRole === 'admin' && <SelectItem value="admin">Admin</SelectItem>}
                     </SelectContent>
                   </Select>
                   <Select value={selectedEmpresaId} onValueChange={setSelectedEmpresaId}>
@@ -397,7 +412,7 @@ export default function UsuariosPage() {
                 <div className="mt-6">
                   <div className="text-sm font-medium mb-2">Setores</div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {sectors.map((s) => (
+                    {(currentUserRole === 'admin' ? sectors : sectors.filter(s => currentUserSectors.includes(s))).map((s) => (
                       <label key={s} className="flex items-center gap-2 text-sm">
                         <Checkbox checked={selectedSectorsNew.includes(s)} onCheckedChange={() => setSelectedSectorsNew((prev) => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])} />
                         <span>{s}</span>
@@ -491,7 +506,7 @@ export default function UsuariosPage() {
                         <SelectContent>
                           <SelectItem value="user">Usuário</SelectItem>
                           <SelectItem value="gestor">Gestor</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
+                          {currentUserRole === 'admin' && <SelectItem value="admin">Admin</SelectItem>}
                         </SelectContent>
                       </Select>
                       <Select value={editEmpresaId} onValueChange={setEditEmpresaId}>
@@ -524,7 +539,7 @@ export default function UsuariosPage() {
                     <div>
                       <div className="text-sm font-medium mb-2">Setores</div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        {sectors.map((s) => (
+                        {(currentUserRole === 'admin' ? sectors : sectors.filter(s => currentUserSectors.includes(s))).map((s) => (
                           <label key={s} className="flex items-center gap-2 text-sm">
                             <Checkbox checked={editSelectedSectors.includes(s)} onCheckedChange={() => setEditSelectedSectors((prev) => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])} />
                             <span>{s}</span>
@@ -639,7 +654,7 @@ export default function UsuariosPage() {
                 <CardDescription>Cadastre uma empresa para vincular usuários e créditos compartilhados</CardDescription>
               </CardHeader>
               <CardContent>
-                <form className="grid grid-cols-1 md:grid-cols-4 gap-4" onSubmit={async (e) => {
+                <form className="grid grid-cols-1 md:grid-cols-5 gap-4" onSubmit={async (e) => {
                   e.preventDefault()
                   setEmpresaMsg(''); setEmpresaErr('')
                   try {
@@ -648,12 +663,12 @@ export default function UsuariosPage() {
                     const res = await fetch('/api/empresas', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                      body: JSON.stringify({ nome: empresaNome, cnpj: empresaCnpj, responsavel: empresaResp, telefone: empresaTel })
+                      body: JSON.stringify({ nome: empresaNome, cnpj: empresaCnpj, responsavel: empresaResp, telefone: empresaTel, user_limit: empresaUserLimit || 1 })
                     })
                     const data = await res.json()
                     if (res.ok) {
                       setEmpresaMsg('Empresa cadastrada com sucesso!')
-                      setEmpresaNome(''); setEmpresaCnpj(''); setEmpresaResp(''); setEmpresaTel('')
+                      setEmpresaNome(''); setEmpresaCnpj(''); setEmpresaResp(''); setEmpresaTel(''); setEmpresaUserLimit('1')
                       // reload empresas
                       const res2 = await fetch('/api/empresas', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
                       const data2 = await res2.json()
@@ -669,6 +684,7 @@ export default function UsuariosPage() {
                   <Input placeholder="CNPJ" value={empresaCnpj} onChange={e=>setEmpresaCnpj(e.target.value)} />
                   <Input placeholder="Responsável" value={empresaResp} onChange={e=>setEmpresaResp(e.target.value)} />
                   <Input placeholder="Telefone" value={empresaTel} onChange={e=>setEmpresaTel(e.target.value)} />
+                  <Input placeholder="Limite usuários (padrão 1)" value={empresaUserLimit} onChange={e=>setEmpresaUserLimit(e.target.value)} />
                   <Button type="submit">Cadastrar empresa</Button>
                 </form>
                 {empresaMsg && <div className="mt-2 text-emerald-700 dark:text-emerald-300 text-sm">{empresaMsg}</div>}
@@ -688,7 +704,9 @@ export default function UsuariosPage() {
                         <TableHead>CNPJ</TableHead>
                         <TableHead>Responsável</TableHead>
                         <TableHead>Telefone</TableHead>
+                        <TableHead>Limite</TableHead>
                         <TableHead>ID</TableHead>
+                        <TableHead>Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -698,7 +716,18 @@ export default function UsuariosPage() {
                           <TableCell>{e.cnpj}</TableCell>
                           <TableCell>{e.responsavel}</TableCell>
                           <TableCell>{e.telefone}</TableCell>
+                          <TableCell>{e.user_limit || 1}</TableCell>
                           <TableCell className="font-mono text-xs">{e.id}</TableCell>
+                          <TableCell>
+                            <Button size="sm" variant="outline" onClick={() => {
+                              setEditingEmpresaId(e.id)
+                              setEditEmpresaNome(e.nome || '')
+                              setEditEmpresaCnpj(e.cnpj || '')
+                              setEditEmpresaResp(e.responsavel || '')
+                              setEditEmpresaTel(e.telefone || '')
+                              setEditEmpresaUserLimit(String(e.user_limit || 1))
+                            }}>Editar</Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -706,20 +735,64 @@ export default function UsuariosPage() {
                 </div>
               </CardContent>
             </Card>
+            {editingEmpresaId && (
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle>Editar Empresa</CardTitle>
+                  <CardDescription>ID: {editingEmpresaId}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form className="grid grid-cols-1 md:grid-cols-6 gap-4" onSubmit={async (e) => {
+                    e.preventDefault()
+                    setEditEmpresaMsg(''); setEditEmpresaErr('')
+                    try {
+                      const { data: sessionData } = await supabase.auth.getSession()
+                      const token = sessionData?.session?.access_token
+                      const payload = { 
+                        id: editingEmpresaId, 
+                        nome: editEmpresaNome, 
+                        cnpj: editEmpresaCnpj || null, 
+                        responsavel: editEmpresaResp || null, 
+                        telefone: editEmpresaTel || null, 
+                        user_limit: parseInt(editEmpresaUserLimit) || 1 
+                      }
+                      const res = await fetch('/api/empresas', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                        body: JSON.stringify(payload)
+                      })
+                      const data = await res.json()
+                      if (res.ok) {
+                        setEditEmpresaMsg('Empresa atualizada com sucesso!')
+                        const res2 = await fetch('/api/empresas', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+                        const data2 = await res2.json()
+                        if (res2.ok) setEmpresas(data2.empresas || [])
+                        setTimeout(() => setEditingEmpresaId(''), 1500)
+                      } else {
+                        setEditEmpresaErr(data?.error || data?.details || 'Falha ao atualizar empresa')
+                      }
+                    } catch (err) {
+                      setEditEmpresaErr('Erro inesperado ao atualizar empresa')
+                    }
+                  }}>
+                    <Input placeholder="Nome da empresa" value={editEmpresaNome} onChange={e=>setEditEmpresaNome(e.target.value)} required />
+                    <Input placeholder="CNPJ" value={editEmpresaCnpj} onChange={e=>setEditEmpresaCnpj(e.target.value)} />
+                    <Input placeholder="Responsável" value={editEmpresaResp} onChange={e=>setEditEmpresaResp(e.target.value)} />
+                    <Input placeholder="Telefone" value={editEmpresaTel} onChange={e=>setEditEmpresaTel(e.target.value)} />
+                    <Input placeholder="Limite usuários" value={editEmpresaUserLimit} onChange={e=>setEditEmpresaUserLimit(e.target.value)} />
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" onClick={() => setEditingEmpresaId('')}>Cancelar</Button>
+                      <Button type="submit">Salvar</Button>
+                    </div>
+                  </form>
+                  {editEmpresaMsg && <div className="mt-2 text-emerald-700 dark:text-emerald-300 text-sm">{editEmpresaMsg}</div>}
+                  {editEmpresaErr && <div className="mt-2 text-red-600 dark:text-red-400 text-sm">{editEmpresaErr}</div>}
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
-          {/* Tab Gestores */}
-          <TabsContent value="gestores">
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle>Gestores</CardTitle>
-                <CardDescription>Gestores podem cadastrar usuários e gerenciar créditos da empresa</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm text-muted-foreground">Para cadastrar um gestor, selecione o papel "gestor" ao criar/editar usuário e vincule à empresa desejada.</div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+
         </Tabs>
       </div>
     </div>

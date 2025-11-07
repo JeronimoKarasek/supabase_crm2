@@ -19,12 +19,32 @@ export async function GET(request) {
   const user = await getUserFromRequest(request)
   if (!user) return unauthorized()
   try {
-    const { data, error } = await supabaseAdmin
+    // Determinar hierarquia
+    const role = user.user_metadata?.role || 'user'
+    let userIdsFilter = null // null => sem filtro (admin)
+    if (role === 'gestor') {
+      // obter empresa do gestor
+      const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', user.id).single()
+      const empresaId = link?.empresa_id
+      if (empresaId) {
+        const { data: rels } = await supabaseAdmin.from('empresa_users').select('user_id').eq('empresa_id', empresaId)
+        userIdsFilter = (rels || []).map(r => r.user_id)
+      } else {
+        userIdsFilter = [user.id]
+      }
+    } else if (role !== 'admin') {
+      userIdsFilter = [user.id]
+    }
+
+    let query = supabaseAdmin
       .from('sms_disparo')
-      .select('batch_id, credential_id, status, reference, tenant_segment_id, created_at, sent_at')
-      .eq('user_id', user.id)
+      .select('batch_id, credential_id, status, reference, tenant_segment_id, created_at, sent_at, user_id')
       .order('created_at', { ascending: false })
       .limit(10000)
+    if (Array.isArray(userIdsFilter)) {
+      query = query.in('user_id', userIdsFilter)
+    }
+    const { data, error } = await query
 
     if (error) {
       if (error?.message?.toLowerCase()?.includes('does not exist') || error?.code === '42P01') {
