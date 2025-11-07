@@ -117,22 +117,22 @@ export async function POST(request) {
         )
       }
 
-      return NextResponse.json({ 
-        data: {
-          paymentId: mpData.id,
-          status: mpData.status, // 'pending' para Pix
-          paymentMethod: 'pix',
-          qrCode: mpData.point_of_interaction?.transaction_data?.qr_code,
-          qrCodeBase64: mpData.point_of_interaction?.transaction_data?.qr_code_base64,
-          ticketUrl: mpData.point_of_interaction?.transaction_data?.ticket_url,
-          referenceId: referenceId,
-          amount: amount,
-          currency: 'BRL',
-          description: description,
-          provider: 'mercadopago',
-          expirationDate: mpData.date_of_expiration
-        }
-      })
+      // Forma unificada de resposta (flatten + data)
+      const flatResponse = {
+        paymentId: mpData.id,
+        status: mpData.status, // 'pending' para Pix
+        paymentMethod: 'pix',
+        qrCode: mpData.point_of_interaction?.transaction_data?.qr_code || null,
+        qrCodeBase64: mpData.point_of_interaction?.transaction_data?.qr_code_base64 || null,
+        ticketUrl: mpData.point_of_interaction?.transaction_data?.ticket_url || null,
+        referenceId: referenceId,
+        amount: amount,
+        currency: 'BRL',
+        description: description,
+        provider: 'mercadopago',
+        expirationDate: mpData.date_of_expiration || null
+      }
+      return NextResponse.json({ ...flatResponse, data: flatResponse })
     } else {
       // ============== PICPAY (padrão) ==============
       // Prepara payload para o PicPay
@@ -170,17 +170,22 @@ export async function POST(request) {
       const picpayData = await picpayResponse.json()
 
       // Retorna dados do PicPay
-      return NextResponse.json({ 
-        data: {
-          paymentUrl: picpayData.paymentUrl,
-          qrcode: picpayData.qrcode,
-          referenceId: referenceId,
-          amount: amount,
-          currency: 'BRL',
-          description: description,
-          provider: 'picpay'
-        }
-      })
+      const picpayQrContent = picpayData?.qrcode?.content || picpayData?.qrcode?.qrcodeContent || null
+      const picpayQrBase64 = picpayData?.qrcode?.base64 || picpayData?.qrcode?.image || null
+      const flatResponse = {
+        paymentId: picpayData?.referenceId || referenceId,
+        status: picpayData?.status || 'pending',
+        paymentMethod: 'pix', // PicPay usa Pix por trás ao gerar QR
+        qrCode: picpayQrContent,
+        qrCodeBase64: picpayQrBase64,
+        paymentUrl: picpayData.paymentUrl || null,
+        referenceId: referenceId,
+        amount: amount,
+        currency: 'BRL',
+        description: description,
+        provider: 'picpay'
+      }
+      return NextResponse.json({ ...flatResponse, data: { ...flatResponse, raw: picpayData } })
     }
   } catch (error) {
     return NextResponse.json(
