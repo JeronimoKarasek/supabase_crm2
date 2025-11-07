@@ -29,7 +29,7 @@ async function sendTemplateMessage({ access_token, phone_number_id, to, template
   const endpoint = `https://graph.facebook.com/v19.0/${encodeURIComponent(phone_number_id)}/messages`
   const body = {
     messaging_product: 'whatsapp',
-    to,
+    to: String(to || '').startsWith('+') ? String(to) : `+${String(to || '')}`,
     type: 'template',
     template: {
       name: template_name,
@@ -60,16 +60,22 @@ export async function POST(request) {
   try {
     const body = await request.json()
     const batch_id = body?.batch_id || ''
+    const includeFailed = !!body?.include_failed
     if (!batch_id) return NextResponse.json({ error: 'batch_id obrigatório' }, { status: 400 })
 
     // load queued rows for this batch (they share the same credential_id)
-    const { data: rows, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('disparo_crm_api')
       .select('*')
       .eq('user_id', user.id)
       .eq('batch_id', batch_id)
-      .eq('status', 'queued')
-      .limit(500)
+    if (includeFailed) {
+      query = query.in('status', ['queued','failed']).lt('attempt_count', 3)
+    } else {
+      query = query.eq('status', 'queued')
+    }
+    query = query.limit(500)
+    const { data: rows, error } = await query
 
     if (error) {
       if (error?.message?.toLowerCase()?.includes('does not exist') || error?.code === '42P01') {
@@ -86,15 +92,21 @@ export async function POST(request) {
     if (credErr || !credRow?.access_token) return NextResponse.json({ error: 'Credenciais ausentes' }, { status: 400 })
 
     let sent = 0, failed = 0
+    const errorMap = new Map()
     for (const r of rows || []) {
       try {
+        // parse template components if stored as string
+        let comps = []
+        if (Array.isArray(r.template_components)) comps = r.template_components
+        else if (typeof r.template_components === 'string') { try { const parsed = JSON.parse(r.template_components); if (Array.isArray(parsed)) comps = parsed } catch {} }
+
         const json = await sendTemplateMessage({
           access_token: credRow.access_token,
           phone_number_id: r.phone_number_id,
           to: r.phone,
           template_name: r.template_name,
           template_language: r.template_language,
-          components: Array.isArray(r.template_components) ? r.template_components : [],
+          components: comps,
         })
         const msgId = json?.messages?.[0]?.id || null
         await supabaseAdmin.from('disparo_crm_api').update({ status: 'sent', message_id: msgId, sent_at: new Date().toISOString(), attempt_count: (r.attempt_count || 0) + 1, updated_at: new Date().toISOString() }).eq('id', r.id)
@@ -102,10 +114,14 @@ export async function POST(request) {
       } catch (e) {
         await supabaseAdmin.from('disparo_crm_api').update({ status: 'failed', error_message: e.message || 'erro', attempt_count: (r.attempt_count || 0) + 1, updated_at: new Date().toISOString() }).eq('id', r.id)
         failed++
+        const key = (e?.message || 'erro').slice(0, 160)
+        errorMap.set(key, (errorMap.get(key) || 0) + 1)
+        console.error('[DisparoAPI] Falha no envio', { batch_id, row_id: r.id, phone: r.phone, error: e?.message, details: e?.details })
       }
     }
 
-    return NextResponse.json({ ok: true, sent, failed })
+    const sample_errors = Array.from(errorMap.entries()).slice(0, 5).map(([message, count]) => ({ message, count }))
+    return NextResponse.json({ ok: true, sent, failed, sample_errors })
   } catch (e) {
     return NextResponse.json({ error: 'Payload inválido', details: e.message }, { status: 400 })
   }

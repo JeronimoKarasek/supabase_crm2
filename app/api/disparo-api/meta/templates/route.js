@@ -32,11 +32,28 @@ export async function GET(request) {
     let appProof = null
     try { if (appSecret && token) { const { createHmac } = await import('crypto'); appProof = createHmac('sha256', appSecret).update(token).digest('hex') } } catch {}
     const withProof = (url) => { if (!appProof) return url; const sep = url.includes('?') ? '&' : '?'; const idp = appId ? `&app_id=${encodeURIComponent(appId)}` : ''; return `${url}${sep}appsecret_proof=${appProof}${idp}` }
-    const url = withProof(`https://graph.facebook.com/v19.0/${encodeURIComponent(waba)}/message_templates?limit=200`)
+    const url = withProof(`https://graph.facebook.com/v19.0/${encodeURIComponent(waba)}/message_templates?limit=200&fields=name,language,status,category,components`)
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     const json = await res.json()
     if (!res.ok) return NextResponse.json({ error: 'Falha ao buscar templates', details: json?.error?.message || 'erro' }, { status: res.status })
-    const list = (json?.data || []).map(t => ({ name: t.name, language: t.language, status: t.status, category: t.category }))
+    const list = (json?.data || []).map(t => {
+      // conta variáveis {{1}}, {{2}} etc no body component
+      let paramCount = 0
+      if (Array.isArray(t.components)) {
+        const bodyComp = t.components.find(c => c.type === 'BODY')
+        if (bodyComp?.text) {
+          const matches = bodyComp.text.match(/\{\{(\d+)\}\}/g)
+          paramCount = matches ? matches.length : 0
+        }
+      }
+      return { 
+        name: t.name, 
+        language: t.language, 
+        status: t.status, 
+        category: t.category,
+        param_count: paramCount
+      }
+    })
     return NextResponse.json({ templates: list })
   } catch (e) {
     return NextResponse.json({ error: 'Erro interno', details: e.message }, { status: 500 })

@@ -143,13 +143,45 @@ export default function DisparoApiPage() {
       return out
     }
 
-    const header = splitLine(lines[0]).map(h => h.trim())
+    // normalização de cabeçalhos: aceita "telefone", "celular", "whatsapp", "número" etc. e mapeia para phone
+    const normalize = (s) => String(s || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // remove acentos
+      .replace(/\s+/g, '')
+
+    const rawHeader = splitLine(lines[0])
+    const headerMap = {}
+    rawHeader.forEach((h, idx) => {
+      const n = normalize(h)
+      // phone synonyms
+      if (['phone', 'telefone', 'celular', 'whatsapp', 'numero', 'numero*', 'número', 'num'].includes(n)) {
+        headerMap[idx] = 'phone'
+        return
+      }
+      // name synonyms
+      if (['name', 'nome', 'contato', 'responsavel', 'responsável'].includes(n)) {
+        headerMap[idx] = 'name'
+        return
+      }
+      // varK synonyms: var1, var 1, variavel1, variavel 1, variavel_1, valor1, campo1 etc
+      const vk = n.match(/^(?:var|variavel|variavel|valor|campo)[_\s\-]*([0-9]+)$/)
+      if (vk) {
+        headerMap[idx] = `var${vk[1]}`
+        return
+      }
+      // fallback: mantém o cabeçalho original
+      headerMap[idx] = String(h).trim()
+    })
+
     const out = []
     for (let i = 1; i < lines.length; i++) {
       const cols = splitLine(lines[i])
       const row = {}
-      header.forEach((h, idx) => {
-        row[h] = (cols[idx] ?? '').toString().trim()
+      rawHeader.forEach((h, idx) => {
+        const key = headerMap[idx]
+        row[key] = (cols[idx] ?? '').toString().trim()
       })
       if (row.phone) out.push(row)
     }
@@ -295,7 +327,10 @@ export default function DisparoApiPage() {
         if (cc && digits && !digits.startsWith(cc)) digits = cc + digits
         return { ...r, phone: digits }
       })
-      const payload = { credential_id: selectedCredentialId, phone_number_id: selectedPhoneNumberId, template_name: templateName, template_language: templateLanguage, rows: normalized }
+      // busca o param_count do template selecionado
+      const selectedTemplate = templates.find(t => t.name === templateName && t.language === templateLanguage)
+      const templateParamCount = selectedTemplate?.param_count || 0
+      const payload = { credential_id: selectedCredentialId, phone_number_id: selectedPhoneNumberId, template_name: templateName, template_language: templateLanguage, template_param_count: templateParamCount, rows: normalized }
       const res = await fetch('/api/disparo-api/import', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(payload) })
       const data = await res.json()
       if (res.ok) {
@@ -312,18 +347,23 @@ export default function DisparoApiPage() {
     }
   }
 
-  const enviar = async () => {
-    if (!batchId) { setError('Nenhum batch importado.'); return }
+  const enviar = async (idOptional, includeFailed = false) => {
+    const bid = idOptional || batchId
+    if (!bid) { setError('Nenhum batch selecionado ou importado.'); return }
     try {
       setLoading(true)
       setError('')
       setMessage('')
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch('/api/disparo-api/send', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ batch_id: batchId }) })
+      const res = await fetch('/api/disparo-api/send', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ batch_id: bid, include_failed: includeFailed }) })
       const data = await res.json()
       if (res.ok) {
-        setMessage(`Envio iniciado. Sucessos: ${data.sent || 0}, Falhas: ${data.failed || 0}`)
+        const msg = `Envio iniciado. Sucessos: ${data.sent || 0}, Falhas: ${data.failed || 0}`
+        setMessage(msg)
+        if ((data.sent || 0) === 0 && (data.failed || 0) > 0 && Array.isArray(data.sample_errors) && data.sample_errors.length) {
+          setError(`Falha ao enviar: ${data.sample_errors[0].message} (ex.: ${data.sample_errors[0].count} ocorrências)`)          
+        }
         setCampaignsRefreshKey(k => k + 1)
       } else {
         setError(data?.error || 'Falha ao enviar')
@@ -625,7 +665,9 @@ export default function DisparoApiPage() {
                     <SelectTrigger><SelectValue placeholder="Selecione o template" /></SelectTrigger>
                     <SelectContent>
                       {templates.map(t => (
-                        <SelectItem key={`${t.name}:${t.language}`} value={t.name}>{t.name} ({t.language})</SelectItem>
+                        <SelectItem key={`${t.name}:${t.language}`} value={t.name}>
+                          {t.name} ({t.language}) {t.param_count > 0 ? `[${t.param_count} var${t.param_count > 1 ? 's' : ''}]` : ''}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -655,6 +697,7 @@ export default function DisparoApiPage() {
               </div>
               <div>
                 <div className="text-sm text-muted-foreground">Prévia: {csvRows.length} linhas</div>
+              {csvRows.length > 0 && (
                 <div className="max-h-64 overflow-auto border rounded">
                   <Table>
                     <TableHeader>
@@ -663,6 +706,7 @@ export default function DisparoApiPage() {
                         <TableHead>name</TableHead>
                         <TableHead>var1</TableHead>
                         <TableHead>var2</TableHead>
+                        <TableHead>var3</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -672,16 +716,42 @@ export default function DisparoApiPage() {
                           <TableCell>{r.name}</TableCell>
                           <TableCell>{r.var1}</TableCell>
                           <TableCell>{r.var2}</TableCell>
+                          <TableCell>{r.var3}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </div>
+              )}
+              {csvRows.length > 0 && templateName && (() => {
+                const selectedTemplate = templates.find(t => t.name === templateName && t.language === templateLanguage)
+                const paramCount = selectedTemplate?.param_count || 0
+                if (paramCount > 0) {
+                  const sampleRow = csvRows[0] || {}
+                  const missingVars = []
+                  for (let i = 1; i <= paramCount; i++) {
+                    if (!sampleRow[`var${i}`]) missingVars.push(`var${i}`)
+                  }
+                  if (missingVars.length > 0) {
+                    return (
+                      <div className="p-3 bg-warning/10 border border-warning rounded text-sm">
+                        ⚠️ Template <strong>{templateName}</strong> requer {paramCount} variável{paramCount > 1 ? 'is' : ''} ({Array.from({length: paramCount}, (_, i) => `var${i+1}`).join(', ')}). 
+                        {missingVars.length > 0 && ` Faltando no CSV: ${missingVars.join(', ')}`}
+                      </div>
+                    )
+                  }
+                }
+                return null
+              })()}
               </div>
 
               <div className="space-y-2">
                 <div className="text-sm font-medium mt-4">Campanhas importadas</div>
-                <CampaignsList refreshKey={campaignsRefreshKey} selectedBatchId={batchId} onSend={(id) => { setBatchId(id); enviar() }} />
+                <CampaignsList
+                  refreshKey={campaignsRefreshKey}
+                  selectedBatchId={batchId}
+                  onSend={(id, includeFailed) => { setBatchId(id); enviar(id, includeFailed) }}
+                />
               </div>
 
               <Separator />
@@ -1163,10 +1233,10 @@ function CampaignsList({ selectedBatchId, onSend, refreshKey }) {
           <TableRow>
             <TableHead>Data</TableHead>
             <TableHead>Batch</TableHead>
-            <TableHead>NÃºmero</TableHead>
+            <TableHead>Número</TableHead>
             <TableHead>Template</TableHead>
             <TableHead>Contagens</TableHead>
-            <TableHead>AÃ§Ãµes</TableHead>
+            <TableHead>Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1180,7 +1250,16 @@ function CampaignsList({ selectedBatchId, onSend, refreshKey }) {
                 <span className="text-xs">T:{b.counts.total} Q:{b.counts.queued} S:{b.counts.sent} D:{b.counts.delivered} R:{b.counts.read} F:{b.counts.failed}</span>
               </TableCell>
               <TableCell>
-                <Button size="sm" onClick={() => onSend(b.batch_id)} disabled={!b.counts || b.counts.queued === 0}>Enviar</Button>
+                {(() => {
+                  const hasQueued = (b.counts?.queued || 0) > 0
+                  const hasFailed = (b.counts?.failed || 0) > 0
+                  const label = hasQueued ? 'Enviar' : (hasFailed ? 'Reenviar falhas' : 'Enviar')
+                  const disabled = !hasQueued && !hasFailed
+                  const includeFailed = !hasQueued && hasFailed
+                  return (
+                    <Button size="sm" onClick={() => onSend(b.batch_id, includeFailed)} disabled={disabled}>{label}</Button>
+                  )
+                })()}
               </TableCell>
             </TableRow>
           ))}

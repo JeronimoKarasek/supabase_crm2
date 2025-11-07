@@ -33,6 +33,7 @@ export async function POST(request) {
     const phone_number_id = body?.phone_number_id || ''
     const template_name = body?.template_name || ''
     const template_language = body?.template_language || 'pt_BR'
+    const template_param_count = parseInt(body?.template_param_count || '0', 10) || 0
     if (!rows.length || !phone_number_id || !template_name || !credential_id) {
       return NextResponse.json({ error: 'Parâmetros insuficientes' }, { status: 400 })
     }
@@ -44,11 +45,12 @@ export async function POST(request) {
 
     const mapped = rows.map((r) => {
       const components = []
-      Object.keys(r).forEach((k) => {
-        if (k.toLowerCase().startsWith('var') && String(r[k]).length) {
-          components.push({ type: 'text', text: String(r[k]) })
-        }
-      })
+      // coleta var1, var2, var3... respeitando o limite do template
+      for (let i = 1; i <= template_param_count; i++) {
+        const key = `var${i}`
+        const val = String(r[key] || '').trim()
+        components.push({ type: 'text', text: val || `{var${i}}` })
+      }
       return {
         user_id: user.id,
         credential_id,
