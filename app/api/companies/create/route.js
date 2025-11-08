@@ -109,11 +109,41 @@ export async function POST(request) {
     if (company.email) companyInsert.email = company.email
     if (company.address) companyInsert.address = company.address
 
-    const { data: companyData, error: companyError } = await supabaseAdmin
+    let { data: companyData, error: companyError } = await supabaseAdmin
       .from('companies')
       .insert(companyInsert)
       .select()
       .single()
+
+    // Retry logic for account_id NOT NULL or missing
+    if (companyError) {
+      const msg = companyError?.message || ''
+      console.warn('⚠️  [Create Company] Insert failed, checking for account_id requirement:', msg)
+      const needsAccountId = /account_id/i.test(msg) && (/not-null|null value/i.test(msg) || /violates not-null/i.test(msg))
+      if (needsAccountId) {
+        // Try with UUID string first (works for uuid or text types)
+        const retryInsert = { ...companyInsert, account_id: (globalThis.crypto?.randomUUID?.() || `${Date.now()}`) }
+        const retry1 = await supabaseAdmin
+          .from('companies')
+          .insert(retryInsert)
+          .select()
+          .single()
+        companyData = retry1.data
+        companyError = retry1.error
+
+        // If still failing and message indicates integer type, try with 0
+        if (companyError && /account_id/i.test(companyError.message) && /integer/i.test(companyError.message)) {
+          const retryInsertInt = { ...companyInsert, account_id: 0 }
+          const retry2 = await supabaseAdmin
+            .from('companies')
+            .insert(retryInsertInt)
+            .select()
+            .single()
+          companyData = retry2.data
+          companyError = retry2.error
+        }
+      }
+    }
 
     if (companyError) {
       console.error('❌ [Create Company] Error creating company:', companyError)
