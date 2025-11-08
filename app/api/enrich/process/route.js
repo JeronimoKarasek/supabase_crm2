@@ -4,6 +4,63 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutos
 /**
+ * Parse JSON com fallback seguro para texto
+ */
+async function parseJsonSafe(res) {
+  try {
+    const text = await res.text()
+    try {
+      return JSON.parse(text)
+    } catch (_) {
+      return text && text.length ? { raw: text } : {}
+    }
+  } catch (_) {
+    return {}
+  }
+}
+
+/**
+ * Chama endpoint Shift Data com fallbacks:
+ * 1) POST com payload minúsculo
+ * 2) POST com payload MAIÚSCULO
+ * 3) GET /endpoint/{valor}
+ * 4) GET /endpoint?chave=valor
+ */
+async function callShiftDataWithFallbacks(endpoint, bearerToken, payload) {
+  const key = Object.keys(payload || {})[0]
+  const value = payload ? payload[key] : undefined
+  const headersJson = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${bearerToken}`
+  }
+  const headersGet = {
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${bearerToken}`
+  }
+
+  const attempts = [
+    { method: 'POST', url: endpoint, headers: headersJson, body: JSON.stringify(payload) },
+    key ? { method: 'POST', url: endpoint, headers: headersJson, body: JSON.stringify({ [key.toUpperCase()]: value }) } : null,
+    (value !== undefined) ? { method: 'GET', url: `${endpoint}/${encodeURIComponent(value)}`, headers: headersGet } : null,
+    (value !== undefined && key) ? { method: 'GET', url: `${endpoint}?${encodeURIComponent(key)}=${encodeURIComponent(value)}`, headers: headersGet } : null,
+  ].filter(Boolean)
+
+  let lastErr = 'Falha na consulta'
+  for (const att of attempts) {
+    try {
+      const res = await fetch(att.url, { method: att.method, headers: att.headers, body: att.body })
+      const data = await parseJsonSafe(res)
+      if (res.ok) return { ok: true, data }
+      lastErr = (typeof data === 'string' ? data : (data?.message || res.statusText || lastErr))
+      // Se for 405 Method Not Allowed, tenta próximo fallback
+    } catch (e) {
+      lastErr = e.message || lastErr
+    }
+  }
+  return { ok: false, error: lastErr }
+}
+/**
  * Obter endpoint e payload correto baseado no tipo de consulta
  */
 function getApiConfig(queryType, value) {
@@ -153,18 +210,31 @@ export async function POST(request) {
     try {
       const loginRes = await fetch('https://api.shiftdata.com.br/api/Login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessKey })
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        // Algumas integrações exigem "AccessKey" (case-sensitive). Enviamos ambos.
+        body: JSON.stringify({ accessKey, AccessKey: accessKey })
       })
-      const loginData = await loginRes.json()
+      const loginData = await parseJsonSafe(loginRes)
       
       if (!loginRes.ok) {
         throw new Error(loginData?.message || 'Falha no login Shift Data')
       }
       
-      authToken = loginData?.token || loginData?.data?.token
+      // Extração resiliente do token, cobrindo variações comuns
+      const candidates = [
+        loginData?.token,
+        loginData?.Token,
+        loginData?.access_token,
+        loginData?.accessToken,
+        loginData?.data?.token,
+        loginData?.data?.Token,
+        loginData?.data?.access_token,
+        loginData?.data?.accessToken,
+      ]
+      authToken = candidates.find(Boolean)
       if (!authToken) {
-        throw new Error('Token não retornado pela API')
+        console.warn('⚠️ [Enrich Process] Login sem token. Usando AccessKey como Bearer fallback. Body:', loginData)
+        authToken = accessKey // Fallback: usar a chave diretamente como token
       }
       
   console.log('✅ [Enrich Process] Login successful. Query type:', job.query_type)
@@ -203,19 +273,9 @@ export async function POST(request) {
         console.log(`🔍 [Enrich] Record ${record.id}: ${apiConfig.label} = ${apiConfig.payload[Object.keys(apiConfig.payload)[0]]}`)
         
         // Consultar API Shift Data com endpoint correto
-        const enrichRes = await fetch(apiConfig.endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: JSON.stringify(apiConfig.payload)
-        })
-
-        const enrichData = await enrichRes.json()
-
-        if (!enrichRes.ok) {
-          throw new Error(enrichData?.message || 'Erro na consulta')
+        const result = await callShiftDataWithFallbacks(apiConfig.endpoint, authToken, apiConfig.payload)
+        if (!result.ok) {
+          throw new Error(result.error || 'Erro na consulta')
         }
 
         // Salvar dados enriquecidos
@@ -223,7 +283,7 @@ export async function POST(request) {
           .from('enrichment_records')
           .update({
             status: 'success',
-            enriched_data: enrichData,
+            enriched_data: result.data,
             processed_at: new Date().toISOString(),
             error_message: null
           })

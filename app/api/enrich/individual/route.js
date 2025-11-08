@@ -1,6 +1,45 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+async function parseJsonSafe(res) {
+  try {
+    const text = await res.text()
+    try { return JSON.parse(text) } catch { return text ? { raw: text } : {} }
+  } catch { return {} }
+}
+
+async function callShiftDataWithFallbacks(endpoint, bearerToken, payload) {
+  const key = Object.keys(payload || {})[0]
+  const value = payload ? payload[key] : undefined
+  const headersJson = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${bearerToken}`
+  }
+  const headersGet = {
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${bearerToken}`
+  }
+  const attempts = [
+    { method: 'POST', url: endpoint, headers: headersJson, body: JSON.stringify(payload) },
+    key ? { method: 'POST', url: endpoint, headers: headersJson, body: JSON.stringify({ [key.toUpperCase()]: value }) } : null,
+    (value !== undefined) ? { method: 'GET', url: `${endpoint}/${encodeURIComponent(value)}`, headers: headersGet } : null,
+    (value !== undefined && key) ? { method: 'GET', url: `${endpoint}?${encodeURIComponent(key)}=${encodeURIComponent(value)}`, headers: headersGet } : null,
+  ].filter(Boolean)
+  let lastErr = 'Erro na consulta'
+  for (const att of attempts) {
+    try {
+      const res = await fetch(att.url, { method: att.method, headers: att.headers, body: att.body })
+      const data = await parseJsonSafe(res)
+      if (res.ok) return { ok: true, data }
+      lastErr = (typeof data === 'string' ? data : (data?.message || res.statusText || lastErr))
+    } catch (e) {
+      lastErr = e.message || lastErr
+    }
+  }
+  return { ok: false, error: lastErr }
+}
+
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
@@ -63,31 +102,40 @@ export async function POST(request) {
     // Login na Shift Data
     const loginRes = await fetch('https://api.shiftdata.com.br/api/Login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accessKey })
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ accessKey, AccessKey: accessKey })
     })
-    const loginData = await loginRes.json()
+    const loginData = await parseJsonSafe(loginRes)
     if (!loginRes.ok) {
       return NextResponse.json({ error: loginData?.message || 'Falha no login' }, { status: 500 })
     }
-
-    const token = loginData?.token || loginData?.data?.token
-    if (!token) return NextResponse.json({ error: 'Token não retornado pela API' }, { status: 500 })
+    const tokenCandidates = [
+      loginData?.token,
+      loginData?.Token,
+      loginData?.access_token,
+      loginData?.accessToken,
+      loginData?.data?.token,
+      loginData?.data?.Token,
+      loginData?.data?.access_token,
+      loginData?.data?.accessToken,
+    ]
+    let token = tokenCandidates.find(Boolean)
+    if (!token) {
+      console.warn('⚠️ [Enrich Individual] Login sem token. Usando AccessKey como Bearer fallback. Body:', loginData)
+      token = accessKey // fallback
+    }
 
     // Determinar endpoint
     let cfg
     try { cfg = getApiConfig(type, value) } catch (e) { return NextResponse.json({ error: e.message }, { status: 400 }) }
 
-    // Chamar endpoint específico
-    const res = await fetch(cfg.endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(cfg.payload)
-    })
-    const data = await res.json()
-    if (!res.ok) return NextResponse.json({ error: data?.message || 'Erro na consulta' }, { status: res.status })
+    // Chamar endpoint com fallbacks de método e payload
+    const result = await callShiftDataWithFallbacks(cfg.endpoint, token, cfg.payload)
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error || 'Erro na consulta' }, { status: 502 })
+    }
 
-    return NextResponse.json({ success: true, type, value, data })
+    return NextResponse.json({ success: true, type, value, data: result.data })
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
