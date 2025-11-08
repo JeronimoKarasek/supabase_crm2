@@ -66,7 +66,8 @@ export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}))
     // Log seguro e estruturado
-    console.info('[MP Webhook] Received', { type: body?.type || body?.topic, id: body?.data?.id || body?.id })
+    console.info('[MP Webhook] ========== WEBHOOK RECEIVED ==========')
+    console.info('[MP Webhook] Received', { type: body?.type || body?.topic, id: body?.data?.id || body?.id, fullBody: body })
     const notificationType = body?.type || body?.topic
     const dataId = body?.data?.id || body?.id
     
@@ -178,13 +179,19 @@ export async function POST(request) {
       }
 
       // Busca compra no banco pela referenceId (fluxo de produtos)
-      const { data: purchase } = await supabaseAdmin
+      console.info('[MP Webhook] Searching for purchase', { externalReference })
+      const { data: purchase, error: purchaseError } = await supabaseAdmin
         .from('product_purchases')
         .select('id,user_id,product_id,status')
         .eq('reference_id', externalReference)
         .single()
       
+      if (purchaseError) {
+        console.warn('[MP Webhook] Purchase not found or error', { externalReference, error: purchaseError })
+      }
+      
       if (purchase) {
+        console.info('[MP Webhook] Purchase found', { purchaseId: purchase.id, userId: purchase.user_id, productId: purchase.product_id, currentStatus: purchase.status })
         // Mapeia status do Mercado Pago para o banco
         const dbStatus = {
           'approved': 'paid',
@@ -204,13 +211,20 @@ export async function POST(request) {
         
         // Se pagamento aprovado, concede acesso ao produto
         if (status === 'approved') {
-          const { data: prod } = await supabaseAdmin
+          console.info('[MP Webhook] Payment APPROVED! Processing product access...')
+          const { data: prod, error: prodError } = await supabaseAdmin
             .from('products')
             .select('sectors, webhook_url, name, key')
             .eq('id', purchase.product_id)
             .single()
           
+          if (prodError) {
+            console.error('[MP Webhook] Error fetching product', { productId: purchase.product_id, error: prodError })
+          }
+          
           if (prod) {
+            console.info('[MP Webhook] Product found', { productKey: prod.key, productName: prod.name, sectors: prod.sectors })
+            
             // Concede setores do produto ao usuário
             console.info('[MP Webhook] Granting sectors to user', { userId: purchase.user_id, sectors: prod.sectors })
             await grantSectorsToUser(purchase.user_id, prod.sectors)
