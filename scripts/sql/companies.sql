@@ -13,14 +13,63 @@ CREATE TABLE IF NOT EXISTS companies (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Adicionar coluna active em companies se não existir
+-- Adicionar colunas em companies se não existirem
 DO $$ 
 BEGIN
+  -- cnpj
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = 'companies' AND column_name = 'cnpj'
+  ) THEN
+    ALTER TABLE companies ADD COLUMN cnpj TEXT;
+  END IF;
+  
+  -- phone
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = 'companies' AND column_name = 'phone'
+  ) THEN
+    ALTER TABLE companies ADD COLUMN phone TEXT;
+  END IF;
+  
+  -- email
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = 'companies' AND column_name = 'email'
+  ) THEN
+    ALTER TABLE companies ADD COLUMN email TEXT;
+  END IF;
+  
+  -- address
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = 'companies' AND column_name = 'address'
+  ) THEN
+    ALTER TABLE companies ADD COLUMN address TEXT;
+  END IF;
+  
+  -- active
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_schema = 'public' AND table_name = 'companies' AND column_name = 'active'
   ) THEN
     ALTER TABLE companies ADD COLUMN active BOOLEAN DEFAULT true;
+  END IF;
+  
+  -- created_at
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = 'companies' AND column_name = 'created_at'
+  ) THEN
+    ALTER TABLE companies ADD COLUMN created_at TIMESTAMPTZ DEFAULT now();
+  END IF;
+  
+  -- updated_at
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = 'companies' AND column_name = 'updated_at'
+  ) THEN
+    ALTER TABLE companies ADD COLUMN updated_at TIMESTAMPTZ DEFAULT now();
   END IF;
 END $$;
 
