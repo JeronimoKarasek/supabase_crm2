@@ -144,21 +144,42 @@ export async function POST(request) {
 
       // Se for compra de produto, cria registro em product_purchases
       if (productData) {
-        try {
-          await supabaseAdmin
-            .from('product_purchases')
-            .insert({
-              user_id: user.id,
-              product_id: productData.id,
-              reference_id: referenceId,
-              amount: amount,
-              status: 'pending',
-              payment_method: 'pix',
-              provider: 'mercadopago'
-            })
-          console.log('✅ Registro de compra criado:', referenceId)
-        } catch (e) {
-          console.error('❌ Erro ao criar registro de compra:', e)
+        console.log('📝 Creating product_purchase record', {
+          user_id: user.id,
+          product_id: productData.id,
+          product_key: productData.key,
+          reference_id: referenceId,
+          amount: amount
+        })
+        
+        const { data: purchaseRecord, error: purchaseError } = await supabaseAdmin
+          .from('product_purchases')
+          .insert({
+            user_id: user.id,
+            product_id: productData.id,
+            reference_id: referenceId,
+            amount: amount,
+            status: 'pending',
+            payment_method: 'pix',
+            provider: 'mercadopago'
+          })
+          .select()
+          .single()
+        
+        if (purchaseError) {
+          console.error('❌ CRITICAL: Failed to create purchase record!', {
+            error: purchaseError,
+            errorMessage: purchaseError.message,
+            errorDetails: purchaseError
+          })
+          // Não retorna erro para não bloquear o pagamento, mas loga fortemente
+        } else {
+          console.log('✅ Purchase record created successfully:', {
+            purchaseId: purchaseRecord?.id,
+            referenceId: referenceId,
+            userId: user.id,
+            productId: productData.id
+          })
         }
       }
 
@@ -216,21 +237,41 @@ export async function POST(request) {
 
       // Se for compra de produto, cria registro em product_purchases
       if (productData) {
-        try {
-          await supabaseAdmin
-            .from('product_purchases')
-            .insert({
-              user_id: user.id,
-              product_id: productData.id,
-              reference_id: referenceId,
-              amount: amount,
-              status: 'pending',
-              payment_method: 'pix',
-              provider: 'picpay'
-            })
-          console.log('✅ Registro de compra criado (PicPay):', referenceId)
-        } catch (e) {
-          console.error('❌ Erro ao criar registro de compra (PicPay):', e)
+        console.log('📝 Creating product_purchase record (PicPay)', {
+          user_id: user.id,
+          product_id: productData.id,
+          product_key: productData.key,
+          reference_id: referenceId,
+          amount: amount
+        })
+        
+        const { data: purchaseRecord, error: purchaseError } = await supabaseAdmin
+          .from('product_purchases')
+          .insert({
+            user_id: user.id,
+            product_id: productData.id,
+            reference_id: referenceId,
+            amount: amount,
+            status: 'pending',
+            payment_method: 'pix',
+            provider: 'picpay'
+          })
+          .select()
+          .single()
+        
+        if (purchaseError) {
+          console.error('❌ CRITICAL: Failed to create purchase record (PicPay)!', {
+            error: purchaseError,
+            errorMessage: purchaseError.message,
+            errorDetails: purchaseError
+          })
+        } else {
+          console.log('✅ Purchase record created successfully (PicPay):', {
+            purchaseId: purchaseRecord?.id,
+            referenceId: referenceId,
+            userId: user.id,
+            productId: productData.id
+          })
         }
       }
 
