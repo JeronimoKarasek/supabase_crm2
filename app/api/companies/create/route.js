@@ -100,18 +100,18 @@ export async function POST(request) {
 
     console.log('🏢 [Create Company] Creating company:', company.name)
 
-    // 1. Criar empresa na tabela companies
+    // 1. Criar empresa na tabela companies (deixa o DB usar DEFAULT para active/timestamps)
+    const companyInsert = {
+      name: company.name
+    }
+    if (company.cnpj) companyInsert.cnpj = company.cnpj
+    if (company.phone) companyInsert.phone = company.phone
+    if (company.email) companyInsert.email = company.email
+    if (company.address) companyInsert.address = company.address
+
     const { data: companyData, error: companyError } = await supabaseAdmin
       .from('companies')
-      .insert({
-        name: company.name,
-        cnpj: company.cnpj || null,
-        phone: company.phone || null,
-        email: company.email || null,
-        address: company.address || null,
-        active: true,
-        created_at: new Date().toISOString()
-      })
+      .insert(companyInsert)
       .select()
       .single()
 
@@ -151,19 +151,19 @@ export async function POST(request) {
 
     console.log('✅ [Create Company] Auth user created:', authData.user.id)
 
-    // 3. Criar registro na tabela users
+    // 3. Criar registro na tabela users (deixa o DB usar DEFAULT para active/timestamps)
+    const userInsert = {
+      id: authData.user.id,
+      email: newUser.email,
+      name: newUser.name,
+      role: 'admin',
+      company_id: companyData.id
+    }
+    if (newUser.phone) userInsert.phone = newUser.phone
+
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
-      .insert({
-        id: authData.user.id,
-        email: newUser.email,
-        name: newUser.name,
-        phone: newUser.phone || null,
-        role: 'admin',
-        company_id: companyData.id,
-        active: true,
-        created_at: new Date().toISOString()
-      })
+      .insert(userInsert)
       .select()
       .single()
 
