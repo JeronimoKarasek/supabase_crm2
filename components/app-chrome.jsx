@@ -82,9 +82,9 @@ export default function AppChrome({ children }) {
       const role = user?.user_metadata?.role || ''
       setIsAdmin(role === 'admin')
       
-      // Buscar saldo de SMS para qualquer usuário autenticado
-      const token = sessionData?.session?.access_token
-      if (token) {
+      // Buscar saldo de SMS apenas para admin
+      if (role === 'admin') {
+        const token = sessionData?.session?.access_token
         const res = await fetch('/api/disparo-sms/balance', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
         const js = await res.json()
         if (res.ok && js?.balance) {
@@ -182,7 +182,7 @@ export default function AppChrome({ children }) {
           </div>
           <div className="flex items-center gap-2">
             <div className="text-sm font-semibold px-2 text-success dark:text-success">Crédito: {creditsBRL}</div>
-            {smsBalance && (
+            {isAdmin && smsBalance && (
               <div className="text-sm font-semibold px-2 py-1 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700">
                 SMS Kolmeya: {smsBalance}
               </div>

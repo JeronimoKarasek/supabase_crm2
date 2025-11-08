@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { exportToCsv } from '@/lib/export'
 
 export default function ConsultaLotePage() {
   const [items, setItems] = useState([])
@@ -116,19 +117,22 @@ export default function ConsultaLotePage() {
         return
       }
       
-      // Verificar se todos os campos obrigatórios estão preenchidos
+      // Verificar apenas os campos OBRIGATÓRIOS (required: true)
       const missingFields = []
       if (selectedBank.fields && Array.isArray(selectedBank.fields)) {
         for (const field of selectedBank.fields) {
-          const value = selectedBankCreds[field.key]
-          if (!value || String(value).trim() === '') {
-            missingFields.push(field.label || field.key)
+          // Só valida se o campo for obrigatório
+          if (field.required === true) {
+            const value = selectedBankCreds[field.key]
+            if (!value || String(value).trim() === '') {
+              missingFields.push(field.label || field.key)
+            }
           }
         }
       }
       
       if (missingFields.length > 0) {
-        setError(`Preencha os seguintes campos em "Senha de banco" para o banco "${selectedBank.name || sendBank}": ${missingFields.join(', ')}`)
+        setError(`Preencha os seguintes campos obrigatórios em "Senha de banco" para o banco "${selectedBank.name || sendBank}": ${missingFields.join(', ')}`)
         return
       }
       
@@ -162,16 +166,23 @@ export default function ConsultaLotePage() {
       const token = sessionData?.session?.access_token
       const res = await fetch(`/api/importar?downloadId=${encodeURIComponent(id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       if (!res.ok) return
+      
+      // Baixar o arquivo XLSX do servidor
       const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `lote_${id}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch {}
+      
+      // Converter XLSX para array de objetos
+      const XLSX = await import('xlsx')
+      const arrayBuffer = await blob.arrayBuffer()
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(firstSheet)
+      
+      // Exportar como CSV com padrão brasileiro
+      exportToCsv(rows, `lote_${String(id).slice(0, 12)}.csv`)
+    } catch (e) {
+      console.error('Erro ao baixar lote:', e)
+      setError('Erro ao baixar lote: ' + (e?.message || 'Erro desconhecido'))
+    }
   }
 
   const onReprocess = async (id) => {
