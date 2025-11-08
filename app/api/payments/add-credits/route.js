@@ -80,6 +80,18 @@ export async function POST(request) {
     
     const baseUrl = process.env.APP_BASE_URL || new URL(request.url).origin
 
+    // Log para debug
+    console.log('💳 Payment Request Summary:', {
+      isProductPurchase: !!productData,
+      productKey: productKey,
+      productId: productData?.id,
+      productName: productData?.name,
+      referenceId: referenceId,
+      amount: amount,
+      provider: provider,
+      userId: user.id
+    })
+
     // Processa pagamento com o provedor selecionado
     if (provider === 'mercadopago') {
       // ============== MERCADO PAGO ==============
@@ -143,8 +155,15 @@ export async function POST(request) {
       }
 
       // Se for compra de produto, cria registro em product_purchases
+      if (productKey && !productData) {
+        console.error('🚨 CRITICAL: productKey exists but productData is null!', {
+          productKey: productKey,
+          productData: productData
+        })
+      }
+      
       if (productData) {
-        console.log('📝 Creating product_purchase record', {
+        console.log('📝 Creating product_purchase record (Mercado Pago)', {
           user_id: user.id,
           product_id: productData.id,
           product_key: productData.key,
@@ -236,6 +255,13 @@ export async function POST(request) {
       const picpayData = await picpayResponse.json()
 
       // Se for compra de produto, cria registro em product_purchases
+      if (productKey && !productData) {
+        console.error('🚨 CRITICAL: productKey exists but productData is null (PicPay)!', {
+          productKey: productKey,
+          productData: productData
+        })
+      }
+      
       if (productData) {
         console.log('📝 Creating product_purchase record (PicPay)', {
           user_id: user.id,
