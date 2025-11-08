@@ -9,10 +9,20 @@ CREATE TABLE IF NOT EXISTS companies (
   phone TEXT,
   email TEXT,
   address TEXT,
-  active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Adicionar coluna active em companies se não existir
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = 'companies' AND column_name = 'active'
+  ) THEN
+    ALTER TABLE companies ADD COLUMN active BOOLEAN DEFAULT true;
+  END IF;
+END $$;
 
 -- Criar tabela users se não existir (compatibilidade)
 CREATE TABLE IF NOT EXISTS public.users (
@@ -53,6 +63,7 @@ BEGIN
 END $$;
 
 -- Atualizar valores padrão nas colunas novas (garantir consistência)
+UPDATE companies SET active = true WHERE active IS NULL;
 UPDATE public.users SET active = true WHERE active IS NULL;
 UPDATE public.users SET role = 'user' WHERE role IS NULL;
 
