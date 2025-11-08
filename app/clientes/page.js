@@ -277,12 +277,12 @@ export default function App() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="equals">Equals</SelectItem>
-            <SelectItem value="notEquals">Not Equal</SelectItem>
-            <SelectItem value="greaterThan">Greater Than</SelectItem>
-            <SelectItem value="lessThan">Less Than</SelectItem>
-            <SelectItem value="greaterThanOrEqual">Greater or Equal</SelectItem>
-            <SelectItem value="lessThanOrEqual">Less or Equal</SelectItem>
+            <SelectItem value="equals">Igual a</SelectItem>
+            <SelectItem value="notEquals">Diferente de</SelectItem>
+            <SelectItem value="greaterThan">Maior que</SelectItem>
+            <SelectItem value="lessThan">Menor que</SelectItem>
+            <SelectItem value="greaterThanOrEqual">Maior ou igual</SelectItem>
+            <SelectItem value="lessThanOrEqual">Menor ou igual</SelectItem>
           </SelectContent>
         </Select>
       )
@@ -295,9 +295,9 @@ export default function App() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="equals">Equals</SelectItem>
-            <SelectItem value="greaterThan">After</SelectItem>
-            <SelectItem value="lessThan">Before</SelectItem>
+            <SelectItem value="equals">Igual a</SelectItem>
+            <SelectItem value="greaterThan">Depois de</SelectItem>
+            <SelectItem value="lessThan">Antes de</SelectItem>
           </SelectContent>
         </Select>
       )
@@ -309,12 +309,12 @@ export default function App() {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="contains">Contains</SelectItem>
-          <SelectItem value="notContains">Does Not Contain</SelectItem>
-          <SelectItem value="equals">Equals</SelectItem>
-          <SelectItem value="notEquals">Not Equal</SelectItem>
-          <SelectItem value="isBlank">Is Blank</SelectItem>
-          <SelectItem value="isNotBlank">Is Not Blank</SelectItem>
+          <SelectItem value="contains">Contém</SelectItem>
+          <SelectItem value="notContains">Não contém</SelectItem>
+          <SelectItem value="equals">Igual a</SelectItem>
+          <SelectItem value="notEquals">Diferente de</SelectItem>
+          <SelectItem value="isBlank">Está em branco</SelectItem>
+          <SelectItem value="isNotBlank">Não está em branco</SelectItem>
         </SelectContent>
       </Select>
     )
@@ -614,14 +614,14 @@ export default function App() {
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Filter className="h-4 w-4" />
-                    Filters
+                    Filtros
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                     <Select value={filterColumn} onValueChange={setFilterColumn}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select column..." />
+                        <SelectValue placeholder="Selecionar coluna..." />
                       </SelectTrigger>
                       <SelectContent>
                         {columns.map((col) => (
@@ -636,7 +636,7 @@ export default function App() {
 
                     {filterType !== 'isBlank' && filterType !== 'isNotBlank' && (
                       <Input
-                        placeholder="Filter value..."
+                        placeholder="Valor do filtro..."
                         value={filterValue}
                         onChange={(e) => setFilterValue(e.target.value)}
                         type={isNumericType(getDataType(filterColumn)) ? 'number' : isDateType(getDataType(filterColumn)) ? 'date' : 'text'}
