@@ -534,6 +534,31 @@ export default function DisparoApiPage() {
 
   useEffect(() => { loadCreds() }, [])
 
+  // Carregar dados do localStorage se vindo de clientes
+  useEffect(() => {
+    try {
+      const storedCsv = localStorage.getItem('whatsapp_csv_data')
+      const storedSource = localStorage.getItem('whatsapp_csv_source')
+      if (storedCsv && storedSource === 'base_csv') {
+        setCsvText(storedCsv)
+        setCsvRows(parseCsv(storedCsv))
+        // Limpar localStorage após carregar
+        localStorage.removeItem('whatsapp_csv_data')
+        localStorage.removeItem('whatsapp_csv_source')
+        // Navegar para a aba de disparo
+        setTimeout(() => {
+          const hash = window.location.hash
+          if (hash === '#disparo') {
+            const element = document.getElementById('disparo')
+            if (element) element.scrollIntoView({ behavior: 'smooth' })
+          }
+        }, 100)
+      }
+    } catch (e) {
+      console.error('Error loading WhatsApp data from localStorage:', e)
+    }
+  }, [])
+
   // quando selecionar credencial, buscar números e templates
   useEffect(() => {
     ;(async () => {

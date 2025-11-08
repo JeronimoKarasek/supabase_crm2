@@ -284,6 +284,31 @@ export default function DisparoSmsPage() {
     loadBalance()
   }, [])
 
+  // Carregar dados do localStorage se vindo de clientes
+  useEffect(() => {
+    try {
+      const storedCsv = localStorage.getItem('sms_csv_data')
+      const storedSource = localStorage.getItem('sms_csv_source')
+      if (storedCsv && storedSource === 'base_csv') {
+        setCsvText(storedCsv)
+        setCsvRows(parseCsv(storedCsv))
+        // Limpar localStorage após carregar
+        localStorage.removeItem('sms_csv_data')
+        localStorage.removeItem('sms_csv_source')
+        // A aba "Nova Campanha" já é a padrão, mas podemos garantir
+        setTimeout(() => {
+          const hash = window.location.hash
+          if (hash === '#nova-campanha') {
+            const element = document.getElementById('nova-campanha')
+            if (element) element.scrollIntoView({ behavior: 'smooth' })
+          }
+        }, 100)
+      }
+    } catch (e) {
+      console.error('Error loading SMS data from localStorage:', e)
+    }
+  }, [])
+
   const availableVars = (() => {
     if (!csvRows.length) return []
     const sample = csvRows[0]

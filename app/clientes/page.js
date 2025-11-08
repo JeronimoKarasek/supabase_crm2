@@ -369,6 +369,132 @@ export default function App() {
     }
   }
 
+  const sendToWhatsApp = async () => {
+    if (!selectedTable) return
+    try {
+      setSending(true)
+      // Build query to fetch all filtered rows
+      const baseParams = new URLSearchParams()
+      baseParams.set('table', selectedTable)
+      baseParams.set('pageSize', String(pageSize))
+      if (periodStart) baseParams.set('periodStart', periodStart)
+      if (periodEnd) baseParams.set('periodEnd', periodEnd)
+      if (filtersList && filtersList.length > 0) {
+        try { baseParams.set('filters', JSON.stringify(filtersList)) } catch {}
+      }
+      const requiresValue = filterType !== 'isBlank' && filterType !== 'isNotBlank'
+      if (filterColumn && (filterValue || !requiresValue)) {
+        baseParams.set('filterColumn', filterColumn)
+        baseParams.set('filterValue', String(filterValue || ''))
+        baseParams.set('filterType', filterType)
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const firstRes = await fetch(`/api/table-data?${baseParams.toString()}&page=1`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+      const firstJson = await firstRes.json()
+      if (!firstRes.ok) throw new Error(firstJson?.error || 'Falha ao buscar dados')
+      const allRows = [...(firstJson?.data || [])]
+      const totalPagesLocal = Math.max(1, parseInt(firstJson?.totalPages || 1, 10))
+      for (let p = 2; p <= totalPagesLocal; p++) {
+        const res = await fetch(`/api/table-data?${baseParams.toString()}&page=${p}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+        const json = await res.json()
+        if (res.ok) {
+          const rows = Array.isArray(json?.data) ? json.data : []
+          if (rows.length) allRows.push(...rows)
+        }
+      }
+
+      // Build CSV with all columns
+      const esc = (val) => {
+        if (val === null || typeof val === 'undefined') return ''
+        const s = String(val)
+        if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"'
+        return s
+      }
+      const first = allRows[0] || {}
+      const allColumns = Object.keys(first)
+      const lines = [allColumns.map(esc).join(',')]
+      for (const row of allRows) {
+        const rowValues = allColumns.map(col => esc(row?.[col] ?? ''))
+        lines.push(rowValues.join(','))
+      }
+      const csv = lines.join('\n')
+
+      // Store CSV in localStorage and redirect
+      localStorage.setItem('whatsapp_csv_data', csv)
+      localStorage.setItem('whatsapp_csv_source', 'base_csv')
+      window.location.href = '/disparo-api#disparo'
+    } catch (e) {
+      setError(e?.message || 'Erro ao preparar dados para WhatsApp')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const sendToSMS = async () => {
+    if (!selectedTable) return
+    try {
+      setSending(true)
+      // Build query to fetch all filtered rows
+      const baseParams = new URLSearchParams()
+      baseParams.set('table', selectedTable)
+      baseParams.set('pageSize', String(pageSize))
+      if (periodStart) baseParams.set('periodStart', periodStart)
+      if (periodEnd) baseParams.set('periodEnd', periodEnd)
+      if (filtersList && filtersList.length > 0) {
+        try { baseParams.set('filters', JSON.stringify(filtersList)) } catch {}
+      }
+      const requiresValue = filterType !== 'isBlank' && filterType !== 'isNotBlank'
+      if (filterColumn && (filterValue || !requiresValue)) {
+        baseParams.set('filterColumn', filterColumn)
+        baseParams.set('filterValue', String(filterValue || ''))
+        baseParams.set('filterType', filterType)
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const firstRes = await fetch(`/api/table-data?${baseParams.toString()}&page=1`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+      const firstJson = await firstRes.json()
+      if (!firstRes.ok) throw new Error(firstJson?.error || 'Falha ao buscar dados')
+      const allRows = [...(firstJson?.data || [])]
+      const totalPagesLocal = Math.max(1, parseInt(firstJson?.totalPages || 1, 10))
+      for (let p = 2; p <= totalPagesLocal; p++) {
+        const res = await fetch(`/api/table-data?${baseParams.toString()}&page=${p}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+        const json = await res.json()
+        if (res.ok) {
+          const rows = Array.isArray(json?.data) ? json.data : []
+          if (rows.length) allRows.push(...rows)
+        }
+      }
+
+      // Build CSV with all columns
+      const esc = (val) => {
+        if (val === null || typeof val === 'undefined') return ''
+        const s = String(val)
+        if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"'
+        return s
+      }
+      const first = allRows[0] || {}
+      const allColumns = Object.keys(first)
+      const lines = [allColumns.map(esc).join(',')]
+      for (const row of allRows) {
+        const rowValues = allColumns.map(col => esc(row?.[col] ?? ''))
+        lines.push(rowValues.join(','))
+      }
+      const csv = lines.join('\n')
+
+      // Store CSV in localStorage and redirect
+      localStorage.setItem('sms_csv_data', csv)
+      localStorage.setItem('sms_csv_source', 'base_csv')
+      window.location.href = '/disparo-sms#nova-campanha'
+    } catch (e) {
+      setError(e?.message || 'Erro ao preparar dados para SMS')
+    } finally {
+      setSending(false)
+    }
+  }
+
   const sendToBatch = async () => {
     if (!selectedTable || !sendBank || !sendProduct) return
     try {
@@ -405,26 +531,23 @@ export default function App() {
         }
       }
 
-      // Map rows to csv (nome,telefone,cpf)
-      const norm = (s) => (s ?? '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-      const first = allRows[0] || {}
-      const keys = Object.keys(first)
-      const nameKey = keys.find(k => norm(k).includes('nome')) || 'nome'
-      const phoneKey = keys.find(k => { const nk = norm(k); return nk.includes('telefone') || nk.includes('celular') || nk === 'fone' || nk.includes('phone') }) || 'telefone'
-      const cpfKey = keys.find(k => norm(k) === 'cpf') || 'cpf'
-
+      // Map rows to csv (todas as colunas da tabela importar)
       const esc = (val) => {
         if (val === null || typeof val === 'undefined') return ''
         const s = String(val)
         if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"'
         return s
       }
-      const lines = ['nome,telefone,cpf']
+      
+      // Get all column headers from first row
+      const first = allRows[0] || {}
+      const allColumns = Object.keys(first)
+      
+      // Build CSV with all columns
+      const lines = [allColumns.map(esc).join(',')]
       for (const row of allRows) {
-        const nome = row?.[nameKey] ?? ''
-        const telefone = row?.[phoneKey] ?? ''
-        const cpf = row?.[cpfKey] ?? ''
-        lines.push([esc(nome), esc(telefone), esc(cpf)].join(','))
+        const rowValues = allColumns.map(col => esc(row?.[col] ?? ''))
+        lines.push(rowValues.join(','))
       }
       const csv = lines.join('\n')
 
@@ -796,21 +919,21 @@ export default function App() {
                   // Redirecionar para Disparo WhatsApp API
                   <div className="py-6 text-center space-y-4">
                     <p className="text-muted-foreground">
-                      Você será redirecionado para a página de <strong>Disparo Whats API</strong> com seus filtros aplicados.
+                      A base filtrada será preparada e você será redirecionado para <strong>Disparo Whats API</strong> com a tabela já carregada na aba Disparo.
                     </p>
-                    <Button onClick={() => window.location.href = '/disparo-api'} size="lg">
-                      Ir para Disparo Whats API
-                    </Button>
+                    <div className="bg-muted/50 p-3 rounded text-sm">
+                      <strong>Total de registros:</strong> {total}
+                    </div>
                   </div>
                 ) : (
                   // Redirecionar para Disparo SMS
                   <div className="py-6 text-center space-y-4">
                     <p className="text-muted-foreground">
-                      Você será redirecionado para a página de <strong>Disparo SMS</strong> com seus filtros aplicados.
+                      A base filtrada será preparada e você será redirecionado para <strong>Nova Campanha SMS</strong> com a tabela já carregada em Base CSV.
                     </p>
-                    <Button onClick={() => window.location.href = '/disparo-sms'} size="lg">
-                      Ir para Disparo SMS
-                    </Button>
+                    <div className="bg-muted/50 p-3 rounded text-sm">
+                      <strong>Total de registros:</strong> {total}
+                    </div>
                   </div>
                 )}
 
@@ -820,6 +943,16 @@ export default function App() {
                   {sendType === 'batch' && (
                     <Button onClick={sendToBatch} disabled={sending || !sendProduct || !sendBank}>
                       {sending ? 'Enviando...' : 'Enviar para Lote'}
+                    </Button>
+                  )}
+                  {sendType === 'whatsapp' && (
+                    <Button onClick={sendToWhatsApp} disabled={sending}>
+                      {sending ? 'Preparando...' : 'Ir para WhatsApp API'}
+                    </Button>
+                  )}
+                  {sendType === 'sms' && (
+                    <Button onClick={sendToSMS} disabled={sending}>
+                      {sending ? 'Preparando...' : 'Ir para Nova Campanha'}
                     </Button>
                   )}
                 </DialogFooter>
