@@ -47,12 +47,19 @@ export async function POST(request) {
       },
     })
     const json = await res.json()
-    console.log('📊 [Balance API] Kolmeya response:', { ok: res.ok, status: res.status, balance: json?.balance })
+    console.log('📊 [Balance API] Kolmeya response:', { ok: res.ok, status: res.status, balance: json?.balance, data: json })
     if (!res.ok) {
       console.error('❌ [Balance API] Kolmeya error:', json)
+      let errorMsg = 'Falha ao consultar saldo'
+      if (res.status === 403) {
+        errorMsg = 'Token SMS inválido ou sem permissão. Verifique o token em Configurações.'
+      } else if (res.status === 401) {
+        errorMsg = 'Token SMS não autorizado. Verifique o token em Configurações.'
+      }
       return NextResponse.json({
-        error: 'Falha ao consultar saldo',
-        details: json?.message || 'erro'
+        error: errorMsg,
+        details: json?.message || json?.error || 'Erro desconhecido',
+        status: res.status
       }, { status: res.status })
     }
     return NextResponse.json({ balance: json?.balance || '0' })
