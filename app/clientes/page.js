@@ -422,10 +422,13 @@ export default function App() {
       const csv = lines.join('\n')
 
       // Store CSV in localStorage and redirect
+      console.log('📱 [Send to WhatsApp] Storing CSV in localStorage...', { rows: allRows.length, csvLength: csv.length })
       localStorage.setItem('whatsapp_csv_data', csv)
       localStorage.setItem('whatsapp_csv_source', 'base_csv')
+      console.log('✅ [Send to WhatsApp] Redirecting to /disparo-api#disparo')
       window.location.href = '/disparo-api#disparo'
     } catch (e) {
+      console.error('❌ [Send to WhatsApp] Error:', e)
       setError(e?.message || 'Erro ao preparar dados para WhatsApp')
     } finally {
       setSending(false)
@@ -485,10 +488,13 @@ export default function App() {
       const csv = lines.join('\n')
 
       // Store CSV in localStorage and redirect
+      console.log('📱 [Send to SMS] Storing CSV in localStorage...', { rows: allRows.length, csvLength: csv.length })
       localStorage.setItem('sms_csv_data', csv)
       localStorage.setItem('sms_csv_source', 'base_csv')
+      console.log('✅ [Send to SMS] Redirecting to /disparo-sms#nova-campanha')
       window.location.href = '/disparo-sms#nova-campanha'
     } catch (e) {
+      console.error('❌ [Send to SMS] Error:', e)
       setError(e?.message || 'Erro ao preparar dados para SMS')
     } finally {
       setSending(false)

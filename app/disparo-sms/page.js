@@ -128,26 +128,36 @@ export default function DisparoSmsPage() {
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
+      console.log('📋 [SMS Segments] Buscando centros de custo...', { hasToken: !!token })
       const res = await fetch(`/api/disparo-sms/segments`, { 
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : undefined 
       })
       const data = await res.json()
+      console.log('📋 [SMS Segments] Resposta:', { ok: res.ok, status: res.status, data })
       if (res.ok) setSegments(data?.segments || [])
-    } catch {}
+      else console.error('❌ [SMS Segments] Erro:', data)
+    } catch (e) {
+      console.error('❌ [SMS Segments] Exception:', e)
+    }
   }
 
   const loadBalance = async () => {
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
+      console.log('📊 [SMS Balance] Buscando saldo...', { hasToken: !!token })
       const res = await fetch(`/api/disparo-sms/balance`, { 
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : undefined 
       })
       const data = await res.json()
+      console.log('📊 [SMS Balance] Resposta:', { ok: res.ok, status: res.status, data })
       if (res.ok) setBalance(data?.balance || '0')
-    } catch {}
+      else console.error('❌ [SMS Balance] Erro:', data)
+    } catch (e) {
+      console.error('❌ [SMS Balance] Exception:', e)
+    }
   }
 
   const onFile = async (e) => {
@@ -289,12 +299,17 @@ export default function DisparoSmsPage() {
     try {
       const storedCsv = localStorage.getItem('sms_csv_data')
       const storedSource = localStorage.getItem('sms_csv_source')
+      console.log('📱 [SMS Page] Checking localStorage:', { hasCsv: !!storedCsv, source: storedSource })
       if (storedCsv && storedSource === 'base_csv') {
+        console.log('📱 [SMS Page] Loading CSV from localStorage...')
         setCsvText(storedCsv)
-        setCsvRows(parseCsv(storedCsv))
+        const rows = parseCsv(storedCsv)
+        console.log('📱 [SMS Page] Parsed rows:', rows.length)
+        setCsvRows(rows)
         // Limpar localStorage após carregar
         localStorage.removeItem('sms_csv_data')
         localStorage.removeItem('sms_csv_source')
+        console.log('✅ [SMS Page] CSV loaded successfully')
         // A aba "Nova Campanha" já é a padrão, mas podemos garantir
         setTimeout(() => {
           const hash = window.location.hash
@@ -305,7 +320,7 @@ export default function DisparoSmsPage() {
         }, 100)
       }
     } catch (e) {
-      console.error('Error loading SMS data from localStorage:', e)
+      console.error('❌ [SMS Page] Error loading SMS data from localStorage:', e)
     }
   }, [])
 

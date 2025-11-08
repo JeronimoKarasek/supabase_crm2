@@ -17,6 +17,7 @@ async function getUserFromRequest(request) {
 
 export async function POST(request) {
   const user = await getUserFromRequest(request)
+  console.log('📊 [Balance API] User:', user?.email || 'not authenticated')
   if (!user) return unauthorized()
   try {
     // Ler credencial única dos global settings
@@ -26,14 +27,17 @@ export async function POST(request) {
       .eq('id', 'global')
       .single()
     if (settingsErr) {
+      console.error('❌ [Balance API] Settings error:', settingsErr)
       return NextResponse.json({ error: 'Falha ao ler configurações globais' }, { status: 500 })
     }
     const s = settingsRow?.data || {}
     const apiToken = s.smsApiToken
+    console.log('📊 [Balance API] Has token:', !!apiToken)
     if (!apiToken) {
       return NextResponse.json({ error: 'Token SMS não configurado' }, { status: 400 })
     }
 
+    console.log('📊 [Balance API] Calling Kolmeya API...')
     const res = await fetch('https://kolmeya.com.br/api/v1/sms/balance', {
       method: 'POST',
       headers: {
@@ -43,7 +47,9 @@ export async function POST(request) {
       },
     })
     const json = await res.json()
+    console.log('📊 [Balance API] Kolmeya response:', { ok: res.ok, status: res.status, balance: json?.balance })
     if (!res.ok) {
+      console.error('❌ [Balance API] Kolmeya error:', json)
       return NextResponse.json({
         error: 'Falha ao consultar saldo',
         details: json?.message || 'erro'
@@ -51,6 +57,7 @@ export async function POST(request) {
     }
     return NextResponse.json({ balance: json?.balance || '0' })
   } catch (e) {
+    console.error('❌ [Balance API] Exception:', e)
     return NextResponse.json({ error: 'Erro interno', details: e.message }, { status: 500 })
   }
 }

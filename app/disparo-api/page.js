@@ -539,12 +539,17 @@ export default function DisparoApiPage() {
     try {
       const storedCsv = localStorage.getItem('whatsapp_csv_data')
       const storedSource = localStorage.getItem('whatsapp_csv_source')
+      console.log('📱 [WhatsApp Page] Checking localStorage:', { hasCsv: !!storedCsv, source: storedSource })
       if (storedCsv && storedSource === 'base_csv') {
+        console.log('📱 [WhatsApp Page] Loading CSV from localStorage...')
         setCsvText(storedCsv)
-        setCsvRows(parseCsv(storedCsv))
+        const rows = parseCsv(storedCsv)
+        console.log('📱 [WhatsApp Page] Parsed rows:', rows.length)
+        setCsvRows(rows)
         // Limpar localStorage após carregar
         localStorage.removeItem('whatsapp_csv_data')
         localStorage.removeItem('whatsapp_csv_source')
+        console.log('✅ [WhatsApp Page] CSV loaded successfully')
         // Navegar para a aba de disparo
         setTimeout(() => {
           const hash = window.location.hash
@@ -555,7 +560,7 @@ export default function DisparoApiPage() {
         }, 100)
       }
     } catch (e) {
-      console.error('Error loading WhatsApp data from localStorage:', e)
+      console.error('❌ [WhatsApp Page] Error loading WhatsApp data from localStorage:', e)
     }
   }, [])
 
