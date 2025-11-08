@@ -68,9 +68,9 @@ export default function AppNav() {
       icon: Users,
       isActive: pathname?.startsWith('/usuarios') ?? false,
     },
-    (role === 'admin' || can('Acesso Banco')) && {
+    (role === 'admin' || can('Senha de banco')) && {
       href: '/acesso-banco',
-      label: 'Acesso Banco',
+      label: 'Senha de banco',
       icon: Settings,
       isActive: pathname?.startsWith('/acesso-banco') ?? false,
     },
@@ -86,9 +86,9 @@ export default function AppNav() {
       icon: FileDigit,
       isActive: pathname?.startsWith('/simular-digitar') ?? false,
     },
-    (role === 'admin' || can('Disparo API')) && {
+    (role === 'admin' || can('Disparo Whats API')) && {
       href: '/disparo-api',
-      label: 'Disparo API',
+      label: 'Disparo Whats API',
       icon: Send,
       isActive: pathname?.startsWith('/disparo-api') ?? false,
     },
@@ -98,10 +98,10 @@ export default function AppNav() {
       icon: MessageSquare,
       isActive: pathname?.startsWith('/disparo-sms') ?? false,
     },
-    // Produtos disponível para todos usuários logados
+    // Soluções disponível para todos usuários logados
     {
       href: '/produtos',
-      label: 'Produtos',
+      label: 'Soluções',
       icon: ShoppingBag,
       isActive: pathname?.startsWith('/produtos') ?? false,
     },

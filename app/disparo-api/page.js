@@ -650,9 +650,9 @@ export default function DisparoApiPage() {
               <CardDescription>Baixe o modelo, importe sua base e selecione o template e número.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 bg-muted/20 rounded-b-xl">
-              <div className="flex gap-2">
-                <Button onClick={downloadModel} variant="outline">Baixar modelo CSV</Button>
-                <Input type="file" accept=".csv" onChange={onFile} />
+              <div className="flex gap-2 items-center">
+                <Input type="file" accept=".csv" onChange={onFile} className="flex-1" />
+                <Button onClick={downloadModel} variant="outline" className="whitespace-nowrap">Baixar modelo CSV</Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="space-y-2">

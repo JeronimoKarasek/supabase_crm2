@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Database, Filter, Search, X, Download, ChevronLeft, ChevronRight, Send, Upload, Plus } from 'lucide-react'
-import { exportToCsv } from '@/lib/export'
+import { exportToExcel } from '@/lib/export'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 
 export default function App() {
@@ -331,7 +331,7 @@ export default function App() {
         }
       }
 
-      exportToCsv(allRows, `clientes_${selectedTable}_all.csv`)
+      exportToExcel(allRows, `clientes_${selectedTable}_all`)
     } catch (e) {
       console.error('Export all failed', e)
       setError(e?.message || 'Falha na exportação')

@@ -98,6 +98,45 @@ export default function ConsultaLotePage() {
 
   const onSend = async () => {
     if (!csvText || !sendProduct || !sendBank) return
+    
+    // Validar se o usuário do banco específico está preenchido
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const credRes = await fetch('/api/banks/credentials', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      const credJson = await credRes.json().catch(() => ({}))
+      const userCreds = credJson.credentials || {}
+      
+      // Verificar se o banco selecionado tem credenciais preenchidas
+      const selectedBankCreds = userCreds[sendBank]
+      const selectedBank = banks.find(b => b.key === sendBank)
+      
+      if (!selectedBankCreds || !selectedBank) {
+        setError(`Você precisa cadastrar suas credenciais para o banco "${selectedBank?.name || sendBank}" em "Senha de banco" antes de enviar o lote.`)
+        return
+      }
+      
+      // Verificar se todos os campos obrigatórios estão preenchidos
+      const missingFields = []
+      if (selectedBank.fields && Array.isArray(selectedBank.fields)) {
+        for (const field of selectedBank.fields) {
+          const value = selectedBankCreds[field.key]
+          if (!value || String(value).trim() === '') {
+            missingFields.push(field.label || field.key)
+          }
+        }
+      }
+      
+      if (missingFields.length > 0) {
+        setError(`Preencha os seguintes campos em "Senha de banco" para o banco "${selectedBank.name || sendBank}": ${missingFields.join(', ')}`)
+        return
+      }
+      
+    } catch (e) {
+      setError('Erro ao verificar credenciais do banco: ' + (e?.message || 'Erro desconhecido'))
+      return
+    }
+    
     try {
       setSending(true)
       setError('')
@@ -127,7 +166,7 @@ export default function ConsultaLotePage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `lote_${id}.csv`
+      a.download = `lote_${id}.xlsx`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)

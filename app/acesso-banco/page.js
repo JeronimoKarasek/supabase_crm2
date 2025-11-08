@@ -30,14 +30,38 @@ export default function AcessoBancoPage() {
     const { data: sessionData } = await supabase.auth.getSession()
     const token = sessionData?.session?.access_token
     const res = await fetch('/api/banks/credentials', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ credentials: creds }) })
-    if (res.ok) setMessage('Salvo com sucesso')
+    if (res.ok) {
+      setMessage('✓ Credenciais salvas com sucesso!')
+      setTimeout(() => setMessage(''), 3000)
+    }
+  }
+
+  const fillExample = (bankKey) => {
+    const bank = banks.find(b => b.key === bankKey)
+    if (!bank || !bank.fields) return
+    
+    const example = {}
+    bank.fields.forEach(f => {
+      if (f.type === 'select' && f.options && f.options.length > 0) {
+        example[f.key] = f.options[0]
+      } else {
+        example[f.key] = `exemplo_${f.key}`
+      }
+    })
+    
+    setCreds(prev => ({
+      ...prev,
+      [bankKey]: { ...(prev[bankKey] || {}), ...example }
+    }))
+    setMessage(`✓ Valores de exemplo preenchidos para ${bank.name}`)
+    setTimeout(() => setMessage(''), 2000)
   }
 
   return (
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
       <div className="max-w-full mx-auto py-6 px-6 space-y-6">
         <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold text-foreground tracking-wide">Acesso Banco</h1>
+          <h1 className="text-xl font-semibold text-foreground tracking-wide">Senha de banco</h1>
           <p className="text-sm text-muted-foreground">Informe suas credenciais para cada banco configurado</p>
         </div>
         <div className="space-y-5">
@@ -54,9 +78,19 @@ export default function AcessoBancoPage() {
                     <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Banco</div>
                     <div className="text-lg font-semibold text-foreground">{b.name || b.key}</div>
                   </div>
-                  <div className="hidden md:flex items-center gap-2 text-[10px] font-medium">
-                    {b.forBatch ? <span className="px-2 py-1 rounded bg-muted text-muted-foreground border border-border">Lote</span> : null}
-                    {b.forSimular ? <span className="px-2 py-1 rounded bg-muted text-muted-foreground border border-border">Simular/Digitar</span> : null}
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => fillExample(b.key)}
+                      className="text-xs"
+                    >
+                      Preencher exemplo
+                    </Button>
+                    <div className="hidden md:flex items-center gap-2 text-[10px] font-medium">
+                      {b.forBatch ? <span className="px-2 py-1 rounded bg-muted text-muted-foreground border border-border">Lote</span> : null}
+                      {b.forSimular ? <span className="px-2 py-1 rounded bg-muted text-muted-foreground border border-border">Simular/Digitar</span> : null}
+                    </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -109,9 +143,9 @@ export default function AcessoBancoPage() {
             ))
           )}
         </div>
-        <div className="flex justify-end gap-3 pt-2">
-          {message && <div className="text-success text-sm">{message}</div>}
-          <Button onClick={save} className="bg-primary hover:bg-accent text-primary-foreground">Salvar credenciais</Button>
+        <div className="flex justify-between items-center gap-3 pt-2">
+          {message && <div className="text-green-600 text-sm font-medium">{message}</div>}
+          <Button onClick={save} className="ml-auto bg-primary hover:bg-accent text-primary-foreground">Salvar todas as credenciais</Button>
         </div>
       </div>
     </div>

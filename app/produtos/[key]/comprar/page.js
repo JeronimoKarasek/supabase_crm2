@@ -15,6 +15,7 @@ export default function ComprarProdutoPage() {
   const [isSubmitting, setSubmitting] = useState(false)
   const [payment, setPayment] = useState(null)
   const [message, setMessage] = useState('')
+  const [paymentApproved, setPaymentApproved] = useState(false)
 
   useEffect(() => {
     ;(async () => {
@@ -67,12 +68,35 @@ export default function ComprarProdutoPage() {
       const res = await fetch(`/api/mercadopago/status?paymentId=${encodeURIComponent(payment.paymentId)}`)
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Falha ao verificar status')
-      if (json.status === 'approved') setMessage('Pagamento confirmado!')
-      else { setMessage(`Status: ${json.status}`); setTimeout(()=>setMessage(''), 2000) }
+      
+      if (json.status === 'approved') {
+        setPaymentApproved(true)
+        setMessage('✅ Pagamento confirmado! Setores liberados. Recarregando...')
+        
+        // O webhook já vai liberar os setores automaticamente
+        // Aguardar um pouco e recarregar a sessão do usuário
+        setTimeout(async () => {
+          try {
+            await supabase.auth.refreshSession()
+            window.location.href = '/dashboard' // Redirecionar para dashboard
+          } catch (e) {
+            console.error('Erro ao recarregar sessão:', e)
+          }
+        }, 2000)
+      } else { 
+        setMessage(`Status: ${json.status}`)
+        setTimeout(()=>setMessage(''), 2000) 
+      }
     } catch (e) {
       setMessage(e?.message || 'Erro ao verificar status')
       setTimeout(() => setMessage(''), 2000)
     }
+  }
+  
+  const gerarNovoQR = () => {
+    setPayment(null)
+    setPaymentApproved(false)
+    setMessage('')
   }
 
   if (!product) return (
@@ -103,7 +127,13 @@ export default function ComprarProdutoPage() {
               <div className="text-2xl font-bold">R$ {basePrice.toFixed(2)}</div>
             </div>
             <div className="flex justify-end">
-              <Button onClick={concluir} disabled={isSubmitting || !(basePrice > 0)}>{isSubmitting ? 'Processando...' : 'Concluir'}</Button>
+              {payment && !paymentApproved ? (
+                <Button onClick={gerarNovoQR} variant="outline">Gerar novo QR</Button>
+              ) : (
+                <Button onClick={concluir} disabled={isSubmitting || !(basePrice > 0) || paymentApproved}>
+                  {isSubmitting ? 'Processando...' : paymentApproved ? '✓ Pagamento Aprovado' : 'Concluir'}
+                </Button>
+              )}
             </div>
             {payment && (
               <div className="border rounded p-3 space-y-3">
