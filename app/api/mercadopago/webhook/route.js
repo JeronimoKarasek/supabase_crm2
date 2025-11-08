@@ -27,38 +27,81 @@ async function grantSectorsToUser(userId, sectors){
   try {
     if (!userId || !Array.isArray(sectors) || sectors.length === 0) {
       console.warn('[grantSectorsToUser] Invalid parameters', { userId, sectors })
-      return
+      return false
     }
 
-    const { data: u, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(userId)
+    console.info('[grantSectorsToUser] Step 1: Getting user data', { userId })
+    const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(userId)
+    
     if (getUserError) {
-      console.error('[grantSectorsToUser] Error getting user', getUserError)
-      return
+      console.error('[grantSectorsToUser] Error getting user', { userId, error: getUserError })
+      return false
     }
 
-    const meta = u?.user?.user_metadata || {}
+    if (!userData || !userData.user) {
+      console.error('[grantSectorsToUser] User not found', { userId })
+      return false
+    }
+
+    const user = userData.user
+    console.info('[grantSectorsToUser] Step 2: User found', { 
+      userId, 
+      userEmail: user.email,
+      currentMetadata: user.user_metadata 
+    })
+
+    const meta = user.user_metadata || {}
     const current = Array.isArray(meta.sectors) ? meta.sectors : []
     const merged = Array.from(new Set([ ...current, ...sectors ]))
     
-    console.info('[grantSectorsToUser] Updating user sectors', { 
+    console.info('[grantSectorsToUser] Step 3: Sectors to merge', { 
       userId, 
       currentSectors: current, 
       newSectors: sectors, 
       mergedSectors: merged 
     })
 
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, { 
-      user_metadata: { ...meta, sectors: merged } 
-    })
-
-    if (updateError) {
-      console.error('[grantSectorsToUser] Error updating user', updateError)
-      return
+    // Preserva todos os metadados existentes e adiciona/atualiza os setores
+    const updatedMetadata = {
+      ...meta,
+      sectors: merged
     }
 
-    console.info('[grantSectorsToUser] User sectors updated successfully', { userId, sectors: merged })
+    console.info('[grantSectorsToUser] Step 4: Updating user with new metadata', { 
+      userId,
+      updatedMetadata 
+    })
+
+    const { data: updateData, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      userId, 
+      { user_metadata: updatedMetadata }
+    )
+
+    if (updateError) {
+      console.error('[grantSectorsToUser] Error updating user', { 
+        userId, 
+        error: updateError,
+        errorMessage: updateError.message,
+        errorDetails: updateError
+      })
+      return false
+    }
+
+    console.info('[grantSectorsToUser] Step 5: User updated successfully!', { 
+      userId, 
+      sectors: merged,
+      updateResult: updateData 
+    })
+    
+    return true
   } catch (e) {
-    console.error('[grantSectorsToUser] Exception', e)
+    console.error('[grantSectorsToUser] Exception caught', { 
+      userId, 
+      error: e,
+      errorMessage: e?.message,
+      errorStack: e?.stack
+    })
+    return false
   }
 }
 
@@ -227,8 +270,13 @@ export async function POST(request) {
             
             // Concede setores do produto ao usuário
             console.info('[MP Webhook] Granting sectors to user', { userId: purchase.user_id, sectors: prod.sectors })
-            await grantSectorsToUser(purchase.user_id, prod.sectors)
-            console.info('[MP Webhook] Sectors granted successfully')
+            const sectorsGranted = await grantSectorsToUser(purchase.user_id, prod.sectors)
+            
+            if (sectorsGranted) {
+              console.info('[MP Webhook] ✅ Sectors granted successfully!')
+            } else {
+              console.error('[MP Webhook] ❌ Failed to grant sectors to user')
+            }
             
             // REMOVIDO: Não adiciona créditos ao comprar produto (apenas setores)
             // Créditos só são adicionados em transações com referenceId "credits_*"
