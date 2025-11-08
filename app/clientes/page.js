@@ -33,12 +33,15 @@ export default function App() {
   const [periodStart, setPeriodStart] = useState('')
   const [periodEnd, setPeriodEnd] = useState('')
   const [sendOpen, setSendOpen] = useState(false)
+  const [sendType, setSendType] = useState('') // 'whatsapp', 'sms', 'batch'
   const [sending, setSending] = useState(false)
   const [banks, setBanks] = useState([])
   const [products, setProducts] = useState([])
   const [sendBank, setSendBank] = useState('')
   const [sendProduct, setSendProduct] = useState('')
   const [canSendBatch, setCanSendBatch] = useState(false)
+  const [canSendWhatsApp, setCanSendWhatsApp] = useState(false)
+  const [canSendSMS, setCanSendSMS] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [addForm, setAddForm] = useState({})
   const [addLoading, setAddLoading] = useState(false)
@@ -68,7 +71,7 @@ export default function App() {
     })()
   }, [])
 
-  // Determine permission to send to batch (sector: Consulta em lote or admin)
+  // Determine permissions (batch, whatsapp, sms)
   useEffect(() => {
     let active = true
     const norm = (s) => { try { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() } catch { return String(s || '').toLowerCase() } }
@@ -78,17 +81,39 @@ export default function App() {
         const user = data?.user
         const role = user?.user_metadata?.role || 'viewer'
         const sectors = Array.isArray(user?.user_metadata?.sectors) ? user.user_metadata.sectors : []
-        const has = sectors.some((s) => norm(s) === norm('Consulta em lote'))
-        if (active) setCanSendBatch(role === 'admin' || has)
-      } catch { if (active) setCanSendBatch(false) }
+        
+        const hasBatch = sectors.some((s) => norm(s) === norm('Consulta em lote'))
+        const hasWhatsApp = sectors.some((s) => norm(s) === norm('Disparo Whats API'))
+        const hasSMS = sectors.some((s) => norm(s) === norm('Disparo SMS'))
+        
+        if (active) {
+          setCanSendBatch(role === 'admin' || hasBatch)
+          setCanSendWhatsApp(role === 'admin' || hasWhatsApp)
+          setCanSendSMS(role === 'admin' || hasSMS)
+        }
+      } catch { 
+        if (active) {
+          setCanSendBatch(false)
+          setCanSendWhatsApp(false)
+          setCanSendSMS(false)
+        }
+      }
     }
     check()
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       const user = session?.user
       const role = user?.user_metadata?.role || 'viewer'
       const sectors = Array.isArray(user?.user_metadata?.sectors) ? user.user_metadata.sectors : []
-      const has = sectors.some((s) => norm(s) === norm('Consulta em lote'))
-      if (active) setCanSendBatch(role === 'admin' || has)
+      
+      const hasBatch = sectors.some((s) => norm(s) === norm('Consulta em lote'))
+      const hasWhatsApp = sectors.some((s) => norm(s) === norm('Disparo Whats API'))
+      const hasSMS = sectors.some((s) => norm(s) === norm('Disparo SMS'))
+      
+      if (active) {
+        setCanSendBatch(role === 'admin' || hasBatch)
+        setCanSendWhatsApp(role === 'admin' || hasWhatsApp)
+        setCanSendSMS(role === 'admin' || hasSMS)
+      }
     })
     return () => { active = false; sub?.subscription?.unsubscribe?.() }
   }, [])
@@ -634,9 +659,9 @@ export default function App() {
                       <Button variant="outline" onClick={exportAll} disabled={loading || exportingAll || !selectedTable}>
                         <Download className="h-4 w-4 mr-2" /> Exportar (tudo)
                       </Button>
-                      {canSendBatch && (
-                        <Button variant="outline" onClick={() => setSendOpen(true)} disabled={loading || !selectedTable}>
-                          <Send className="h-4 w-4 mr-2" /> Enviar p/ consulta em lote
+                      {(canSendBatch || canSendWhatsApp || canSendSMS) && (
+                        <Button onClick={() => setSendOpen(true)} disabled={loading || !selectedTable} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                          <Send className="h-4 w-4 mr-2" /> Enviar
                         </Button>
                       )}
                     </div>
@@ -659,46 +684,139 @@ export default function App() {
               </Card>
             )}
 
-            {/* Send to batch Dialog */}
-            {canSendBatch && (
-            <Dialog open={sendOpen} onOpenChange={setSendOpen}>
-              <DialogContent>
+            {/* Send Dialog - Choose destination */}
+            <Dialog open={sendOpen} onOpenChange={(open) => { setSendOpen(open); if (!open) setSendType('') }}>
+              <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle>Enviar para consulta em lote</DialogTitle>
-                  <DialogDescription>Selecione o produto e o banco para processar sua base filtrada.</DialogDescription>
+                  <DialogTitle>Enviar Base Filtrada</DialogTitle>
+                  <DialogDescription>
+                    {!sendType ? 'Escolha para onde deseja enviar sua base de clientes filtrada:' : 
+                     sendType === 'batch' ? 'Configure o envio para Consulta em Lote' :
+                     sendType === 'whatsapp' ? 'Configurar envio via WhatsApp API' :
+                     'Configurar envio via SMS'}
+                  </DialogDescription>
                 </DialogHeader>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2">
-                  <Select value={sendProduct} onValueChange={setSendProduct}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Produto" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.map((p,i) => {
-                        const name = typeof p === 'string' ? p : (p?.name || '')
-                        return (
-                          <SelectItem key={i} value={name}>{name}</SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                  <Select value={sendBank} onValueChange={setSendBank}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Banco" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {banks.map((b) => (
-                        <SelectItem key={b.key} value={b.key}>{b.name || b.key}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+
+                {!sendType ? (
+                  // Seleção do tipo de envio
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4">
+                    {canSendWhatsApp && (
+                      <button
+                        onClick={() => setSendType('whatsapp')}
+                        className="group relative overflow-hidden rounded-lg border-2 border-border hover:border-green-500 transition-all p-6 flex flex-col items-center gap-3 hover:shadow-lg hover:scale-105"
+                      >
+                        <div className="h-16 w-16 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center group-hover:bg-green-500 transition-colors">
+                          <Send className="h-8 w-8 text-green-600 dark:text-green-400 group-hover:text-white" />
+                        </div>
+                        <div className="text-center">
+                          <h3 className="font-semibold text-lg">WhatsApp API</h3>
+                          <p className="text-xs text-muted-foreground mt-1">Disparo via Meta Business</p>
+                        </div>
+                        <Badge variant="secondary" className="absolute top-2 right-2">Rápido</Badge>
+                      </button>
+                    )}
+
+                    {canSendSMS && (
+                      <button
+                        onClick={() => setSendType('sms')}
+                        className="group relative overflow-hidden rounded-lg border-2 border-border hover:border-blue-500 transition-all p-6 flex flex-col items-center gap-3 hover:shadow-lg hover:scale-105"
+                      >
+                        <div className="h-16 w-16 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center group-hover:bg-blue-500 transition-colors">
+                          <Send className="h-8 w-8 text-blue-600 dark:text-blue-400 group-hover:text-white" />
+                        </div>
+                        <div className="text-center">
+                          <h3 className="font-semibold text-lg">SMS</h3>
+                          <p className="text-xs text-muted-foreground mt-1">Disparo por mensagem</p>
+                        </div>
+                        <Badge variant="secondary" className="absolute top-2 right-2">Direto</Badge>
+                      </button>
+                    )}
+
+                    {canSendBatch && (
+                      <button
+                        onClick={() => setSendType('batch')}
+                        className="group relative overflow-hidden rounded-lg border-2 border-border hover:border-purple-500 transition-all p-6 flex flex-col items-center gap-3 hover:shadow-lg hover:scale-105"
+                      >
+                        <div className="h-16 w-16 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center group-hover:bg-purple-500 transition-colors">
+                          <Database className="h-8 w-8 text-purple-600 dark:text-purple-400 group-hover:text-white" />
+                        </div>
+                        <div className="text-center">
+                          <h3 className="font-semibold text-lg">Consulta em Lote</h3>
+                          <p className="text-xs text-muted-foreground mt-1">Processamento por banco</p>
+                        </div>
+                        <Badge variant="secondary" className="absolute top-2 right-2">Lote</Badge>
+                      </button>
+                    )}
+                  </div>
+                ) : sendType === 'batch' ? (
+                  // Configuração para Consulta em Lote
+                  <div className="space-y-4 py-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Produto</label>
+                        <Select value={sendProduct} onValueChange={setSendProduct}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o produto" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {products.map((p,i) => {
+                              const name = typeof p === 'string' ? p : (p?.name || '')
+                              return <SelectItem key={i} value={name}>{name}</SelectItem>
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Banco</label>
+                        <Select value={sendBank} onValueChange={setSendBank}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o banco" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {banks.map((b) => (
+                              <SelectItem key={b.key} value={b.key}>{b.name || b.key}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="bg-muted/50 p-3 rounded text-sm">
+                      <strong>Filtros aplicados:</strong> {filtersList.length} filtro(s) · <strong>Total:</strong> {total} registros
+                    </div>
+                  </div>
+                ) : sendType === 'whatsapp' ? (
+                  // Redirecionar para Disparo WhatsApp API
+                  <div className="py-6 text-center space-y-4">
+                    <p className="text-muted-foreground">
+                      Você será redirecionado para a página de <strong>Disparo Whats API</strong> com seus filtros aplicados.
+                    </p>
+                    <Button onClick={() => window.location.href = '/disparo-api'} size="lg">
+                      Ir para Disparo Whats API
+                    </Button>
+                  </div>
+                ) : (
+                  // Redirecionar para Disparo SMS
+                  <div className="py-6 text-center space-y-4">
+                    <p className="text-muted-foreground">
+                      Você será redirecionado para a página de <strong>Disparo SMS</strong> com seus filtros aplicados.
+                    </p>
+                    <Button onClick={() => window.location.href = '/disparo-sms'} size="lg">
+                      Ir para Disparo SMS
+                    </Button>
+                  </div>
+                )}
+
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setSendOpen(false)}>Cancelar</Button>
-                  <Button onClick={sendToBatch} disabled={sending || !sendProduct || !sendBank}>{sending ? 'Enviando...' : 'Enviar'}</Button>
+                  {sendType && <Button variant="outline" onClick={() => setSendType('')}>Voltar</Button>}
+                  <Button variant="outline" onClick={() => { setSendOpen(false); setSendType('') }}>Cancelar</Button>
+                  {sendType === 'batch' && (
+                    <Button onClick={sendToBatch} disabled={sending || !sendProduct || !sendBank}>
+                      {sending ? 'Enviando...' : 'Enviar para Lote'}
+                    </Button>
+                  )}
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-            )}
 
             {/* Add row Dialog */}
             <Dialog open={addOpen} onOpenChange={setAddOpen}>

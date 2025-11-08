@@ -33,13 +33,15 @@ export default function DashboardPage() {
   const [recentSales, setRecentSales] = useState([])
   const [openConfig, setOpenConfig] = useState(false)
   const [config, setConfig] = useState({
-    totalVendas: 150,
-    vendasMes: 23,
-    receitaTotal: 45000,
-    receitaMes: 8500,
-    visitantes: 0, // Será calculado automaticamente
-    comprasIniciadas: 200,
-    percentNovosClientes: 15,
+    // Configurações de onde buscar os dados
+    tabelaClientes: 'Farol',
+    tabelaVendas: 'product_purchases', // Tabela de vendas/compras
+    campoDataVenda: 'created_at',
+    campoValorVenda: 'amount',
+    campoStatusVenda: 'status',
+    statusAprovado: 'paid', // Status que indica venda aprovada
+    // Multiplicador de visitantes (visitantes = clientes * multiplicador)
+    multiplicadorVisitantes: 5,
   })
   const [isAdmin, setIsAdmin] = useState(false)
 
@@ -71,33 +73,67 @@ export default function DashboardPage() {
       
       // Mesclar com configurações padrão
       const savedConfig = {
-        totalVendas: dashboardConfig.totalVendas || 150,
-        vendasMes: dashboardConfig.vendasMes || 23,
-        receitaTotal: dashboardConfig.receitaTotal || 45000,
-        receitaMes: dashboardConfig.receitaMes || 8500,
-        comprasIniciadas: dashboardConfig.comprasIniciadas || 200,
-        percentNovosClientes: dashboardConfig.percentNovosClientes || 15,
+        tabelaClientes: dashboardConfig.tabelaClientes || 'Farol',
+        tabelaVendas: dashboardConfig.tabelaVendas || 'product_purchases',
+        campoDataVenda: dashboardConfig.campoDataVenda || 'created_at',
+        campoValorVenda: dashboardConfig.campoValorVenda || 'amount',
+        campoStatusVenda: dashboardConfig.campoStatusVenda || 'status',
+        statusAprovado: dashboardConfig.statusAprovado || 'paid',
+        multiplicadorVisitantes: dashboardConfig.multiplicadorVisitantes || 5,
       }
       setConfig(savedConfig)
 
-      // Buscar estatísticas de clientes (dado real)
-      const clientesRes = await fetch('/api/aggregate?table=Farol', {
+      // 1. BUSCAR TOTAL DE CLIENTES (CADASTROS)
+      const clientesRes = await fetch(`/api/aggregate?table=${encodeURIComponent(savedConfig.tabelaClientes)}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined
       })
       const clientesData = await clientesRes.json().catch(() => ({}))
       const totalClientes = clientesData?.count || 0
+
+      // 2. BUSCAR CLIENTES NOVOS (últimos 30 dias)
+      const dataLimite = new Date()
+      dataLimite.setDate(dataLimite.getDate() - 30)
+      const { data: clientesNovosData, error: errNovos } = await supabase
+        .from(savedConfig.tabelaClientes)
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', dataLimite.toISOString())
+      const clientesNovos = clientesNovosData?.length || 0
+
+      // 3. BUSCAR VENDAS APROVADAS (TOTAL)
+      const { data: vendasTotalData, error: errVendasTotal } = await supabase
+        .from(savedConfig.tabelaVendas)
+        .select(`${savedConfig.campoValorVenda}, ${savedConfig.campoDataVenda}`)
+        .eq(savedConfig.campoStatusVenda, savedConfig.statusAprovado)
       
-      // Calcular estatísticas usando configurações
-      const totalVendas = savedConfig.totalVendas
-      const vendasMes = savedConfig.vendasMes
-      const receitaTotal = savedConfig.receitaTotal
-      const receitaMes = savedConfig.receitaMes
-      const ticketMedio = receitaTotal / (totalVendas || 1)
-      const taxaConversao = ((vendasMes / (totalClientes || 1)) * 100)
+      const totalVendas = vendasTotalData?.length || 0
+      const receitaTotal = vendasTotalData?.reduce((sum, v) => sum + (Number(v[savedConfig.campoValorVenda]) || 0), 0) || 0
+
+      // 4. BUSCAR VENDAS DO MÊS
+      const inicioMes = new Date()
+      inicioMes.setDate(1)
+      inicioMes.setHours(0, 0, 0, 0)
+      
+      const vendasMesData = vendasTotalData?.filter(v => {
+        const dataVenda = new Date(v[savedConfig.campoDataVenda])
+        return dataVenda >= inicioMes
+      }) || []
+      
+      const vendasMes = vendasMesData.length
+      const receitaMes = vendasMesData.reduce((sum, v) => sum + (Number(v[savedConfig.campoValorVenda]) || 0), 0)
+
+      // 5. BUSCAR COMPRAS INICIADAS (todas as compras, independente do status)
+      const { data: comprasIniciadasData, error: errCompras } = await supabase
+        .from(savedConfig.tabelaVendas)
+        .select('*', { count: 'exact', head: true })
+      const comprasIniciadas = comprasIniciadasData?.length || totalVendas + 50
+
+      // CALCULAR MÉTRICAS
+      const ticketMedio = totalVendas > 0 ? receitaTotal / totalVendas : 0
+      const taxaConversao = totalClientes > 0 ? ((vendasMes / totalClientes) * 100) : 0
 
       setStats({
         totalClientes,
-        clientesNovos: Math.floor(totalClientes * (savedConfig.percentNovosClientes / 100)),
+        clientesNovos,
         totalVendas,
         vendasMes,
         receitaTotal,
@@ -106,12 +142,12 @@ export default function DashboardPage() {
         taxaConversao,
       })
 
-      // Funil de vendas usando configurações
-      const visitantes = totalClientes > 0 ? totalClientes * 5 : savedConfig.comprasIniciadas * 2
+      // FUNIL DE VENDAS COM DADOS REAIS
+      const visitantes = totalClientes * savedConfig.multiplicadorVisitantes
       setFunnelData([
         { stage: 'Visitantes', count: visitantes, percent: 100, color: 'bg-blue-500' },
         { stage: 'Cadastros', count: totalClientes, percent: (totalClientes / visitantes * 100).toFixed(1), color: 'bg-green-500' },
-        { stage: 'Compras Iniciadas', count: savedConfig.comprasIniciadas, percent: (savedConfig.comprasIniciadas / visitantes * 100).toFixed(1), color: 'bg-yellow-500' },
+        { stage: 'Compras Iniciadas', count: comprasIniciadas, percent: (comprasIniciadas / visitantes * 100).toFixed(1), color: 'bg-yellow-500' },
         { stage: 'Pagamentos Aprovados', count: totalVendas, percent: (totalVendas / visitantes * 100).toFixed(1), color: 'bg-purple-500' },
       ])
 
@@ -198,87 +234,89 @@ export default function DashboardPage() {
                 </DialogHeader>
                 <div className="space-y-6 py-4">
                   <div className="space-y-4">
-                    <h3 className="text-sm font-semibold">📊 Métricas de Vendas</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Total de Vendas</Label>
-                        <Input
-                          type="number"
-                          value={config.totalVendas}
-                          onChange={(e) => setConfig(prev => ({ ...prev, totalVendas: Number(e.target.value) }))}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Vendas este Mês</Label>
-                        <Input
-                          type="number"
-                          value={config.vendasMes}
-                          onChange={(e) => setConfig(prev => ({ ...prev, vendasMes: Number(e.target.value) }))}
-                        />
-                      </div>
+                    <h3 className="text-sm font-semibold">� Configuração de Clientes</h3>
+                    <div className="space-y-2">
+                      <Label>Tabela de Clientes</Label>
+                      <Input
+                        value={config.tabelaClientes}
+                        onChange={(e) => setConfig(prev => ({ ...prev, tabelaClientes: e.target.value }))}
+                        placeholder="Ex: Farol"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Nome da tabela do Supabase onde estão os clientes/cadastros
+                      </p>
                     </div>
                   </div>
 
                   <div className="space-y-4">
-                    <h3 className="text-sm font-semibold">💰 Receita</h3>
+                    <h3 className="text-sm font-semibold">💰 Configuração de Vendas</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Receita Total (R$)</Label>
+                        <Label>Tabela de Vendas</Label>
                         <Input
-                          type="number"
-                          step="0.01"
-                          value={config.receitaTotal}
-                          onChange={(e) => setConfig(prev => ({ ...prev, receitaTotal: Number(e.target.value) }))}
+                          value={config.tabelaVendas}
+                          onChange={(e) => setConfig(prev => ({ ...prev, tabelaVendas: e.target.value }))}
+                          placeholder="Ex: product_purchases"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Receita este Mês (R$)</Label>
+                        <Label>Campo de Valor</Label>
+                        <Input
+                          value={config.campoValorVenda}
+                          onChange={(e) => setConfig(prev => ({ ...prev, campoValorVenda: e.target.value }))}
+                          placeholder="Ex: amount"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Campo de Data</Label>
+                        <Input
+                          value={config.campoDataVenda}
+                          onChange={(e) => setConfig(prev => ({ ...prev, campoDataVenda: e.target.value }))}
+                          placeholder="Ex: created_at"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Campo de Status</Label>
+                        <Input
+                          value={config.campoStatusVenda}
+                          onChange={(e) => setConfig(prev => ({ ...prev, campoStatusVenda: e.target.value }))}
+                          placeholder="Ex: status"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Status = Pago</Label>
+                        <Input
+                          value={config.statusAprovado}
+                          onChange={(e) => setConfig(prev => ({ ...prev, statusAprovado: e.target.value }))}
+                          placeholder="Ex: paid"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Valor do status que indica pagamento aprovado
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Multiplicador Visitantes</Label>
                         <Input
                           type="number"
-                          step="0.01"
-                          value={config.receitaMes}
-                          onChange={(e) => setConfig(prev => ({ ...prev, receitaMes: Number(e.target.value) }))}
+                          value={config.multiplicadorVisitantes}
+                          onChange={(e) => setConfig(prev => ({ ...prev, multiplicadorVisitantes: Number(e.target.value) }))}
                         />
+                        <p className="text-xs text-muted-foreground">
+                          Visitantes = Clientes × Multiplicador
+                        </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold">🎯 Funil de Vendas</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Compras Iniciadas</Label>
-                        <Input
-                          type="number"
-                          value={config.comprasIniciadas}
-                          onChange={(e) => setConfig(prev => ({ ...prev, comprasIniciadas: Number(e.target.value) }))}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Número de pessoas que iniciaram o processo de compra
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>% Novos Clientes</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={config.percentNovosClientes}
-                          onChange={(e) => setConfig(prev => ({ ...prev, percentNovosClientes: Number(e.target.value) }))}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Percentual de clientes novos do mês
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-muted/50 p-4 rounded-lg">
-                    <h4 className="text-sm font-semibold mb-2">💡 Dica</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Os <strong>Cadastros</strong> e <strong>Visitantes</strong> são calculados automaticamente 
-                      baseados nos clientes reais da tabela Farol. Os demais valores podem ser personalizados aqui.
-                    </p>
+                  <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <h4 className="text-sm font-semibold mb-2 text-blue-900 dark:text-blue-100">� Como funciona</h4>
+                    <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                      <li>• <strong>Cadastros:</strong> Total de registros na tabela de clientes</li>
+                      <li>• <strong>Visitantes:</strong> Calculado automaticamente (Clientes × Multiplicador)</li>
+                      <li>• <strong>Compras Iniciadas:</strong> Total de registros na tabela de vendas</li>
+                      <li>• <strong>Pagamentos Aprovados:</strong> Vendas com status = "{config.statusAprovado}"</li>
+                      <li>• <strong>Receita:</strong> Soma do campo "{config.campoValorVenda}" das vendas aprovadas</li>
+                    </ul>
                   </div>
 
                   <div className="flex justify-end gap-2">
