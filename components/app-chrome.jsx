@@ -80,18 +80,26 @@ export default function AppChrome({ children }) {
       const { data: sessionData } = await supabase.auth.getSession()
       const user = sessionData?.session?.user
       const role = user?.user_metadata?.role || ''
+      console.log('🔍 [App Chrome] Loading SMS balance...', { role, isAdmin: role === 'admin' })
       setIsAdmin(role === 'admin')
       
       // Buscar saldo de SMS apenas para admin
       if (role === 'admin') {
         const token = sessionData?.session?.access_token
+        console.log('🔍 [App Chrome] Fetching SMS balance from API...', { hasToken: !!token })
         const res = await fetch('/api/disparo-sms/balance', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
         const js = await res.json()
+        console.log('🔍 [App Chrome] SMS balance response:', { ok: res.ok, status: res.status, balance: js?.balance, data: js })
         if (res.ok && js?.balance) {
           setSmsBalance(js.balance)
+          console.log('✅ [App Chrome] SMS balance set:', js.balance)
+        } else {
+          console.error('❌ [App Chrome] Failed to load SMS balance:', js)
         }
       }
-    } catch {}
+    } catch (e) {
+      console.error('❌ [App Chrome] Exception loading SMS balance:', e)
+    }
   }
 
   useEffect(() => {

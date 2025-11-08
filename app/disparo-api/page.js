@@ -61,6 +61,7 @@ export default function DisparoApiPage() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [activeTab, setActiveTab] = useState('credenciais')
 
   // Credentials
   const [credentials, setCredentials] = useState([]) // lista
@@ -550,14 +551,9 @@ export default function DisparoApiPage() {
         localStorage.removeItem('whatsapp_csv_data')
         localStorage.removeItem('whatsapp_csv_source')
         console.log('✅ [WhatsApp Page] CSV loaded successfully')
-        // Navegar para a aba de disparo
-        setTimeout(() => {
-          const hash = window.location.hash
-          if (hash === '#disparo') {
-            const element = document.getElementById('disparo')
-            if (element) element.scrollIntoView({ behavior: 'smooth' })
-          }
-        }, 100)
+        // Mudar para a aba de disparo
+        setActiveTab('disparo')
+        console.log('✅ [WhatsApp Page] Changed to Disparo tab')
       }
     } catch (e) {
       console.error('❌ [WhatsApp Page] Error loading WhatsApp data from localStorage:', e)
@@ -595,7 +591,7 @@ export default function DisparoApiPage() {
       {message ? <div className="text-green-600 text-sm">{message}</div> : null}
       {error ? <div className="text-red-600 text-sm">{error}</div> : null}
 
-  <Tabs defaultValue="credenciais">
+  <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="credenciais">Credenciais</TabsTrigger>
           <TabsTrigger value="disparo">Disparo</TabsTrigger>
