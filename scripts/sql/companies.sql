@@ -14,14 +14,31 @@ CREATE TABLE IF NOT EXISTS companies (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Adicionar coluna company_id na tabela users se não existir
+-- Adicionar colunas na tabela users se não existirem
 DO $$ 
 BEGIN
+  -- Adicionar company_id
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'users' AND column_name = 'company_id'
   ) THEN
     ALTER TABLE users ADD COLUMN company_id BIGINT REFERENCES companies(id) ON DELETE SET NULL;
+  END IF;
+  
+  -- Adicionar active
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'users' AND column_name = 'active'
+  ) THEN
+    ALTER TABLE users ADD COLUMN active BOOLEAN DEFAULT true;
+  END IF;
+  
+  -- Adicionar role (se não existir)
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'users' AND column_name = 'role'
+  ) THEN
+    ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
   END IF;
 END $$;
 
