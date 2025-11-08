@@ -32,6 +32,7 @@ export async function POST(request) {
     const body = await request.json()
     const amount = parseFloat(body.amount)
     const description = body.description || body.email || user.email
+    const productKey = body.productKey // Detecta se é compra de produto
 
     // Valida valor
     if (isNaN(amount) || amount <= 0) {
@@ -41,6 +42,8 @@ export async function POST(request) {
     // Busca configurações de pagamento
     let provider = 'picpay'
     let settings = null
+    let productData = null
+    
     try {
       const { data: settingsData } = await supabaseAdmin
         .from('global_settings')
@@ -51,8 +54,30 @@ export async function POST(request) {
       provider = settings.provider || 'picpay'
     } catch {}
 
+    // Se for compra de produto, busca dados do produto
+    if (productKey) {
+      try {
+        const { data: prod } = await supabaseAdmin
+          .from('products')
+          .select('id, key, name, sectors')
+          .eq('key', productKey)
+          .single()
+        
+        if (!prod) {
+          return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 })
+        }
+        productData = prod
+      } catch (e) {
+        return NextResponse.json({ error: 'Erro ao buscar produto' }, { status: 500 })
+      }
+    }
+
     // Gera referenceId único
-    const referenceId = `credits_${user.id}_${Date.now()}`
+    // IMPORTANTE: Para produtos usa "product_", para créditos usa "credits_"
+    const referenceId = productKey 
+      ? `product_${productKey}_${user.id}_${Date.now()}`
+      : `credits_${user.id}_${Date.now()}`
+    
     const baseUrl = process.env.APP_BASE_URL || new URL(request.url).origin
 
     // Processa pagamento com o provedor selecionado
@@ -117,6 +142,26 @@ export async function POST(request) {
         )
       }
 
+      // Se for compra de produto, cria registro em product_purchases
+      if (productData) {
+        try {
+          await supabaseAdmin
+            .from('product_purchases')
+            .insert({
+              user_id: user.id,
+              product_id: productData.id,
+              reference_id: referenceId,
+              amount: amount,
+              status: 'pending',
+              payment_method: 'pix',
+              provider: 'mercadopago'
+            })
+          console.log('✅ Registro de compra criado:', referenceId)
+        } catch (e) {
+          console.error('❌ Erro ao criar registro de compra:', e)
+        }
+      }
+
       // Forma unificada de resposta (flatten + data)
       const flatResponse = {
         paymentId: mpData.id,
@@ -168,6 +213,26 @@ export async function POST(request) {
       }
 
       const picpayData = await picpayResponse.json()
+
+      // Se for compra de produto, cria registro em product_purchases
+      if (productData) {
+        try {
+          await supabaseAdmin
+            .from('product_purchases')
+            .insert({
+              user_id: user.id,
+              product_id: productData.id,
+              reference_id: referenceId,
+              amount: amount,
+              status: 'pending',
+              payment_method: 'pix',
+              provider: 'picpay'
+            })
+          console.log('✅ Registro de compra criado (PicPay):', referenceId)
+        } catch (e) {
+          console.error('❌ Erro ao criar registro de compra (PicPay):', e)
+        }
+      }
 
       // Retorna dados do PicPay
       const picpayQrContent = picpayData?.qrcode?.content || picpayData?.qrcode?.qrcodeContent || null

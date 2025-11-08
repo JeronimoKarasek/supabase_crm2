@@ -25,12 +25,41 @@ export const dynamic = 'force-dynamic'
 
 async function grantSectorsToUser(userId, sectors){
   try {
-    const { data: u } = await supabaseAdmin.auth.admin.getUserById(userId)
+    if (!userId || !Array.isArray(sectors) || sectors.length === 0) {
+      console.warn('[grantSectorsToUser] Invalid parameters', { userId, sectors })
+      return
+    }
+
+    const { data: u, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(userId)
+    if (getUserError) {
+      console.error('[grantSectorsToUser] Error getting user', getUserError)
+      return
+    }
+
     const meta = u?.user?.user_metadata || {}
     const current = Array.isArray(meta.sectors) ? meta.sectors : []
-    const merged = Array.from(new Set([ ...current, ...(sectors || []) ]))
-    await supabaseAdmin.auth.admin.updateUserById(userId, { user_metadata: { ...meta, sectors: merged } })
-  } catch {}
+    const merged = Array.from(new Set([ ...current, ...sectors ]))
+    
+    console.info('[grantSectorsToUser] Updating user sectors', { 
+      userId, 
+      currentSectors: current, 
+      newSectors: sectors, 
+      mergedSectors: merged 
+    })
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, { 
+      user_metadata: { ...meta, sectors: merged } 
+    })
+
+    if (updateError) {
+      console.error('[grantSectorsToUser] Error updating user', updateError)
+      return
+    }
+
+    console.info('[grantSectorsToUser] User sectors updated successfully', { userId, sectors: merged })
+  } catch (e) {
+    console.error('[grantSectorsToUser] Exception', e)
+  }
 }
 
 export async function POST(request) {
@@ -80,7 +109,8 @@ export async function POST(request) {
       
       if (!externalReference) return NextResponse.json({ ok: true })
 
-      // Detecta se é adição de créditos (referenceId inicia com "credits_")
+      // Detecta se é adição de créditos (referenceId inicia com "credits_" e não é compra de produto)
+      // Produtos usam padrão "product_*" então não entram nesta condição
       if (externalReference.startsWith('credits_') && status === 'approved') {
         try {
           // Extrai userId do referenceId: credits_{userId}_{timestamp}
@@ -182,7 +212,12 @@ export async function POST(request) {
           
           if (prod) {
             // Concede setores do produto ao usuário
+            console.info('[MP Webhook] Granting sectors to user', { userId: purchase.user_id, sectors: prod.sectors })
             await grantSectorsToUser(purchase.user_id, prod.sectors)
+            console.info('[MP Webhook] Sectors granted successfully')
+            
+            // REMOVIDO: Não adiciona créditos ao comprar produto (apenas setores)
+            // Créditos só são adicionados em transações com referenceId "credits_*"
             
             // Chama webhook do produto se configurado
             if (prod.webhook_url) {
