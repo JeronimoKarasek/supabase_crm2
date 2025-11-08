@@ -20,11 +20,11 @@ export default function FarolChatPresentation() {
     'https://via.placeholder.com/1200x560?text=FarolChat+Relat%C3%B3rios',
   ]
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto py-8 px-4 space-y-6">
+    <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
+      <div className="container mx-auto py-6 px-6 space-y-6">
         <div>
-          <div className="text-4xl font-bold">FarolChat</div>
-          <div className="text-muted-foreground">CRM de conversação de whatsapp</div>
+    <div className="text-4xl font-bold text-foreground">FarolChat</div>
+    <div className="text-muted-foreground">CRM de conversação de whatsapp</div>
         </div>
 
         {images.map((src, i) => (
@@ -36,8 +36,8 @@ export default function FarolChatPresentation() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Por que FarolChat?</CardTitle>
-            <CardDescription>Plataforma moderna, aberta e escalável</CardDescription>
+            <CardTitle className="text-black dark:text-white">Por que FarolChat?</CardTitle>
+            <CardDescription className="text-black/70 dark:text-white/70">Plataforma moderna, aberta e escalável</CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Feature title="Inbox Colaborativo" desc="Atenda múltiplos clientes simultaneamente, encaminhe conversas e gerencie filas com eficiência." />

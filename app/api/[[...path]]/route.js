@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '../../../lib/supabase-admin.js'
+import { supabaseAdmin } from '@/lib/supabase-admin.js'
+
+export const dynamic = 'force-dynamic'
 
 function unauthorized(msg = 'Unauthorized') {
   return NextResponse.json({ error: msg }, { status: 401 })
@@ -143,7 +145,7 @@ export async function GET(request) {
       }
       const periodStart = searchParams.get('periodStart')
       const periodEnd = searchParams.get('periodEnd')
-      const dateColumn = 'horario da ultima resposta'
+      const dateColumn = searchParams.get('dateColumn') || 'horario da ultima resposta'
       const pageParam = parseInt(searchParams.get('page') || '1', 10)
       const pageSizeParam = parseInt(searchParams.get('pageSize') || '100', 10)
       const page = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam
@@ -178,12 +180,8 @@ export async function GET(request) {
       }
 
       // Period filter (if provided)
-      if (periodStart) {
-        query = query.gte(dateColumn, periodStart)
-      }
-      if (periodEnd) {
-        query = query.lte(dateColumn, periodEnd)
-      }
+      if (periodStart && dateColumn) query = query.gte(dateColumn, periodStart)
+      if (periodEnd && dateColumn) query = query.lte(dateColumn, periodEnd)
 
       // Enforce user-required filters
       const requiredFilters = Array.isArray(filtersByTable[tableName]) ? filtersByTable[tableName] : []

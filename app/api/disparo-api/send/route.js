@@ -1,0 +1,156 @@
+import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+
+export const dynamic = 'force-dynamic'
+
+function unauthorized(msg = 'Unauthorized') { return NextResponse.json({ error: msg }, { status: 401 }) }
+
+async function getUserFromRequest(request) {
+  const auth = request.headers.get('authorization') || request.headers.get('Authorization')
+  if (!auth || !auth.toLowerCase().startsWith('bearer ')) return null
+  const token = auth.split(' ')[1]
+  if (!token) return null
+  const { data, error } = await supabaseAdmin.auth.getUser(token)
+  if (error) return null
+  return data?.user || null
+}
+
+async function getCreds(userId) {
+  try {
+    const { data, error } = await supabaseAdmin.from('whatsapp_credentials').select('*').eq('user_id', userId).limit(1)
+    if (!error && data && data[0]) return data[0]
+  } catch {}
+  // fallback: metadata
+  const { data: u } = await supabaseAdmin.auth.admin.getUserById(userId)
+  return (u?.user?.user_metadata?.whatsapp) || null
+}
+
+async function sendTemplateMessage({ access_token, phone_number_id, to, template_name, template_language, components, header_image_url }) {
+  const endpoint = `https://graph.facebook.com/v19.0/${encodeURIComponent(phone_number_id)}/messages`
+  
+  // Construct template components
+  const templateComponents = []
+  
+  // Add header component if image URL provided
+  if (header_image_url) {
+    templateComponents.push({
+      type: 'header',
+      parameters: [
+        {
+          type: 'image',
+          image: {
+            link: header_image_url
+          }
+        }
+      ]
+    })
+  }
+  
+  // Add body component if parameters exist
+  if (Array.isArray(components) && components.length) {
+    templateComponents.push({
+      type: 'body',
+      parameters: components
+    })
+  }
+  
+  const body = {
+    messaging_product: 'whatsapp',
+    to: String(to || '').startsWith('+') ? String(to) : `+${String(to || '')}`,
+    type: 'template',
+    template: {
+      name: template_name,
+      language: { code: template_language || 'pt_BR' },
+      ...(templateComponents.length ? { components: templateComponents } : {}),
+    },
+  }
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const err = new Error(json?.error?.message || 'Falha no envio')
+    err.details = json
+    throw err
+  }
+  return json
+}
+
+export async function POST(request) {
+  const user = await getUserFromRequest(request)
+  if (!user) return unauthorized()
+  try {
+    const body = await request.json()
+    const batch_id = body?.batch_id || ''
+    const includeFailed = !!body?.include_failed
+    if (!batch_id) return NextResponse.json({ error: 'batch_id obrigatório' }, { status: 400 })
+
+    // load queued rows for this batch (they share the same credential_id)
+    let query = supabaseAdmin
+      .from('disparo_crm_api')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('batch_id', batch_id)
+    if (includeFailed) {
+      query = query.in('status', ['queued','failed']).lt('attempt_count', 3)
+    } else {
+      query = query.eq('status', 'queued')
+    }
+    query = query.limit(500)
+    const { data: rows, error } = await query
+
+    if (error) {
+      if (error?.message?.toLowerCase()?.includes('does not exist') || error?.code === '42P01') {
+        return NextResponse.json({ error: 'Tabela disparo_crm_api não encontrada. Execute o SQL sugerido.', missingTable: true }, { status: 400 })
+      }
+      return NextResponse.json({ error: 'Falha ao consultar base', details: error.message }, { status: 400 })
+    }
+
+    if (!rows || !rows.length) return NextResponse.json({ ok: true, sent: 0, failed: 0 })
+
+    // load credential
+    const credId = rows[0].credential_id
+    const { data: credRow, error: credErr } = await supabaseAdmin.from('whatsapp_credentials').select('*').eq('id', credId).eq('user_id', user.id).single()
+    if (credErr || !credRow?.access_token) return NextResponse.json({ error: 'Credenciais ausentes' }, { status: 400 })
+
+    let sent = 0, failed = 0
+    const errorMap = new Map()
+    for (const r of rows || []) {
+      try {
+        // parse template components if stored as string
+        let comps = []
+        if (Array.isArray(r.template_components)) comps = r.template_components
+        else if (typeof r.template_components === 'string') { try { const parsed = JSON.parse(r.template_components); if (Array.isArray(parsed)) comps = parsed } catch {} }
+
+        const json = await sendTemplateMessage({
+          access_token: credRow.access_token,
+          phone_number_id: r.phone_number_id,
+          to: r.phone,
+          template_name: r.template_name,
+          template_language: r.template_language,
+          components: comps,
+          header_image_url: r.header_image_url || null,
+        })
+        const msgId = json?.messages?.[0]?.id || null
+        await supabaseAdmin.from('disparo_crm_api').update({ status: 'sent', message_id: msgId, sent_at: new Date().toISOString(), attempt_count: (r.attempt_count || 0) + 1, updated_at: new Date().toISOString() }).eq('id', r.id)
+        sent++
+      } catch (e) {
+        await supabaseAdmin.from('disparo_crm_api').update({ status: 'failed', error_message: e.message || 'erro', attempt_count: (r.attempt_count || 0) + 1, updated_at: new Date().toISOString() }).eq('id', r.id)
+        failed++
+        const key = (e?.message || 'erro').slice(0, 160)
+        errorMap.set(key, (errorMap.get(key) || 0) + 1)
+        console.error('[DisparoAPI] Falha no envio', { batch_id, row_id: r.id, phone: r.phone, error: e?.message, details: e?.details })
+      }
+    }
+
+    const sample_errors = Array.from(errorMap.entries()).slice(0, 5).map(([message, count]) => ({ message, count }))
+    return NextResponse.json({ ok: true, sent, failed, sample_errors })
+  } catch (e) {
+    return NextResponse.json({ error: 'Payload inválido', details: e.message }, { status: 400 })
+  }
+}

@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -9,26 +9,27 @@ import { supabase } from '@/lib/supabase'
 export default function AssinarFarolChat() {
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({ nome: '', telefone: '', cpf: '', email: '', empresa: '' })
-  const [settings, setSettings] = useState({ userPrice: 0, connectionPrice: 0 })
+  const [pricing, setPricing] = useState({ userPrice: 0, connectionPrice: 0 })
   const [qty, setQty] = useState({ users: 1, connections: 1 })
   const [isSubmitting, setSubmitting] = useState(false)
-  const [payment, setPayment] = useState(null) // { paymentUrl, qrcode }
+  const [payment, setPayment] = useState(null)
   const [message, setMessage] = useState('')
 
   useEffect(() => {
     ;(async () => {
       try {
-        const res = await fetch('/api/global-settings')
+        const res = await fetch('/api/products/public?key=farolchat')
         const json = await res.json()
-        const up = Number(json?.settings?.farolChat?.userPrice || 0)
-        const cp = Number(json?.settings?.farolChat?.connectionPrice || 0)
-        setSettings({ userPrice: up, connectionPrice: cp })
+        const p = json?.product?.pricing || {}
+        const up = Number(p.userPrice || 0)
+        const cp = Number(p.connectionPrice || 0)
+        setPricing({ userPrice: up, connectionPrice: cp })
       } catch {}
     })()
   }, [])
 
-  const totalUsers = useMemo(() => (qty.users || 0) * (settings.userPrice || 0), [qty.users, settings.userPrice])
-  const totalConnections = useMemo(() => (qty.connections || 0) * (settings.connectionPrice || 0), [qty.connections, settings.connectionPrice])
+  const totalUsers = useMemo(() => (qty.users || 0) * (pricing.userPrice || 0), [qty.users, pricing.userPrice])
+  const totalConnections = useMemo(() => (qty.connections || 0) * (pricing.connectionPrice || 0), [qty.connections, pricing.connectionPrice])
   const total = useMemo(() => totalUsers + totalConnections, [totalUsers, totalConnections])
 
   const onNext = () => {
@@ -45,6 +46,8 @@ export default function AssinarFarolChat() {
     try {
       const referenceId = `farol_${Date.now()}`
       const body = {
+        productKey: 'farolchat',
+        returnPath: '/produtos/farolchat/assinar',
         amount: Number(total.toFixed(2)),
         referenceId,
         buyer: {
@@ -54,15 +57,15 @@ export default function AssinarFarolChat() {
           email: form.email,
           phone: form.telefone,
         },
+        buyerForm: { nome: form.nome, cpf: form.cpf, email: form.email, telefone: form.telefone, empresa: form.empresa },
         metadata: { empresa: form.empresa, users: qty.users, connections: qty.connections }
       }
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch('/api/picpay/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) })
+      const res = await fetch('/api/payments/add-credits', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Falha ao iniciar pagamento')
-      setPayment({ paymentUrl: json.paymentUrl, qrcode: json.qrcode })
-      window.open(json.paymentUrl, '_blank', 'noopener')
+      setPayment({ qrCode: json.qrCode, qrCodeBase64: json.qrCodeBase64, paymentId: json.paymentId })
     } catch (e) {
       setMessage(e?.message || 'Erro ao criar pagamento')
       setTimeout(() => setMessage(''), 3000)
@@ -72,28 +75,31 @@ export default function AssinarFarolChat() {
   }
 
   const checkStatus = async () => {
-    if (!payment) return
+    if (!payment?.paymentId) return
     try {
-      const url = new URL(payment.paymentUrl)
-      const ref = new URLSearchParams(url.search).get('referenceId') || ''
-      const res = await fetch(`/api/picpay/status?ref=${encodeURIComponent(ref)}`)
+      const res = await fetch(`https://api.mercadopago.com/v1/payments/${payment.paymentId}`, {
+        headers: { 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_MERCADOPAGO_ACCESS_TOKEN || ''}` }
+      })
       const json = await res.json()
-      if (json.status === 'paid') {
+      if (json.status === 'approved') {
         setStep(3)
       } else {
         setMessage(`Status: ${json.status}`)
         setTimeout(() => setMessage(''), 2000)
       }
-    } catch {}
+    } catch {
+      setMessage('Erro ao verificar status')
+      setTimeout(() => setMessage(''), 2000)
+    }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto py-8 px-4">
+    <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
+      <div className="container mx-auto py-6 px-6">
         <Card className="max-w-3xl mx-auto">
           <CardHeader>
-            <CardTitle>Assinar FarolChat</CardTitle>
-            <CardDescription>Complete seu cadastro e finalize a assinatura</CardDescription>
+            <CardTitle className="text-foreground">Assinar FarolChat</CardTitle>
+            <CardDescription className="text-muted-foreground">Complete seu cadastro e finalize a assinatura</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {message && <div className="text-amber-600 text-sm">{message}</div>}
@@ -116,12 +122,12 @@ export default function AssinarFarolChat() {
                     <div className="text-sm font-medium">Usuários</div>
                     <Input type="number" min={0} value={qty.users} onChange={(e)=> setQty(prev => ({...prev, users: Number(e.target.value || 0)}))} />
                   </div>
-                  <div className="text-right text-sm">R$ {settings.userPrice?.toFixed?.(2) || Number(settings.userPrice).toFixed(2)} cada — Total: <span className="font-medium">R$ {totalUsers.toFixed(2)}</span></div>
+                  <div className="text-right text-sm">R$ {pricing.userPrice?.toFixed?.(2) || Number(pricing.userPrice).toFixed(2)} cada  Total: <span className="font-medium">R$ {totalUsers.toFixed(2)}</span></div>
                   <div>
                     <div className="text-sm font-medium">Conexões</div>
                     <Input type="number" min={0} value={qty.connections} onChange={(e)=> setQty(prev => ({...prev, connections: Number(e.target.value || 0)}))} />
                   </div>
-                  <div className="text-right text-sm">R$ {settings.connectionPrice?.toFixed?.(2) || Number(settings.connectionPrice).toFixed(2)} cada — Total: <span className="font-medium">R$ {totalConnections.toFixed(2)}</span></div>
+                  <div className="text-right text-sm">R$ {pricing.connectionPrice?.toFixed?.(2) || Number(pricing.connectionPrice).toFixed(2)} cada  Total: <span className="font-medium">R$ {totalConnections.toFixed(2)}</span></div>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="text-lg">Valor total</div>
@@ -132,18 +138,27 @@ export default function AssinarFarolChat() {
                   <Button onClick={concluir} disabled={isSubmitting || total <= 0}>{isSubmitting ? 'Processando...' : 'Concluir'}</Button>
                 </div>
                 {payment && (
-                  <div className="border rounded p-3 space-y-2">
-                    <div className="text-sm">Abra o PicPay no link gerado. Após o pagamento, clique em "Verificar".</div>
-                    {payment.qrcode?.base64 && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={`data:image/png;base64,${payment.qrcode.base64}`} alt="QR" className="w-48 h-48" />
+                  <div className="border rounded p-3 space-y-3">
+                    <div className="text-sm font-medium">Escaneie o QR Code para pagar via PIX</div>
+                    {payment.qrCodeBase64 && (
+                      <div className="flex flex-col items-center gap-3 bg-white p-4 rounded">
+                        <img src={`data:image/png;base64,${payment.qrCodeBase64}`} alt="QR Code PIX" className="w-64 h-64" />
+                        <div className="text-xs text-muted-foreground text-center max-w-sm break-all">
+                          {payment.qrCode}
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => {
+                          navigator.clipboard.writeText(payment.qrCode)
+                          setMessage('Código PIX copiado!')
+                          setTimeout(() => setMessage(''), 2000)
+                        }}>
+                          Copiar código PIX
+                        </Button>
+                      </div>
                     )}
-                    <div className="flex gap-2">
-                      <Button variant="outline" asChild>
-                        <a href={payment.paymentUrl} target="_blank" rel="noopener">Abrir no PicPay</a>
-                      </Button>
-                      <Button variant="secondary" onClick={checkStatus}>Verificar</Button>
+                    <div className="text-xs text-muted-foreground">
+                      Após efetuar o pagamento, clique em "Verificar Status" ou aguarde a confirmação automática.
                     </div>
+                    <Button variant="secondary" onClick={checkStatus} className="w-full">Verificar Status</Button>
                   </div>
                 )}
               </div>
@@ -160,4 +175,3 @@ export default function AssinarFarolChat() {
     </div>
   )
 }
-

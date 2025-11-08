@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [branding, setBranding] = useState({ siteName: 'CRM', siteSubtitle: 'Supabase Viewer', logoUrl: '' })
+  const [branding, setBranding] = useState({ siteName: 'FarolTech', siteSubtitle: 'Iluminando seu caminho', logoUrl: '' })
 
   useEffect(() => {
     ;(async () => {
@@ -21,8 +21,8 @@ export default function LoginPage() {
         const res = await fetch('/api/global-settings')
         const json = await res.json()
         if (res.ok) setBranding({
-          siteName: json?.settings?.siteName || 'CRM',
-          siteSubtitle: json?.settings?.siteSubtitle || 'Supabase Viewer',
+          siteName: json?.settings?.siteName || 'FarolTech',
+          siteSubtitle: json?.settings?.siteSubtitle || 'Iluminando seu caminho',
           logoUrl: json?.settings?.logoUrl || '',
         })
       } catch {}

@@ -34,32 +34,85 @@ export default function AcessoBancoPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto py-8 px-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Acesso Banco</CardTitle>
-            <CardDescription>Informe suas credenciais para cada banco configurado</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {banks.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Nenhum banco configurado. Cadastre em Configuração.</div>
-            ) : banks.map((b) => (
-              <div key={b.key} className="p-3 border rounded space-y-2">
-                <div className="font-medium">{b.name}</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {(b.fields || []).map((f, idx) => (
-                    <Input key={idx} placeholder={f.label || f.key} value={creds?.[b.key]?.[f.key] || ''} onChange={(e) => setCreds(prev => ({ ...prev, [b.key]: { ...(prev[b.key]||{}), [f.key]: e.target.value } }))} />
-                  ))}
+    <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
+      <div className="max-w-full mx-auto py-6 px-6 space-y-6">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold text-foreground tracking-wide">Acesso Banco</h1>
+          <p className="text-sm text-muted-foreground">Informe suas credenciais para cada banco configurado</p>
+        </div>
+        <div className="space-y-5">
+          {banks.length === 0 ? (
+            <div className="text-sm text-muted-foreground">Nenhum banco configurado. Cadastre em Configuração.</div>
+          ) : (
+            banks.map((b) => (
+              <div
+                key={b.key}
+                className="rounded-lg border border-border bg-card p-5 shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Banco</div>
+                    <div className="text-lg font-semibold text-foreground">{b.name || b.key}</div>
+                  </div>
+                  <div className="hidden md:flex items-center gap-2 text-[10px] font-medium">
+                    {b.forBatch ? <span className="px-2 py-1 rounded bg-muted text-muted-foreground border border-border">Lote</span> : null}
+                    {b.forSimular ? <span className="px-2 py-1 rounded bg-muted text-muted-foreground border border-border">Simular/Digitar</span> : null}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {(b.fields || []).map((f, idx) => {
+                    const val = creds?.[b.key]?.[f.key] || ''
+                    const label = f.label || f.key
+                    if (f.type === 'select' && Array.isArray(f.options) && f.options.length > 0) {
+                      return (
+                        <div key={idx} className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">{label}</label>
+                          <select
+                            className="h-10 px-2 rounded border border-border bg-muted text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                            value={val}
+                            onChange={(e) =>
+                              setCreds((prev) => ({
+                                ...prev,
+                                [b.key]: { ...(prev[b.key] || {}), [f.key]: e.target.value },
+                              }))
+                            }
+                          >
+                            <option value="" className="text-black">Selecione...</option>
+                            {f.options.map((o, i) => (
+                              <option key={i} value={o} className="text-black">
+                                {o}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div key={idx} className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">{label}</label>
+                        <Input
+                          placeholder={label}
+                          value={val}
+                          onChange={(e) =>
+                            setCreds((prev) => ({
+                              ...prev,
+                              [b.key]: { ...(prev[b.key] || {}), [f.key]: e.target.value },
+                            }))
+                          }
+                          className="h-10 bg-muted border border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary/40"
+                        />
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
-            ))}
-            <div className="flex justify-end gap-2 items-center">
-              {message && <div className="text-emerald-600 text-sm">{message}</div>}
-              <Button onClick={save}>Salvar credenciais</Button>
-            </div>
-          </CardContent>
-        </Card>
+            ))
+          )}
+        </div>
+        <div className="flex justify-end gap-3 pt-2">
+          {message && <div className="text-success text-sm">{message}</div>}
+          <Button onClick={save} className="bg-primary hover:bg-accent text-primary-foreground">Salvar credenciais</Button>
+        </div>
       </div>
     </div>
   )

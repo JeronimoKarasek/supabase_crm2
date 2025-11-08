@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -12,13 +13,34 @@ import { supabase } from '@/lib/supabase'
 import { sectors } from '@/lib/sectors'
 
 export default function UsuariosPage() {
+  // Empresas
+  const [empresas, setEmpresas] = useState([])
+  const [empresaNome, setEmpresaNome] = useState('')
+  const [empresaCnpj, setEmpresaCnpj] = useState('')
+  const [empresaResp, setEmpresaResp] = useState('')
+  const [empresaTel, setEmpresaTel] = useState('')
+  const [empresaMsg, setEmpresaMsg] = useState('')
+  const [empresaErr, setEmpresaErr] = useState('')
+  const [empresaUserLimit, setEmpresaUserLimit] = useState('1')
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState('')
+  // const [editEmpresaId, setEditEmpresaId] = useState('') // duplicado, já declarado abaixo
+  const [editEmpresaNome, setEditEmpresaNome] = useState('')
+  const [editEmpresaCnpj, setEditEmpresaCnpj] = useState('')
+  const [editEmpresaResp, setEditEmpresaResp] = useState('')
+  const [editEmpresaTel, setEditEmpresaTel] = useState('')
+  const [editEmpresaUserLimit, setEditEmpresaUserLimit] = useState('1')
+  const [editEmpresaMsg, setEditEmpresaMsg] = useState('')
+  const [editEmpresaErr, setEditEmpresaErr] = useState('')
+  const [editingEmpresaId, setEditingEmpresaId] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState('viewer')
+  const [role, setRole] = useState('user')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [users, setUsers] = useState([])
+  const [currentUserRole, setCurrentUserRole] = useState('user')
+  const [currentUserSectors, setCurrentUserSectors] = useState([])
   const [tables, setTables] = useState([])
   const [selectedSectorsNew, setSelectedSectorsNew] = useState([])
 
@@ -33,7 +55,8 @@ export default function UsuariosPage() {
 
   // edit state
   const [editingId, setEditingId] = useState('')
-  const [editRole, setEditRole] = useState('viewer')
+  const [editRole, setEditRole] = useState('user')
+  const [editEmpresaId, setEditEmpresaId] = useState('')
   const [editAllowedTables, setEditAllowedTables] = useState([])
   const [editSelectedSectors, setEditSelectedSectors] = useState([])
   const [editFilterTable, setEditFilterTable] = useState('')
@@ -42,6 +65,7 @@ export default function UsuariosPage() {
   const [editFilterType, setEditFilterType] = useState('contains')
   const [editFilterValue, setEditFilterValue] = useState('')
   const [editFiltersByTable, setEditFiltersByTable] = useState({})
+  const [editPassword, setEditPassword] = useState('')
 
   const fetchUsers = async () => {
     try {
@@ -71,9 +95,28 @@ export default function UsuariosPage() {
           const names = raw.map(t => typeof t === 'string' ? t : (t.table_name || t))
           setTables(names)
         }
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
+    })()
+    // Carregar empresas
+    ;(async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData?.session?.access_token
+        const res = await fetch('/api/empresas', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+        const data = await res.json()
+        if (res.ok) setEmpresas(data.empresas || [])
+      } catch {}
+    })()
+    // Carregar role do usuário atual
+    ;(async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData?.session?.access_token
+        if (!token) return
+        const { data: me } = await supabase.auth.getUser()
+        if (me?.user?.user_metadata?.role) setCurrentUserRole(me.user.user_metadata.role)
+        if (Array.isArray(me?.user?.user_metadata?.sectors)) setCurrentUserSectors(me.user.user_metadata.sectors)
+      } catch {}
     })()
   }, [])
 
@@ -130,6 +173,7 @@ export default function UsuariosPage() {
         email,
         password,
         role,
+        empresaId: selectedEmpresaId,
         allowedTables: allowedTablesNew,
         filtersByTable: filtersByTableNew,
       }
@@ -145,7 +189,8 @@ export default function UsuariosPage() {
         setMessage('Usuário criado com sucesso.')
         setEmail('')
         setPassword('')
-        setRole('viewer')
+        setRole('user')
+        setSelectedEmpresaId('')
         setAllowedTablesNew([])
         setFilterTableNew('')
         setFilterColumnsNew([])
@@ -192,23 +237,24 @@ export default function UsuariosPage() {
   }
 
   const startEdit = (u) => {
-    setEditingId(u.id)
-    const meta = u.user_metadata || {}
-    setEditRole(meta.role || 'viewer')
-    const allowed = meta.permissions?.allowedTables || []
-    setEditAllowedTables(allowed)
-    setEditSelectedSectors(Array.isArray(meta.sectors) ? meta.sectors : [])
-    // support legacy single filter, but prefer filtersByTable
-    const fbt = meta.permissions?.filtersByTable
-    const legacy = meta.permissions?.filter
-    let initial = {}
-    if (fbt && typeof fbt === 'object') initial = fbt
-    else if (legacy?.table) initial = { [legacy.table]: [{ column: legacy.column, type: legacy.type, value: legacy.value }] }
-    setEditFiltersByTable(initial)
-    setEditFilterTable('')
-    setEditFilterColumn('')
-    setEditFilterType('contains')
-    setEditFilterValue('')
+  setEditingId(u.id)
+  const meta = u.user_metadata || {}
+  setEditRole(meta.role || 'user')
+  setEditEmpresaId(meta.empresaId || '')
+  const allowed = meta.permissions?.allowedTables || []
+  setEditAllowedTables(allowed)
+  setEditSelectedSectors(Array.isArray(meta.sectors) ? meta.sectors : [])
+  // support legacy single filter, mas prefer filtersByTable
+  const fbt = meta.permissions?.filtersByTable
+  const legacy = meta.permissions?.filter
+  let initial = {}
+  if (fbt && typeof fbt === 'object') initial = fbt
+  else if (legacy?.table) initial = { [legacy.table]: [{ column: legacy.column, type: legacy.type, value: legacy.value }] }
+  setEditFiltersByTable(initial)
+  setEditFilterTable('')
+  setEditFilterColumn('')
+  setEditFilterType('contains')
+  setEditFilterValue('')
   }
 
   const toggleAllowedEdit = (t) => {
@@ -247,9 +293,11 @@ export default function UsuariosPage() {
       const payload = {
         id: editingId,
         role: editRole,
+        empresaId: editEmpresaId,
         allowedTables: editAllowedTables,
         filtersByTable: editFiltersByTable,
       }
+      if (editPassword && editPassword.length >= 8) payload.password = editPassword
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
       const res = await fetch('/api/users', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ ...payload, sectors: editSelectedSectors }) })
@@ -257,6 +305,7 @@ export default function UsuariosPage() {
       if (res.ok) {
         setMessage('Usuário atualizado com sucesso.')
         setEditingId('')
+        setEditPassword('')
         await fetchUsers()
       } else {
         setError(data?.error || 'Falha ao atualizar usuário')
@@ -291,256 +340,91 @@ export default function UsuariosPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto py-8 px-4">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Users className="h-8 w-8 text-primary" />
-            <h1 className="text-4xl font-bold text-foreground">Usuários</h1>
-          </div>
-          <p className="text-muted-foreground">Crie usuários com permissão de visualização (viewer) e defina o acesso</p>
-        </div>
+    <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
+      <div className="container mx-auto py-6 px-6">
+        <Tabs defaultValue="usuarios" className="space-y-6">
+          <TabsList className="grid grid-cols-2 w-full md:max-w-md mb-6">
+            <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+            <TabsTrigger value="empresas">Empresas</TabsTrigger>
+          </TabsList>
 
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle>Novo Usuário</CardTitle>
-            <CardDescription>Informe e-mail, senha, permissão e acesso</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="grid grid-cols-1 md:grid-cols-4 gap-4" onSubmit={onSubmit}>
-              <Input
-                type="email"
-                placeholder="email@exemplo.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              <Input
-                type="password"
-                placeholder="Senha"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-              />
-              <Select value={role} onValueChange={setRole}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="viewer">Viewer</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button type="submit" disabled={loading}>
-                {loading ? 'Salvando...' : 'Criar usuário'}
-              </Button>
-            </form>
-
-            {/* Allowed tables */}
-            <div className="mt-6">
-              <div className="text-sm font-medium mb-2">Tabelas permitidas</div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {tables.map((t) => (
-                  <label key={t} className="flex items-center gap-2 text-sm">
-                    <Checkbox checked={allowedTablesNew.includes(t)} onCheckedChange={() => toggleAllowedNew(t)} />
-                    <span>{t}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Sectors */}
-            <div className="mt-6">
-              <div className="text-sm font-medium mb-2">Setores</div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {sectors.map((s) => (
-                  <label key={s} className="flex items-center gap-2 text-sm">
-                    <Checkbox checked={selectedSectorsNew.includes(s)} onCheckedChange={() => setSelectedSectorsNew((prev) => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])} />
-                    <span>{s}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Optional filters (multiple) */}
-            <div className="mt-6">
-              <div className="text-sm font-medium mb-2">Filtros (você pode adicionar vários por tabela)</div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Select value={filterTableNew} onValueChange={setFilterTableNew}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tabela" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tables.map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={filterColumnNew} onValueChange={setFilterColumnNew} disabled={!filterTableNew}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Coluna" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filterColumnsNew.map(c => (
-                      <SelectItem key={c.column_name} value={c.column_name}>{c.column_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={filterTypeNew} onValueChange={setFilterTypeNew} disabled={!filterTableNew || !filterColumnNew}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="contains">Contém</SelectItem>
-                    <SelectItem value="equals">Igual</SelectItem>
-                    <SelectItem value="greaterThan">Maior que</SelectItem>
-                    <SelectItem value="lessThan">Menor que</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <div className="flex gap-2">
-                  <Input className="flex-1" placeholder="Valor" value={filterValueNew} onChange={(e) => setFilterValueNew(e.target.value)} disabled={!filterTableNew || !filterColumnNew} />
-                  <Button type="button" variant="outline" onClick={addFilterNew} disabled={!filterTableNew || !filterColumnNew || !String(filterValueNew).length}>Adicionar</Button>
-                </div>
-              </div>
-              {/* List added filters */}
-              <div className="mt-3 space-y-2">
-                {Object.entries(filtersByTableNew).map(([table, list]) => (
-                  <div key={table} className="text-sm">
-                    <div className="font-medium">{table}</div>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {list.map((f, idx) => (
-                        <div key={idx} className="px-2 py-1 rounded border bg-muted/50">
-                          <span className="font-mono text-xs">{f.column} {f.type} {String(f.value)}</span>
-                          <Button size="sm" variant="ghost" className="ml-2 h-6 px-2" onClick={() => removeFilterNew(table, idx)}>Remover</Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {message && (
-              <div className="mt-4 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 px-4 py-3 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                {message}
-              </div>
-            )}
-            {error && (
-              <div className="mt-4 bg-destructive/10 text-destructive px-4 py-3 rounded-lg border border-destructive/20">
-                {error}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="mt-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Usuários cadastrados</CardTitle>
-              <CardDescription>Listagem básica de usuários</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {users?.length > 0 ? (
-                <div className="border rounded-lg overflow-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Permissão</TableHead>
-                        <TableHead>Tabelas</TableHead>
-                        <TableHead>Setores</TableHead>
-                        <TableHead>Ações</TableHead>
-                        <TableHead>ID</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {users.map((u) => {
-                        const allowed = u.user_metadata?.permissions?.allowedTables || []
-                        const userSectors = Array.isArray(u.user_metadata?.sectors) ? u.user_metadata.sectors : []
-                        const isSelf = false // optional: could compare with current session
-                        return (
-                          <TableRow key={u.id}>
-                            <TableCell>{u.email}</TableCell>
-                            <TableCell>{u.user_metadata?.role || '-'}</TableCell>
-                            <TableCell className="text-xs">{allowed.length ? allowed.join(', ') : '—'}</TableCell>
-                            <TableCell className="text-xs">{userSectors.length ? userSectors.join(', ') : '—'}</TableCell>
-                            <TableCell className="flex gap-2">
-                              <Button size="sm" variant="outline" onClick={() => startEdit(u)}>Editar</Button>
-                              <Button size="sm" variant="destructive" onClick={() => onDeleteUser(u)}>
-                                Excluir
-                              </Button>
-                            </TableCell>
-                            <TableCell className="font-mono text-xs">{u.id}</TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="text-muted-foreground">Nenhum usuário encontrado</div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Edit section */}
-        {editingId && (
-          <div className="mt-6">
-            <Card>
+          {/* Tab Usuários */}
+          <TabsContent value="usuarios">
+            <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle>Editar usuário</CardTitle>
-                <CardDescription>ID: {editingId}</CardDescription>
+                <CardTitle>Novo Usuário</CardTitle>
+                <CardDescription>Informe e-mail, senha, papel, empresa e acesso</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <Select value={editRole} onValueChange={setEditRole}>
+              <CardContent>
+                <form className="grid grid-cols-1 md:grid-cols-5 gap-4" onSubmit={onSubmit}>
+                  <Input
+                    type="email"
+                    placeholder="email@exemplo.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                  <Input
+                    type="password"
+                    placeholder="Senha"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={8}
+                  />
+                  <Select value={role} onValueChange={setRole}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Papel" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="viewer">Viewer</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="user">Usuário</SelectItem>
+                      <SelectItem value="gestor">Gestor</SelectItem>
+                        {currentUserRole === 'admin' && <SelectItem value="admin">Admin</SelectItem>}
                     </SelectContent>
                   </Select>
-                  <div className="md:col-span-3 flex gap-2 justify-end">
-                    <Button variant="outline" onClick={() => setEditingId('')}>Cancelar</Button>
-                    <Button onClick={saveEdit} disabled={loading}>{loading ? 'Salvando...' : 'Salvar alterações'}</Button>
-                  </div>
-                </div>
-
-                <div>
+                  <Select value={selectedEmpresaId} onValueChange={setSelectedEmpresaId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Empresa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {empresas.map(e => (
+                        <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button type="submit" disabled={loading}>
+                    {loading ? 'Salvando...' : 'Criar usuário'}
+                  </Button>
+                </form>
+                {/* Allowed tables */}
+                <div className="mt-6">
                   <div className="text-sm font-medium mb-2">Tabelas permitidas</div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {tables.map((t) => (
                       <label key={t} className="flex items-center gap-2 text-sm">
-                        <Checkbox checked={editAllowedTables.includes(t)} onCheckedChange={() => toggleAllowedEdit(t)} />
+                        <Checkbox checked={allowedTablesNew.includes(t)} onCheckedChange={() => toggleAllowedNew(t)} />
                         <span>{t}</span>
                       </label>
                     ))}
                   </div>
                 </div>
-
-                <div>
+                {/* Sectors */}
+                <div className="mt-6">
                   <div className="text-sm font-medium mb-2">Setores</div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {sectors.map((s) => (
+                    {(currentUserRole === 'admin' ? sectors : sectors.filter(s => currentUserSectors.includes(s))).map((s) => (
                       <label key={s} className="flex items-center gap-2 text-sm">
-                        <Checkbox checked={editSelectedSectors.includes(s)} onCheckedChange={() => setEditSelectedSectors((prev) => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])} />
+                        <Checkbox checked={selectedSectorsNew.includes(s)} onCheckedChange={() => setSelectedSectorsNew((prev) => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])} />
                         <span>{s}</span>
                       </label>
                     ))}
                   </div>
                 </div>
-
-                <div>
+                {/* Optional filters (multiple) */}
+                <div className="mt-6">
                   <div className="text-sm font-medium mb-2">Filtros (você pode adicionar vários por tabela)</div>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Select value={editFilterTable} onValueChange={setEditFilterTable}>
+                    <Select value={filterTableNew} onValueChange={setFilterTableNew}>
                       <SelectTrigger>
                         <SelectValue placeholder="Tabela" />
                       </SelectTrigger>
@@ -550,19 +434,17 @@ export default function UsuariosPage() {
                         ))}
                       </SelectContent>
                     </Select>
-
-                    <Select value={editFilterColumn} onValueChange={setEditFilterColumn} disabled={!editFilterTable}>
+                    <Select value={filterColumnNew} onValueChange={setFilterColumnNew} disabled={!filterTableNew}>
                       <SelectTrigger>
                         <SelectValue placeholder="Coluna" />
                       </SelectTrigger>
                       <SelectContent>
-                        {editFilterColumns.map(c => (
+                        {filterColumnsNew.map(c => (
                           <SelectItem key={c.column_name} value={c.column_name}>{c.column_name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-
-                    <Select value={editFilterType} onValueChange={setEditFilterType} disabled={!editFilterTable || !editFilterColumn}>
+                    <Select value={filterTypeNew} onValueChange={setFilterTypeNew} disabled={!filterTableNew || !filterColumnNew}>
                       <SelectTrigger>
                         <SelectValue placeholder="Tipo" />
                       </SelectTrigger>
@@ -573,22 +455,21 @@ export default function UsuariosPage() {
                         <SelectItem value="lessThan">Menor que</SelectItem>
                       </SelectContent>
                     </Select>
-
                     <div className="flex gap-2">
-                      <Input className="flex-1" placeholder="Valor" value={editFilterValue} onChange={(e) => setEditFilterValue(e.target.value)} disabled={!editFilterTable || !editFilterColumn} />
-                      <Button type="button" variant="outline" onClick={addFilterEdit} disabled={!editFilterTable || !editFilterColumn || !String(editFilterValue).length}>Adicionar</Button>
+                      <Input className="flex-1" placeholder="Valor" value={filterValueNew} onChange={(e) => setFilterValueNew(e.target.value)} disabled={!filterTableNew || !filterColumnNew} />
+                      <Button type="button" variant="outline" onClick={addFilterNew} disabled={!filterTableNew || !filterColumnNew || !String(filterValueNew).length}>Adicionar</Button>
                     </div>
                   </div>
-                  {/* List current filters */}
+                  {/* List added filters */}
                   <div className="mt-3 space-y-2">
-                    {Object.entries(editFiltersByTable).map(([table, list]) => (
+                    {Object.entries(filtersByTableNew).map(([table, list]) => (
                       <div key={table} className="text-sm">
                         <div className="font-medium">{table}</div>
                         <div className="flex flex-wrap gap-2 mt-1">
                           {list.map((f, idx) => (
                             <div key={idx} className="px-2 py-1 rounded border bg-muted/50">
                               <span className="font-mono text-xs">{f.column} {f.type} {String(f.value)}</span>
-                              <Button size="sm" variant="ghost" className="ml-2 h-6 px-2" onClick={() => removeFilterEdit(table, idx)}>Remover</Button>
+                              <Button size="sm" variant="ghost" className="ml-2 h-6 px-2" onClick={() => removeFilterNew(table, idx)}>Remover</Button>
                             </div>
                           ))}
                         </div>
@@ -596,10 +477,376 @@ export default function UsuariosPage() {
                     ))}
                   </div>
                 </div>
+                {message && (
+                  <div className="mt-4 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 px-4 py-3 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                    {message}
+                  </div>
+                )}
+                {error && (
+                  <div className="mt-4 bg-destructive/10 text-destructive px-4 py-3 rounded-lg border border-destructive/20">
+                    {error}
+                  </div>
+                )}
               </CardContent>
             </Card>
-          </div>
-        )}
+            {/* Edit section */}
+            {editingId && (
+              <div className="mt-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Editar usuário</CardTitle>
+                    <CardDescription>ID: {editingId}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                      <Select value={editRole} onValueChange={setEditRole}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Papel" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="user">Usuário</SelectItem>
+                          <SelectItem value="gestor">Gestor</SelectItem>
+                          {currentUserRole === 'admin' && <SelectItem value="admin">Admin</SelectItem>}
+                        </SelectContent>
+                      </Select>
+                      <Select value={editEmpresaId} onValueChange={setEditEmpresaId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Empresa" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {empresas.map(e => (
+                            <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input type="password" placeholder="Nova senha (opcional)" value={editPassword} onChange={(e)=> setEditPassword(e.target.value)} minLength={8} />
+                      <div className="md:col-span-2 flex gap-2 justify-end">
+                        <Button variant="outline" onClick={() => { setEditingId(''); setEditPassword('') }}>Cancelar</Button>
+                        <Button onClick={saveEdit} disabled={loading}>{loading ? 'Salvando...' : 'Salvar alterações'}</Button>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium mb-2">Tabelas permitidas</div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {tables.map((t) => (
+                          <label key={t} className="flex items-center gap-2 text-sm">
+                            <Checkbox checked={editAllowedTables.includes(t)} onCheckedChange={() => toggleAllowedEdit(t)} />
+                            <span>{t}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium mb-2">Setores</div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {(currentUserRole === 'admin' ? sectors : sectors.filter(s => currentUserSectors.includes(s))).map((s) => (
+                          <label key={s} className="flex items-center gap-2 text-sm">
+                            <Checkbox checked={editSelectedSectors.includes(s)} onCheckedChange={() => setEditSelectedSectors((prev) => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])} />
+                            <span>{s}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium mb-2">Filtros (você pode adicionar vários por tabela)</div>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <Select value={editFilterTable} onValueChange={setEditFilterTable}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Tabela" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {tables.map(t => (
+                              <SelectItem key={t} value={t}>{t}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select value={editFilterColumn} onValueChange={setEditFilterColumn} disabled={!editFilterTable}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Coluna" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {editFilterColumns.map(c => (
+                              <SelectItem key={c.column_name} value={c.column_name}>{c.column_name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select value={editFilterType} onValueChange={setEditFilterType} disabled={!editFilterTable || !editFilterColumn}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="contains">Contém</SelectItem>
+                            <SelectItem value="equals">Igual</SelectItem>
+                            <SelectItem value="greaterThan">Maior que</SelectItem>
+                            <SelectItem value="lessThan">Menor que</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <div className="flex gap-2">
+                          <Input className="flex-1" placeholder="Valor" value={editFilterValue} onChange={(e) => setEditFilterValue(e.target.value)} disabled={!editFilterTable || !editFilterColumn} />
+                          <Button type="button" variant="outline" onClick={addFilterEdit} disabled={!editFilterTable || !editFilterColumn || !String(editFilterValue).length}>Adicionar</Button>
+                        </div>
+                      </div>
+                      {/* List current filters */}
+                      <div className="mt-3 space-y-2">
+                        {Object.entries(editFiltersByTable).map(([table, list]) => (
+                          <div key={table} className="text-sm">
+                            <div className="font-medium">{table}</div>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {list.map((f, idx) => (
+                                <div key={idx} className="px-2 py-1 rounded border bg-muted/50">
+                                  <span className="font-mono text-xs">{f.column} {f.type} {String(f.value)}</span>
+                                  <Button size="sm" variant="ghost" className="ml-2 h-6 px-2" onClick={() => removeFilterEdit(table, idx)}>Remover</Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+            {/* Lista de usuários */}
+            <Card className="mt-8">
+              <CardHeader>
+                <CardTitle>Usuários cadastrados</CardTitle>
+                <CardDescription>Hierarquia aplicada: admin=todos, gestor=empresa, usuário=próprio.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {users?.length ? (
+                  <div className="border rounded-lg overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Papel</TableHead>
+                          <TableHead>Empresa</TableHead>
+                          <TableHead>Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {users.map(u => (
+                          <TableRow key={u.id}>
+                            <TableCell>{u.email}</TableCell>
+                            <TableCell>{u.user_metadata?.role || '-'}</TableCell>
+                            <TableCell>{u.user_metadata?.empresaId || '—'}</TableCell>
+                            <TableCell className="flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => startEdit(u)}>Editar</Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">Nenhum usuário visível nesta hierarquia.</div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tab Empresas */}
+          <TabsContent value="empresas">
+            <Card className="shadow-lg">
+              <CardHeader>
+                <CardTitle>Nova Empresa</CardTitle>
+                <CardDescription>Cadastre uma empresa para vincular usuários e créditos compartilhados</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form className="grid grid-cols-1 md:grid-cols-5 gap-4" onSubmit={async (e) => {
+                  e.preventDefault()
+                  setEmpresaMsg(''); setEmpresaErr('')
+                  try {
+                    const { data: sessionData } = await supabase.auth.getSession()
+                    const token = sessionData?.session?.access_token
+                    const res = await fetch('/api/empresas', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                      body: JSON.stringify({ nome: empresaNome, cnpj: empresaCnpj, responsavel: empresaResp, telefone: empresaTel, user_limit: empresaUserLimit || 1 })
+                    })
+                    const data = await res.json()
+                    if (res.ok) {
+                      setEmpresaMsg('Empresa cadastrada com sucesso!')
+                      setEmpresaNome(''); setEmpresaCnpj(''); setEmpresaResp(''); setEmpresaTel(''); setEmpresaUserLimit('1')
+                      // reload empresas
+                      const res2 = await fetch('/api/empresas', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+                      const data2 = await res2.json()
+                      if (res2.ok) setEmpresas(data2.empresas || [])
+                    } else {
+                      setEmpresaErr(data?.error || 'Falha ao cadastrar empresa')
+                    }
+                  } catch (err) {
+                    setEmpresaErr('Erro inesperado ao cadastrar empresa')
+                  }
+                }}>
+                  <Input placeholder="Nome da empresa" value={empresaNome} onChange={e=>setEmpresaNome(e.target.value)} required />
+                  <Input placeholder="CNPJ" value={empresaCnpj} onChange={e=>setEmpresaCnpj(e.target.value)} />
+                  <Input placeholder="Responsável" value={empresaResp} onChange={e=>setEmpresaResp(e.target.value)} />
+                  <Input placeholder="Telefone" value={empresaTel} onChange={e=>setEmpresaTel(e.target.value)} />
+                  <Input placeholder="Limite usuários (padrão 1)" value={empresaUserLimit} onChange={e=>setEmpresaUserLimit(e.target.value)} />
+                  <Button type="submit">Cadastrar empresa</Button>
+                </form>
+                {empresaMsg && <div className="mt-2 text-emerald-700 dark:text-emerald-300 text-sm">{empresaMsg}</div>}
+                {empresaErr && <div className="mt-2 text-red-600 dark:text-red-400 text-sm">{empresaErr}</div>}
+              </CardContent>
+            </Card>
+            <Card className="bg-card mt-8">
+              <CardHeader>
+                <CardTitle>Empresas cadastradas</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="border rounded-lg overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>CNPJ</TableHead>
+                        <TableHead>Responsável</TableHead>
+                        <TableHead>Telefone</TableHead>
+                        <TableHead>Limite</TableHead>
+                        <TableHead>ID</TableHead>
+                        <TableHead>Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {empresas.map((e) => (
+                        <TableRow key={e.id}>
+                          <TableCell>{e.nome}</TableCell>
+                          <TableCell>{e.cnpj}</TableCell>
+                          <TableCell>{e.responsavel}</TableCell>
+                          <TableCell>{e.telefone}</TableCell>
+                          <TableCell>{e.user_limit || 1}</TableCell>
+                          <TableCell className="font-mono text-xs">{e.id}</TableCell>
+                          <TableCell>
+                            <Button size="sm" variant="outline" onClick={() => {
+                              setEditingEmpresaId(e.id)
+                              setEditEmpresaNome(e.nome || '')
+                              setEditEmpresaCnpj(e.cnpj || '')
+                              setEditEmpresaResp(e.responsavel || '')
+                              setEditEmpresaTel(e.telefone || '')
+                              setEditEmpresaUserLimit(String(e.user_limit || 1))
+                            }}>Editar</Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+            {editingEmpresaId && (
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle>Editar Empresa</CardTitle>
+                  <CardDescription>ID: {editingEmpresaId}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form className="grid grid-cols-1 md:grid-cols-6 gap-4" onSubmit={async (e) => {
+                    e.preventDefault()
+                    setEditEmpresaMsg(''); setEditEmpresaErr('')
+                    try {
+                      const { data: sessionData } = await supabase.auth.getSession()
+                      const token = sessionData?.session?.access_token
+                      const payload = { 
+                        id: editingEmpresaId, 
+                        nome: editEmpresaNome, 
+                        cnpj: editEmpresaCnpj || null, 
+                        responsavel: editEmpresaResp || null, 
+                        telefone: editEmpresaTel || null, 
+                        user_limit: parseInt(editEmpresaUserLimit) || 1 
+                      }
+                      const res = await fetch('/api/empresas', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                        body: JSON.stringify(payload)
+                      })
+                      const data = await res.json()
+                      if (res.ok) {
+                        setEditEmpresaMsg('Empresa atualizada com sucesso!')
+                        const res2 = await fetch('/api/empresas', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+                        const data2 = await res2.json()
+                        if (res2.ok) setEmpresas(data2.empresas || [])
+                        setTimeout(() => setEditingEmpresaId(''), 1500)
+                      } else {
+                        setEditEmpresaErr(data?.error || data?.details || 'Falha ao atualizar empresa')
+                      }
+                    } catch (err) {
+                      setEditEmpresaErr('Erro inesperado ao atualizar empresa')
+                    }
+                  }}>
+                    <Input placeholder="Nome da empresa" value={editEmpresaNome} onChange={e=>setEditEmpresaNome(e.target.value)} required />
+                    <Input placeholder="CNPJ" value={editEmpresaCnpj} onChange={e=>setEditEmpresaCnpj(e.target.value)} />
+                    <Input placeholder="Responsável" value={editEmpresaResp} onChange={e=>setEditEmpresaResp(e.target.value)} />
+                    <Input placeholder="Telefone" value={editEmpresaTel} onChange={e=>setEditEmpresaTel(e.target.value)} />
+                    <Input placeholder="Limite usuários" value={editEmpresaUserLimit} onChange={e=>setEditEmpresaUserLimit(e.target.value)} />
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" onClick={() => setEditingEmpresaId('')}>Cancelar</Button>
+                      <Button type="submit">Salvar</Button>
+                    </div>
+                  </form>
+                  {editEmpresaMsg && <div className="mt-2 text-emerald-700 dark:text-emerald-300 text-sm">{editEmpresaMsg}</div>}
+                  {editEmpresaErr && <div className="mt-2 text-red-600 dark:text-red-400 text-sm">{editEmpresaErr}</div>}
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+
+        </Tabs>
+      </div>
+    </div>
+  )
+}
+
+function AdminAddCreditsForm(){
+  const [userId, setUserId] = useState('')
+  const [email, setEmail] = useState('')
+  const [amount, setAmount] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [err, setErr] = useState('')
+
+  const submit = async () => {
+    setLoading(true); setMsg(''); setErr('')
+    try{
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const res = await fetch('/api/credits/admin-add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ userId: userId || undefined, email: email || undefined, amount })
+      })
+      const j = await res.json()
+      if (!res.ok) {
+        setErr(j?.error || 'Falha ao adicionar créditos')
+      } else {
+        setMsg(`Novo saldo: ${j.balanceBRL}`)
+        setUserId(''); setEmail(''); setAmount('')
+      }
+    } catch(e){
+      setErr('Erro inesperado')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Input placeholder="ID do usuário (UUID)" value={userId} onChange={(e)=> setUserId(e.target.value)} />
+        <Input placeholder="ou e-mail do usuário" value={email} onChange={(e)=> setEmail(e.target.value)} />
+        <Input placeholder="Valor em R$ (ex: 50,00)" value={amount} onChange={(e)=> setAmount(e.target.value)} />
+      </div>
+      <div className="flex gap-2">
+        <Button onClick={submit} disabled={loading || (!userId && !email) || !amount}>
+          {loading ? 'Processando...' : 'Adicionar Créditos'}
+        </Button>
+        {msg && <div className="text-emerald-700 dark:text-emerald-300 text-sm self-center">{msg}</div>}
+        {err && <div className="text-red-600 dark:text-red-400 text-sm self-center">{err}</div>}
+      </div>
+      <div className="text-xs text-muted-foreground">
+        Para liberar esta função, adicione seu e-mail em Configuração &gt; adminEmails (em global settings). Caso contrário, retorno será 403.
       </div>
     </div>
   )

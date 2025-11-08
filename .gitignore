@@ -37,6 +37,11 @@ dist
 .env.*
 .emergent/
 
+# Sensitive credentials files
+MERCADOPAGO_CREDENTIALS.md
+PICPAY_CREDENTIALS.md
+*_CREDENTIALS.md
+
 # Logs and debug files
 npm-debug.log*
 yarn-debug.log*

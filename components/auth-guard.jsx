@@ -17,6 +17,11 @@ export default function AuthGuard({ children }) {
     const hasSector = (sectors, name) => (Array.isArray(sectors) ? sectors : []).some(s => norm(s) === norm(name))
 
     const run = async () => {
+      // Permite que /login sempre carregue, mesmo sem sessão
+      if (pathname === '/login') {
+        if (mounted) setChecked(true)
+        return
+      }
       const { data } = await supabase.auth.getSession()
       const hasSession = !!data?.session
       if (!hasSession && pathname !== '/login') {
@@ -55,6 +60,8 @@ export default function AuthGuard({ children }) {
           if (!(role === 'admin' || hasSector(sectors, 'Acesso Banco'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/consulta-lote')) {
           if (!(role === 'admin' || hasSector(sectors, 'Consulta em lote'))) router.replace(pickDefaultRoute())
+        } else if (pathname.startsWith('/simular-digitar')) {
+          if (!(role === 'admin' || hasSector(sectors, 'Simular/Digitar'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/produtos')) {
           // Produtos acessível a qualquer usuário logado
           // nenhuma restrição adicional
@@ -104,6 +111,8 @@ export default function AuthGuard({ children }) {
           if (!(role === 'admin' || hasSector(sectors, 'Acesso Banco'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/consulta-lote')) {
           if (!(role === 'admin' || hasSector(sectors, 'Consulta em lote'))) router.replace(pickDefaultRoute())
+        } else if (pathname.startsWith('/simular-digitar')) {
+          if (!(role === 'admin' || hasSector(sectors, 'Simular/Digitar'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/produtos')) {
           // Produtos acessível a qualquer usuário logado
         }
@@ -112,6 +121,12 @@ export default function AuthGuard({ children }) {
     return () => { mounted = false; sub.subscription.unsubscribe() }
   }, [pathname, router])
 
-  if (!checked) return null
+  if (!checked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+        <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-sky-500" />
+      </div>
+    )
+  }
   return children
 }

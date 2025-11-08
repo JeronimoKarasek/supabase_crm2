@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag } from 'lucide-react'
+import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag, FileDigit, Send, PackagePlus, MessageSquare } from 'lucide-react'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -80,12 +80,36 @@ export default function AppNav() {
       icon: FileSearch,
       isActive: pathname?.startsWith('/consulta-lote') ?? false,
     },
+    (role === 'admin' || can('Simular/Digitar')) && {
+      href: '/simular-digitar',
+      label: 'Simular/Digitar',
+      icon: FileDigit,
+      isActive: pathname?.startsWith('/simular-digitar') ?? false,
+    },
+    (role === 'admin' || can('Disparo API')) && {
+      href: '/disparo-api',
+      label: 'Disparo API',
+      icon: Send,
+      isActive: pathname?.startsWith('/disparo-api') ?? false,
+    },
+    (role === 'admin' || can('Disparo SMS')) && {
+      href: '/disparo-sms',
+      label: 'Disparo SMS',
+      icon: MessageSquare,
+      isActive: pathname?.startsWith('/disparo-sms') ?? false,
+    },
     // Produtos disponível para todos usuários logados
     {
       href: '/produtos',
       label: 'Produtos',
       icon: ShoppingBag,
       isActive: pathname?.startsWith('/produtos') ?? false,
+    },
+    (role === 'admin' || can('Criação de produtos')) && {
+      href: '/criacao-produtos',
+      label: 'Criação de produtos',
+      icon: PackagePlus,
+      isActive: pathname?.startsWith('/criacao-produtos') ?? false,
     },
   ].filter(Boolean)
 
