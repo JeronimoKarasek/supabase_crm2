@@ -52,11 +52,17 @@ BEGIN
   END IF;
 END $$;
 
+-- Atualizar valores padrão nas colunas novas (garantir consistência)
+UPDATE public.users SET active = true WHERE active IS NULL;
+UPDATE public.users SET role = 'user' WHERE role IS NULL;
+
 -- Índices para performance
 CREATE INDEX IF NOT EXISTS idx_companies_active ON companies(active);
 CREATE INDEX IF NOT EXISTS idx_companies_cnpj ON companies(cnpj) WHERE cnpj IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_companies_email ON companies(email) WHERE email IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id);
+CREATE INDEX IF NOT EXISTS idx_users_company_id ON public.users(company_id);
+CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role);
+CREATE INDEX IF NOT EXISTS idx_users_active ON public.users(active);
 
 -- RLS (Row Level Security)
 ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
@@ -67,7 +73,7 @@ CREATE POLICY "Admins can view all companies" ON companies
   FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM users
+      SELECT 1 FROM public.users
       WHERE users.id = auth.uid()
       AND users.role = 'admin'
     )
@@ -79,7 +85,7 @@ CREATE POLICY "Admins can create companies" ON companies
   FOR INSERT
   WITH CHECK (
     EXISTS (
-      SELECT 1 FROM users
+      SELECT 1 FROM public.users
       WHERE users.id = auth.uid()
       AND users.role = 'admin'
     )
@@ -91,7 +97,7 @@ CREATE POLICY "Admins can update companies" ON companies
   FOR UPDATE
   USING (
     EXISTS (
-      SELECT 1 FROM users
+      SELECT 1 FROM public.users
       WHERE users.id = auth.uid()
       AND users.role = 'admin'
     )
@@ -103,7 +109,7 @@ CREATE POLICY "Users can view their own company" ON companies
   FOR SELECT
   USING (
     id IN (
-      SELECT company_id FROM users
+      SELECT company_id FROM public.users
       WHERE users.id = auth.uid()
     )
   );
