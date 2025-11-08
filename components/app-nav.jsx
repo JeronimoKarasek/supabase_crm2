@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag, FileDigit, Send, PackagePlus, MessageSquare } from 'lucide-react'
+import { Database, Users, Gauge, Settings, FileSearch, ShoppingBag, FileDigit, Send, PackagePlus, MessageSquare, Sparkles } from 'lucide-react'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -97,6 +97,12 @@ export default function AppNav() {
       label: 'Disparo SMS',
       icon: MessageSquare,
       isActive: pathname?.startsWith('/disparo-sms') ?? false,
+    },
+    (role === 'admin' || can('Higienizar Dados')) && {
+      href: '/higienizar-dados',
+      label: 'Higienizar Dados',
+      icon: Sparkles,
+      isActive: pathname?.startsWith('/higienizar-dados') ?? false,
     },
     // Soluções disponível para todos usuários logados
     {

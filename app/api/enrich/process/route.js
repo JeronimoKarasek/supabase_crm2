@@ -3,6 +3,59 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutos
+/**
+ * Obter endpoint e payload correto baseado no tipo de consulta
+ */
+function getApiConfig(queryType, value) {
+  const cleanValue = (value || '').replace(/\D/g, '') // Remove formatação
+  
+  switch (queryType) {
+    case 'cpf':
+      if (!cleanValue || cleanValue.length !== 11) {
+        throw new Error('CPF inválido (deve ter 11 dígitos)')
+      }
+      return {
+        endpoint: 'https://api.shiftdata.com.br/api/PessoaFisica',
+        payload: { cpf: cleanValue },
+        label: 'CPF'
+      }
+    
+    case 'cnpj':
+      if (!cleanValue || cleanValue.length !== 14) {
+        throw new Error('CNPJ inválido (deve ter 14 dígitos)')
+      }
+      return {
+        endpoint: 'https://api.shiftdata.com.br/api/PessoaJuridica',
+        payload: { cnpj: cleanValue },
+        label: 'CNPJ'
+      }
+    
+    case 'placa':
+      const placa = (value || '').replace(/[^A-Z0-9]/gi, '').toUpperCase()
+      if (!placa || placa.length !== 7) {
+        throw new Error('Placa inválida (deve ter 7 caracteres)')
+      }
+      return {
+        endpoint: 'https://api.shiftdata.com.br/api/Veiculos',
+        payload: { placa },
+        label: 'Placa'
+      }
+    
+    case 'telefone':
+      if (!cleanValue || cleanValue.length < 10) {
+        throw new Error('Telefone inválido (mínimo 10 dígitos)')
+      }
+      return {
+        endpoint: 'https://api.shiftdata.com.br/api/Telefone',
+        payload: { telefone: cleanValue },
+        label: 'Telefone'
+      }
+    
+    default:
+      throw new Error(`Tipo de consulta inválido: ${queryType}`)
+  }
+}
+
 
 function unauthorized(msg = 'Unauthorized') {
   return NextResponse.json({ error: msg }, { status: 401 })
@@ -62,14 +115,10 @@ export async function POST(request) {
       .single()
 
     const settings = settingsRow?.data || {}
-    const accessKey = settings.shiftDataAccessKey
+    // AccessKey fixa como fallback para o login na Shift Data
+    const accessKey = (settings.shiftDataAccessKey || '96FA65CEC7234FFDA72D2D97EA6A457B')
     const costPerQuery = parseFloat(settings.shiftDataCostPerQuery) || 0.10
-
-    if (!accessKey) {
-      return NextResponse.json({ 
-        error: 'AccessKey do Shift Data não configurado. Configure em /configuracao' 
-      }, { status: 400 })
-    }
+    // Nunca bloqueia por falta de accessKey, sempre usa fallback
 
     // Atualizar status para processando
     await supabaseAdmin
@@ -118,7 +167,7 @@ export async function POST(request) {
         throw new Error('Token não retornado pela API')
       }
       
-      console.log('✅ [Enrich Process] Login successful')
+  console.log('✅ [Enrich Process] Login successful. Query type:', job.query_type)
     } catch (loginError) {
       console.error('❌ [Enrich Process] Login error:', loginError)
       await supabaseAdmin
@@ -148,20 +197,19 @@ export async function POST(request) {
           .update({ status: 'processing' })
           .eq('id', record.id)
 
-        const cpf = (record.cpf || '').replace(/\D/g, '') // Remover formatação
-
-        if (!cpf || cpf.length !== 11) {
-          throw new Error('CPF inválido')
-        }
-
-        // Consultar API Shift Data
-        const enrichRes = await fetch('https://api.shiftdata.com.br/api/PessoaFisica', {
+        // Obter configuração da API baseada no tipo
+        const apiConfig = getApiConfig(record.query_type || job.query_type, record.query_value)
+        
+        console.log(`🔍 [Enrich] Record ${record.id}: ${apiConfig.label} = ${apiConfig.payload[Object.keys(apiConfig.payload)[0]]}`)
+        
+        // Consultar API Shift Data com endpoint correto
+        const enrichRes = await fetch(apiConfig.endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${authToken}`
           },
-          body: JSON.stringify({ cpf })
+          body: JSON.stringify(apiConfig.payload)
         })
 
         const enrichData = await enrichRes.json()
@@ -184,10 +232,10 @@ export async function POST(request) {
         successCount++
         creditsUsed += costPerQuery
 
-        console.log(`✅ [Enrich Process] Record ${record.id} success`)
+  console.log(`✅ [Enrich] Record ${record.id} success (${apiConfig.label})`)
 
       } catch (recordError) {
-        console.error(`❌ [Enrich Process] Record ${record.id} error:`, recordError)
+  console.error(`❌ [Enrich] Record ${record.id} error:`, recordError.message)
         
         await supabaseAdmin
           .from('enrichment_records')

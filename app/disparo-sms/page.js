@@ -21,6 +21,7 @@ export default function DisparoSmsPage() {
 
   // Configuração global SMS
   const [hasToken, setHasToken] = useState(false)
+  const [smsMessageValue, setSmsMessageValue] = useState('')
 
   // Disparo
   const [segments, setSegments] = useState([])
@@ -121,6 +122,7 @@ export default function DisparoSmsPage() {
       const js = await res.json()
       const s = js?.settings || {}
       setHasToken(!!s.smsApiToken)
+      setSmsMessageValue(s.smsMessageValue || '')
     } catch {}
   }
 
@@ -342,7 +344,10 @@ export default function DisparoSmsPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Disparo SMS</h1>
-              <p className="text-sm text-muted-foreground">Envie SMS em massa para sua base de contatos</p>
+              <p className="text-sm text-muted-foreground">Envie SMS em massa para sua base de contatos.</p>
+              {smsMessageValue && (
+                <p className="text-xs text-muted-foreground mt-1">Cada SMS consome R$ {Number(smsMessageValue).toFixed(2)} em créditos.</p>
+              )}
             </div>
           </div>
 
@@ -368,7 +373,7 @@ export default function DisparoSmsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Nova Campanha SMS</CardTitle>
-          <CardDescription>Importe sua base e configure a mensagem</CardDescription>
+          <CardDescription>Importe sua base, personalize variáveis e acompanhe o envio. O custo por mensagem segue o valor configurado.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

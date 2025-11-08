@@ -21,15 +21,15 @@ async function getUserFromRequest(request) {
  * POST /api/enrich/upload
  * 
  * Upload planilha para enriquecimento
- * Body: { csv: string, filename?: string }
+ * Body: { csv: string, filename?: string, type?: 'cpf'|'cnpj'|'placa'|'telefone' }
  */
 export async function POST(request) {
   try {
     const user = await getUserFromRequest(request)
     if (!user) return unauthorized()
 
-    const body = await request.json()
-    const { csv, filename } = body
+  const body = await request.json()
+  const { csv, filename, type: overrideTypeRaw } = body
 
     if (!csv) {
       return NextResponse.json({ error: 'CSV não fornecido' }, { status: 400 })
@@ -55,13 +55,50 @@ export async function POST(request) {
       rows.push(row)
     }
 
-    // Verificar se tem CPF
-    const hasCpf = headers.some(h => /cpf/.test(h))
-    if (!hasCpf) {
+  // Detectar tipo de consulta baseado nas colunas (ou sobrescrever se vier no body)
+  let queryType = null
+    let queryColumn = null
+    
+    // Prioridade: CPF > CNPJ > Placa > Telefone
+    const overrideType = typeof overrideTypeRaw === 'string' ? overrideTypeRaw.toLowerCase() : null
+    const validTypes = ['cpf','cnpj','placa','telefone']
+
+    if (overrideType && validTypes.includes(overrideType)) {
+      queryType = overrideType
+    }
+
+    if (!queryType && headers.some(h => /^cpf$/i.test(h))) {
+      queryType = 'cpf'
+      queryColumn = headers.find(h => /^cpf$/i.test(h))
+    } else if (!queryType && headers.some(h => /^cnpj$/i.test(h))) {
+      queryType = 'cnpj'
+      queryColumn = headers.find(h => /^cnpj$/i.test(h))
+    } else if (!queryType && headers.some(h => /^placa$/i.test(h))) {
+      queryType = 'placa'
+      queryColumn = headers.find(h => /^placa$/i.test(h))
+    } else if (!queryType && headers.some(h => /^telefone$|^phone$|^celular$/i.test(h))) {
+      queryType = 'telefone'
+      queryColumn = headers.find(h => /^telefone$|^phone$|^celular$/i.test(h))
+    }
+    
+    if (!queryType) {
       return NextResponse.json({ 
-        error: 'CSV deve conter coluna CPF para enriquecimento' 
+        error: 'CSV deve conter coluna CPF, CNPJ, Placa ou Telefone para enriquecimento' 
       }, { status: 400 })
     }
+
+    // Validar que a coluna correspondente existe quando o tipo é sobrescrito
+    if (!queryColumn) {
+      if (queryType === 'cpf') queryColumn = headers.find(h => /^cpf$/i.test(h))
+      if (queryType === 'cnpj') queryColumn = headers.find(h => /^cnpj$/i.test(h))
+      if (queryType === 'placa') queryColumn = headers.find(h => /^placa$/i.test(h))
+      if (queryType === 'telefone') queryColumn = headers.find(h => /^telefone$|^phone$|^celular$/i.test(h))
+    }
+    if (!queryColumn) {
+      return NextResponse.json({ error: `Para tipo '${queryType}', inclua uma coluna correspondente no CSV (ex.: ${queryType})` }, { status: 400 })
+    }
+    
+    console.log('🔍 [Enrich Upload] Query type detected:', queryType, 'Column:', queryColumn)
 
     // Gerar lote_id único
     const lote_id = `enrich_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
@@ -74,6 +111,7 @@ export async function POST(request) {
         user_email: user.email,
         user_id: user.id,
         filename: filename || 'upload.csv',
+  query_type: queryType,
         status: 'pendente',
         total_rows: rows.length,
         processed_rows: 0
@@ -92,9 +130,13 @@ export async function POST(request) {
     // Inserir registros
     const records = rows.map(row => ({
       lote_id,
-      cpf: row.cpf || row.documento || '',
+  query_type: queryType,
+  query_value: row[queryColumn] || '',
+  cpf: queryType === 'cpf' ? (row[queryColumn] || '') : '',
+  cnpj: queryType === 'cnpj' ? (row[queryColumn] || '') : '',
+  placa: queryType === 'placa' ? (row[queryColumn] || '') : '',
+  telefone: queryType === 'telefone' ? (row[queryColumn] || '') : (row.telefone || row.phone || row.celular || ''),
       nome: row.nome || row.name || '',
-      telefone: row.telefone || row.phone || row.celular || '',
       email: row.email || '',
       original_data: row,
       status: 'pending'
@@ -114,13 +156,14 @@ export async function POST(request) {
       }, { status: 500 })
     }
 
-    console.log('✅ [Enrich Upload] Success! Lote:', lote_id, 'Records:', rows.length)
+  console.log('✅ [Enrich Upload] Success! Lote:', lote_id, 'Type:', queryType, 'Records:', rows.length)
 
     return NextResponse.json({
       success: true,
+  query_type: queryType,
       lote_id,
       total_rows: rows.length,
-      message: 'Upload concluído. Aguardando processamento.'
+  message: `Upload concluído (${queryType.toUpperCase()}). Aguardando processamento.`
     })
 
   } catch (error) {

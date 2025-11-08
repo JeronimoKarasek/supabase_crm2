@@ -45,6 +45,10 @@ export default function ConfiguracaoPage() {
   const [smsWebhookUrl, setSmsWebhookUrl] = useState('')
   const [smsMessageValue, setSmsMessageValue] = useState('')
 
+  // Shift Data API
+  const [shiftDataAccessKey, setShiftDataAccessKey] = useState('')
+  const [shiftDataCostPerQuery, setShiftDataCostPerQuery] = useState('')
+
   const [message, setMessage] = useState('')
 
   const getAuthHeaders = async () => {
@@ -116,6 +120,9 @@ export default function ConfiguracaoPage() {
           setSmsApiId(s.smsApiId || '')
           setSmsWebhookUrl(s.smsWebhookUrl || '')
           setSmsMessageValue(s.smsMessageValue || '')
+          // AccessKey fixa (fallback) apenas para exibição; não editável
+          setShiftDataAccessKey(s.shiftDataAccessKey || '96FA65CEC7234FFDA72D2D97EA6A457B')
+          setShiftDataCostPerQuery(s.shiftDataCostPerQuery || '')
         }
       } catch {}
     })()
@@ -239,9 +246,11 @@ export default function ConfiguracaoPage() {
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
       <div className="container mx-auto py-6 px-6">
         <Tabs defaultValue="geral" className="space-y-6">
-          <TabsList className="grid grid-cols-3 w-full md:max-w-md">
+          <TabsList className="grid grid-cols-5 w-full md:max-w-4xl">
             <TabsTrigger value="geral">Geral</TabsTrigger>
             <TabsTrigger value="credenciais">Credenciais</TabsTrigger>
+            <TabsTrigger value="higienizacao">Higienização</TabsTrigger>
+            <TabsTrigger value="apis">APIs Externas</TabsTrigger>
             <TabsTrigger value="bancos">Bancos & Produtos</TabsTrigger>
           </TabsList>
 
@@ -509,6 +518,66 @@ export default function ConfiguracaoPage() {
             </Button>
             {message && <div className="text-emerald-600 text-sm">{message}</div>}
           </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Aba Higienização (Shift Data) */}
+          <TabsContent value="higienizacao" className="space-y-6">
+            <Card className="bg-card">
+              <CardHeader>
+                <CardTitle>Shift Data - Higienização de Dados</CardTitle>
+                <CardDescription>Token de acesso da API Shift Data (fixo, não editável)</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="shift_access_key">Access Key (fixo)</Label>
+                    <Input 
+                      id="shift_access_key"
+                      type="text"
+                      value={shiftDataAccessKey}
+                      readOnly
+                      className="bg-slate-100 cursor-not-allowed"
+                    />
+                    <p className="text-xs text-muted-foreground">Chave de acesso fornecida pela Shift Data. Não é possível alterar.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="shift_cost_per_query">Custo por Consulta (R$) *</Label>
+                    <Input 
+                      id="shift_cost_per_query"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.10" 
+                      value={shiftDataCostPerQuery} 
+                      onChange={(e) => setShiftDataCostPerQuery(e.target.value)} 
+                    />
+                    <p className="text-xs text-muted-foreground">Valor cobrado por cada consulta realizada</p>
+                  </div>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-md border border-border/50">
+                  <h4 className="font-medium text-sm mb-2">Informações da API</h4>
+                  <ul className="text-xs text-muted-foreground space-y-1">
+                    <li>• <strong>Login:</strong> https://api.shiftdata.com.br/api/Login</li>
+                    <li>• <strong>Consulta CPF:</strong> https://api.shiftdata.com.br/api/PessoaFisica</li>
+                    <li>• <strong>Consulta CNPJ:</strong> https://api.shiftdata.com.br/api/PessoaJuridica</li>
+                    <li>• <strong>Consulta Placa:</strong> https://api.shiftdata.com.br/api/Veiculos</li>
+                    <li>• <strong>Consulta Telefone:</strong> https://api.shiftdata.com.br/api/Telefone</li>
+                    <li>• A Access Key é usada para autenticação e obtenção do token</li>
+                  </ul>
+                </div>
+                <Button onClick={async () => {
+                  const body = { shiftDataCostPerQuery }
+                  await fetch('/api/global-settings', {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+                  })
+                  setMessage('Configuração de custo salva!')
+                  setTimeout(() => setMessage(''), 2000)
+                }} disabled={!shiftDataCostPerQuery}>
+                  Salvar Custo por Consulta
+                </Button>
+                {message && <div className="text-emerald-600 text-sm">{message}</div>}
+              </CardContent>
             </Card>
           </TabsContent>
 
