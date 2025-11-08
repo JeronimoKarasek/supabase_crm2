@@ -23,7 +23,19 @@ async function getUserFromRequest(request) {
 
 function applyFilterToQuery(query, filter) {
   const { column, type, value } = filter || {}
-  if (!column || typeof value === 'undefined' || value === null) return query
+  if (!column) return query
+  
+  // Para isBlank e isNotBlank, não precisa de valor
+  if (type === 'isBlank') {
+    return query.or(`${column}.is.null,${column}.eq.`)
+  }
+  if (type === 'isNotBlank') {
+    return query.not(column, 'is', null).neq(column, '')
+  }
+  
+  // Para outros tipos, precisa de valor
+  if (typeof value === 'undefined' || value === null) return query
+  
   switch (type) {
     case 'contains':
       return query.ilike(column, `%${value}%`)

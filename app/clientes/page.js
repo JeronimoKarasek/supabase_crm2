@@ -190,8 +190,9 @@ export default function App() {
       if (periodStart) url += `&periodStart=${encodeURIComponent(periodStart)}`
       if (periodEnd) url += `&periodEnd=${encodeURIComponent(periodEnd)}`
 
-      if (applyFilter && filterColumn && filterValue) {
-        url += `&filterColumn=${encodeURIComponent(filterColumn)}&filterValue=${encodeURIComponent(filterValue)}&filterType=${encodeURIComponent(filterType)}`
+      const requiresValue = filterType !== 'isBlank' && filterType !== 'isNotBlank'
+      if (applyFilter && filterColumn && (filterValue || !requiresValue)) {
+        url += `&filterColumn=${encodeURIComponent(filterColumn)}&filterValue=${encodeURIComponent(filterValue || '')}&filterType=${encodeURIComponent(filterType)}`
       }
       if (filtersList && filtersList.length > 0) {
         try {
@@ -312,6 +313,8 @@ export default function App() {
           <SelectItem value="notContains">Does Not Contain</SelectItem>
           <SelectItem value="equals">Equals</SelectItem>
           <SelectItem value="notEquals">Not Equal</SelectItem>
+          <SelectItem value="isBlank">Is Blank</SelectItem>
+          <SelectItem value="isNotBlank">Is Not Blank</SelectItem>
         </SelectContent>
       </Select>
     )
@@ -330,9 +333,10 @@ export default function App() {
       if (filtersList && filtersList.length > 0) {
         try { baseParams.set('filters', JSON.stringify(filtersList)) } catch {}
       }
-      if (filterColumn && filterValue) {
+      const requiresValueExport = filterType !== 'isBlank' && filterType !== 'isNotBlank'
+      if (filterColumn && (filterValue || !requiresValueExport)) {
         baseParams.set('filterColumn', filterColumn)
-        baseParams.set('filterValue', String(filterValue))
+        baseParams.set('filterValue', String(filterValue || ''))
         baseParams.set('filterType', filterType)
       }
 
@@ -378,9 +382,10 @@ export default function App() {
       if (filtersList && filtersList.length > 0) {
         try { baseParams.set('filters', JSON.stringify(filtersList)) } catch {}
       }
-      if (filterColumn && filterValue) {
+      const requiresValueSend = filterType !== 'isBlank' && filterType !== 'isNotBlank'
+      if (filterColumn && (filterValue || !requiresValueSend)) {
         baseParams.set('filterColumn', filterColumn)
-        baseParams.set('filterValue', String(filterValue))
+        baseParams.set('filterValue', String(filterValue || ''))
         baseParams.set('filterType', filterType)
       }
 
@@ -629,13 +634,15 @@ export default function App() {
 
                     {renderFilterOptions()}
 
-                    <Input
-                      placeholder="Filter value..."
-                      value={filterValue}
-                      onChange={(e) => setFilterValue(e.target.value)}
-                      type={isNumericType(getDataType(filterColumn)) ? 'number' : isDateType(getDataType(filterColumn)) ? 'date' : 'text'}
-                      disabled={!filterColumn}
-                    />
+                    {filterType !== 'isBlank' && filterType !== 'isNotBlank' && (
+                      <Input
+                        placeholder="Filter value..."
+                        value={filterValue}
+                        onChange={(e) => setFilterValue(e.target.value)}
+                        type={isNumericType(getDataType(filterColumn)) ? 'number' : isDateType(getDataType(filterColumn)) ? 'date' : 'text'}
+                        disabled={!filterColumn}
+                      />
+                    )}
 
                     <Input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} placeholder="Início" />
                     <Input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} placeholder="Fim" />
@@ -649,8 +656,9 @@ export default function App() {
                         Aplicar
                       </Button>
                       <Button variant="outline" onClick={() => {
-                        if (!filterColumn || !filterValue) return
-                        setFiltersList(prev => [...prev, { column: filterColumn, type: filterType, value: filterValue }])
+                        const requiresValue = filterType !== 'isBlank' && filterType !== 'isNotBlank'
+                        if (!filterColumn || (requiresValue && !filterValue)) return
+                        setFiltersList(prev => [...prev, { column: filterColumn, type: filterType, value: filterValue || '' }])
                         setFilterColumn(''); setFilterValue(''); setFilterType('contains')
                       }}>Adicionar filtro</Button>
                       <Button variant="outline" onClick={clearFilter} disabled={!filterColumn && !filterValue && filtersList.length===0 && !periodStart && !periodEnd}>
