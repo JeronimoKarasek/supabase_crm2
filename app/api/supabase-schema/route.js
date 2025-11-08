@@ -1,14 +1,20 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY,
-  { auth: { persistSession: false } }
-)
-
 export async function GET() {
   try {
+    // Inicializar Supabase dentro da função para garantir variáveis de ambiente
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+      return NextResponse.json({ 
+        error: 'Variáveis de ambiente Supabase não configuradas' 
+      }, { status: 500 })
+    }
+
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_KEY,
+      { auth: { persistSession: false } }
+    )
     // Query para buscar todas as tabelas do schema public
     const { data: tablesData, error: tablesError } = await supabaseAdmin.rpc('get_table_names')
     
