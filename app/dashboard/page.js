@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { supabase } from '@/lib/supabase'
 import { TrendingUp, TrendingDown, DollarSign, Users, ShoppingCart, CreditCard, ChevronRight, Settings } from 'lucide-react'
@@ -44,10 +45,13 @@ export default function DashboardPage() {
     multiplicadorVisitantes: 5,
   })
   const [isAdmin, setIsAdmin] = useState(false)
+  const [availableTables, setAvailableTables] = useState([])
+  const [availableColumns, setAvailableColumns] = useState({})
 
   useEffect(() => {
     checkAdmin()
     loadDashboard()
+    loadAvailableTables()
   }, [])
 
   const checkAdmin = async () => {
@@ -56,6 +60,27 @@ export default function DashboardPage() {
       const role = data?.user?.user_metadata?.role
       setIsAdmin(role === 'admin')
     } catch {}
+  }
+
+  const loadAvailableTables = async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      
+      const res = await fetch('/api/supabase-schema', {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      })
+      const data = await res.json()
+      
+      if (data.tables) {
+        setAvailableTables(data.tables)
+        setAvailableColumns(data.columns || {})
+      }
+    } catch (error) {
+      console.error('Erro ao carregar tabelas:', error)
+      // Fallback para tabelas conhecidas
+      setAvailableTables(['Farol', 'product_purchases', 'products', 'global_settings'])
+    }
   }
 
   const loadDashboard = async () => {
@@ -234,61 +259,164 @@ export default function DashboardPage() {
                 </DialogHeader>
                 <div className="space-y-6 py-4">
                   <div className="space-y-4">
-                    <h3 className="text-sm font-semibold">� Configuração de Clientes</h3>
+                    <h3 className="text-sm font-semibold">👥 Configuração de Clientes</h3>
                     <div className="space-y-2">
                       <Label>Tabela de Clientes</Label>
-                      <Input
+                      <Select
                         value={config.tabelaClientes}
-                        onChange={(e) => setConfig(prev => ({ ...prev, tabelaClientes: e.target.value }))}
-                        placeholder="Ex: Farol"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Nome da tabela do Supabase onde estão os clientes/cadastros
-                      </p>
-                    </div>
-                  </div>
-
+                        onValueChange={(value) => setConfig(prev => ({ ...prev, tabelaClientes: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a tabela" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableTables.length > 0 ? (
+                            availableTables.map(table => (
+                              <SelectItem key={table} value={table}>
                   <div className="space-y-4">
                     <h3 className="text-sm font-semibold">💰 Configuração de Vendas</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Tabela de Vendas</Label>
-                        <Input
+                        <Select
                           value={config.tabelaVendas}
-                          onChange={(e) => setConfig(prev => ({ ...prev, tabelaVendas: e.target.value }))}
-                          placeholder="Ex: product_purchases"
-                        />
+                          onValueChange={(value) => setConfig(prev => ({ ...prev, tabelaVendas: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a tabela" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableTables.length > 0 ? (
+                              availableTables.map(table => (
+                                <SelectItem key={table} value={table}>
+                                  {table}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <>
+                                <SelectItem value="product_purchases">product_purchases</SelectItem>
+                                <SelectItem value="vendas">vendas</SelectItem>
+                                <SelectItem value="pedidos">pedidos</SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-2">
                         <Label>Campo de Valor</Label>
-                        <Input
+                        <Select
                           value={config.campoValorVenda}
-                          onChange={(e) => setConfig(prev => ({ ...prev, campoValorVenda: e.target.value }))}
-                          placeholder="Ex: amount"
-                        />
+                          onValueChange={(value) => setConfig(prev => ({ ...prev, campoValorVenda: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o campo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableColumns[config.tabelaVendas]?.length > 0 ? (
+                              availableColumns[config.tabelaVendas].map(col => (
+                                <SelectItem key={col} value={col}>
+                                  {col}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <>
+                                <SelectItem value="amount">amount</SelectItem>
+                                <SelectItem value="valor">valor</SelectItem>
+                                <SelectItem value="price">price</SelectItem>
+                                <SelectItem value="total">total</SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-2">
                         <Label>Campo de Data</Label>
-                        <Input
+                        <Select
                           value={config.campoDataVenda}
-                          onChange={(e) => setConfig(prev => ({ ...prev, campoDataVenda: e.target.value }))}
-                          placeholder="Ex: created_at"
-                        />
+                          onValueChange={(value) => setConfig(prev => ({ ...prev, campoDataVenda: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o campo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableColumns[config.tabelaVendas]?.length > 0 ? (
+                              availableColumns[config.tabelaVendas].map(col => (
+                                <SelectItem key={col} value={col}>
+                                  {col}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <>
+                                <SelectItem value="created_at">created_at</SelectItem>
+                                <SelectItem value="data">data</SelectItem>
+                                <SelectItem value="date">date</SelectItem>
+                                <SelectItem value="updated_at">updated_at</SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-2">
                         <Label>Campo de Status</Label>
-                        <Input
+                        <Select
                           value={config.campoStatusVenda}
-                          onChange={(e) => setConfig(prev => ({ ...prev, campoStatusVenda: e.target.value }))}
-                          placeholder="Ex: status"
-                        />
+                          onValueChange={(value) => setConfig(prev => ({ ...prev, campoStatusVenda: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o campo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableColumns[config.tabelaVendas]?.length > 0 ? (
+                              availableColumns[config.tabelaVendas].map(col => (
+                                <SelectItem key={col} value={col}>
+                                  {col}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <>
+                                <SelectItem value="status">status</SelectItem>
+                                <SelectItem value="state">state</SelectItem>
+                                <SelectItem value="payment_status">payment_status</SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-2">
                         <Label>Status = Pago</Label>
-                        <Input
+                        <Select
                           value={config.statusAprovado}
-                          onChange={(e) => setConfig(prev => ({ ...prev, statusAprovado: e.target.value }))}
-                          placeholder="Ex: paid"
+                          onValueChange={(value) => setConfig(prev => ({ ...prev, statusAprovado: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Valor do status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="paid">paid</SelectItem>
+                            <SelectItem value="approved">approved</SelectItem>
+                            <SelectItem value="pago">pago</SelectItem>
+                            <SelectItem value="aprovado">aprovado</SelectItem>
+                            <SelectItem value="completed">completed</SelectItem>
+                            <SelectItem value="success">success</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Valor que indica pagamento aprovado
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Multiplicador Visitantes</Label>
+                        <Input
+                          type="number"
+                          value={config.multiplicadorVisitantes}
+                          onChange={(e) => setConfig(prev => ({ ...prev, multiplicadorVisitantes: Number(e.target.value) }))}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Visitantes = Clientes × Multiplicador
+                        </p>
+                      </div>
+                    </div>
+                  </div>  placeholder="Ex: paid"
                         />
                         <p className="text-xs text-muted-foreground">
                           Valor do status que indica pagamento aprovado
