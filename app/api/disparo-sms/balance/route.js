@@ -31,10 +31,12 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Falha ao ler configurações globais' }, { status: 500 })
     }
     const s = settingsRow?.data || {}
-    const apiToken = s.smsApiToken
-    console.log('📊 [Balance API] Has token:', !!apiToken)
+    // Prioridade: 1. Variável de ambiente (Vercel), 2. Banco de dados
+    const apiToken = process.env.KOLMEYA_SMS_TOKEN || s.smsApiToken
+    const tokenSource = process.env.KOLMEYA_SMS_TOKEN ? 'env' : 'database'
+    console.log('📊 [Balance API] Token source:', tokenSource, 'Has token:', !!apiToken)
     if (!apiToken) {
-      return NextResponse.json({ error: 'Token SMS não configurado' }, { status: 400 })
+      return NextResponse.json({ error: 'Token SMS não configurado. Configure em Configurações ou no Vercel.' }, { status: 400 })
     }
 
     console.log('📊 [Balance API] Calling Kolmeya API...')
