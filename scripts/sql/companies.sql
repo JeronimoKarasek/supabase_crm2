@@ -134,7 +134,7 @@ CREATE POLICY "Admins can view all companies" ON companies
   USING (
     EXISTS (
       SELECT 1 FROM public.users
-      WHERE users.id = auth.uid()
+      WHERE users.id::text = auth.uid()::text
       AND users.role = 'admin'
     )
   );
@@ -146,7 +146,7 @@ CREATE POLICY "Admins can create companies" ON companies
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM public.users
-      WHERE users.id = auth.uid()
+      WHERE users.id::text = auth.uid()::text
       AND users.role = 'admin'
     )
   );
@@ -158,7 +158,7 @@ CREATE POLICY "Admins can update companies" ON companies
   USING (
     EXISTS (
       SELECT 1 FROM public.users
-      WHERE users.id = auth.uid()
+      WHERE users.id::text = auth.uid()::text
       AND users.role = 'admin'
     )
   );
@@ -170,7 +170,7 @@ CREATE POLICY "Users can view their own company" ON companies
   USING (
     id IN (
       SELECT company_id FROM public.users
-      WHERE users.id = auth.uid()
+      WHERE users.id::text = auth.uid()::text
     )
   );
 
