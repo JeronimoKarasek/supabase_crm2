@@ -14,31 +14,41 @@ CREATE TABLE IF NOT EXISTS companies (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Criar tabela users se não existir (compatibilidade)
+CREATE TABLE IF NOT EXISTS public.users (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT,
+  name TEXT,
+  phone TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Adicionar colunas na tabela users se não existirem
 DO $$ 
 BEGIN
   -- Adicionar company_id
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'users' AND column_name = 'company_id'
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'company_id'
   ) THEN
-    ALTER TABLE users ADD COLUMN company_id BIGINT REFERENCES companies(id) ON DELETE SET NULL;
+    ALTER TABLE public.users ADD COLUMN company_id BIGINT REFERENCES companies(id) ON DELETE SET NULL;
   END IF;
   
   -- Adicionar active
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'users' AND column_name = 'active'
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'active'
   ) THEN
-    ALTER TABLE users ADD COLUMN active BOOLEAN DEFAULT true;
+    ALTER TABLE public.users ADD COLUMN active BOOLEAN DEFAULT true;
   END IF;
   
   -- Adicionar role (se não existir)
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'users' AND column_name = 'role'
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'role'
   ) THEN
-    ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
+    ALTER TABLE public.users ADD COLUMN role TEXT DEFAULT 'user';
   END IF;
 END $$;
 
