@@ -6,9 +6,7 @@ export const dynamic = 'force-dynamic'
 /**
  * Add Credits API
  * 
- * Gera link de pagamento para adicionar créditos
- * Suporta: PicPay e Mercado Pago
- * O provedor é selecionado nas configurações globais
+ * Gera pagamento Pix via Mercado Pago para adicionar créditos
  */
 
 async function getUser(request) {
@@ -39,8 +37,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Valor inválido' }, { status: 400 })
     }
 
-    // Busca configurações de pagamento
-    let provider = 'picpay'
+    // Busca configurações de pagamento do Mercado Pago
     let settings = null
     let productData = null
     
@@ -51,8 +48,20 @@ export async function POST(request) {
         .eq('id', 'global')
         .single()
       settings = settingsData?.data?.payments || {}
-      provider = settings.provider || 'picpay'
-    } catch {}
+      
+      console.log('⚙️ Configurações Mercado Pago:', {
+        hasMercadoPagoToken: !!(settings.mercadopagoAccessToken || process.env.MERCADOPAGO_ACCESS_TOKEN),
+        hasEnvToken: !!process.env.MERCADOPAGO_ACCESS_TOKEN,
+        hasSettingsToken: !!settings.mercadopagoAccessToken
+      })
+    } catch (e) {
+      console.error('❌ Erro ao buscar configurações:', e)
+      return NextResponse.json({ 
+        error: 'Erro ao buscar configurações de pagamento',
+        details: e.message,
+        hint: 'Verifique se as configurações estão salvas em Configuração > Pagamentos'
+      }, { status: 500 })
+    }
 
     // Se for compra de produto, busca dados do produto
     if (productKey) {
@@ -72,6 +81,17 @@ export async function POST(request) {
       }
     }
 
+    // Busca Access Token do Mercado Pago
+    const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN || settings.mercadopagoAccessToken
+    
+    if (!accessToken) {
+      console.error('❌ Mercado Pago Access Token não configurado!')
+      return NextResponse.json({ 
+        error: 'Mercado Pago não configurado',
+        hint: 'Configure o Access Token em: Configuração > Pagamentos > Mercado Pago Access Token'
+      }, { status: 500 })
+    }
+
     // Gera referenceId único
     // IMPORTANTE: Para produtos usa "product_", para créditos usa "credits_"
     const referenceId = productKey 
@@ -80,33 +100,14 @@ export async function POST(request) {
     
     const baseUrl = process.env.APP_BASE_URL || new URL(request.url).origin
 
-    // Log para debug
-    console.log('💳 Payment Request Summary:', {
+    console.log('💳 Gerando pagamento Mercado Pago:', {
       isProductPurchase: !!productData,
       productKey: productKey,
-      productId: productData?.id,
-      productName: productData?.name,
       referenceId: referenceId,
       amount: amount,
-      provider: provider,
-      userId: user.id
+      userId: user.id,
+      userEmail: user.email
     })
-
-    // Processa pagamento com o provedor selecionado
-    if (provider === 'mercadopago') {
-      // ============== MERCADO PAGO ==============
-      let accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN || settings.mercadopagoAccessToken
-      
-      console.log('🔍 Debug Mercado Pago:')
-      console.log('- Provider:', provider)
-      console.log('- Access Token exists:', !!accessToken)
-      console.log('- Access Token (primeiros 20 chars):', accessToken?.substring(0, 20))
-      console.log('- Settings:', JSON.stringify(settings, null, 2))
-      
-      if (!accessToken) {
-        console.error('❌ Access Token não encontrado!')
-        return NextResponse.json({ error: 'Mercado Pago access token não configurado' }, { status: 500 })
-      }
 
       // Cria pagamento Pix direto (sem checkout redirect)
       const payment = {
@@ -148,8 +149,18 @@ export async function POST(request) {
 
       if (!mpResponse.ok) {
         console.error('❌ Erro do Mercado Pago:', mpData)
+        
+        // Extrai mensagem de erro mais específica
+        const errorMessage = mpData?.message || mpData?.error || 'Erro ao gerar pagamento Pix'
+        const errorCause = mpData?.cause?.[0]?.description || mpData?.cause?.[0]?.code || ''
+        const fullError = errorCause ? `${errorMessage}: ${errorCause}` : errorMessage
+        
         return NextResponse.json(
-          { error: 'Erro ao gerar pagamento Pix', details: mpData },
+          { 
+            error: fullError,
+            details: mpData,
+            hint: 'Verifique se o Access Token do Mercado Pago está configurado corretamente em Configuração > Pagamentos'
+          },
           { status: mpResponse.status }
         )
       }
@@ -202,8 +213,8 @@ export async function POST(request) {
         }
       }
 
-      // Forma unificada de resposta (flatten + data)
-      const flatResponse = {
+      // Retorna dados do pagamento Mercado Pago
+      const response = {
         paymentId: mpData.id,
         status: mpData.status, // 'pending' para Pix
         paymentMethod: 'pix',
@@ -217,108 +228,8 @@ export async function POST(request) {
         provider: 'mercadopago',
         expirationDate: mpData.date_of_expiration || null
       }
-      return NextResponse.json({ ...flatResponse, data: flatResponse })
-    } else {
-      // ============== PICPAY (padrão) ==============
-      // Prepara payload para o PicPay
-      const picpayPayload = {
-        referenceId: referenceId,
-        callbackUrl: `${baseUrl}/api/picpay/callback`,
-        returnUrl: `${baseUrl}/dashboard`,
-        value: Number(amount.toFixed(2)),
-        buyer: {
-          firstName: user.user_metadata?.name?.split(' ')[0] || user.email.split('@')[0],
-          lastName: user.user_metadata?.name?.split(' ').slice(1).join(' ') || 'Usuário',
-          document: '00000000000',
-          email: user.email,
-          phone: user.user_metadata?.phone || '+5500000000000',
-        },
-      }
-
-      // Chama API do PicPay para criar pagamento (não precisa de token)
-      const picpayResponse = await fetch('https://appws.picpay.com/ecommerce/public/payments', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(picpayPayload),
-      })
-
-      if (!picpayResponse.ok) {
-        const errorData = await picpayResponse.json()
-        return NextResponse.json(
-          { error: 'Erro ao gerar link de pagamento', details: errorData },
-          { status: picpayResponse.status }
-        )
-      }
-
-      const picpayData = await picpayResponse.json()
-
-      // Se for compra de produto, cria registro em product_purchases
-      if (productKey && !productData) {
-        console.error('🚨 CRITICAL: productKey exists but productData is null (PicPay)!', {
-          productKey: productKey,
-          productData: productData
-        })
-      }
       
-      if (productData) {
-        console.log('📝 Creating product_purchase record (PicPay)', {
-          user_id: user.id,
-          product_id: productData.id,
-          product_key: productData.key,
-          reference_id: referenceId,
-          amount: amount
-        })
-        
-        const { data: purchaseRecord, error: purchaseError } = await supabaseAdmin
-          .from('product_purchases')
-          .insert({
-            user_id: user.id,
-            product_id: productData.id,
-            reference_id: referenceId,
-            amount: amount,
-            status: 'pending',
-            payment_method: 'pix',
-            provider: 'picpay'
-          })
-          .select()
-          .single()
-        
-        if (purchaseError) {
-          console.error('❌ CRITICAL: Failed to create purchase record (PicPay)!', {
-            error: purchaseError,
-            errorMessage: purchaseError.message,
-            errorDetails: purchaseError
-          })
-        } else {
-          console.log('✅ Purchase record created successfully (PicPay):', {
-            purchaseId: purchaseRecord?.id,
-            referenceId: referenceId,
-            userId: user.id,
-            productId: productData.id
-          })
-        }
-      }
-
-      // Retorna dados do PicPay
-      const picpayQrContent = picpayData?.qrcode?.content || picpayData?.qrcode?.qrcodeContent || null
-      const picpayQrBase64 = picpayData?.qrcode?.base64 || picpayData?.qrcode?.image || null
-      const flatResponse = {
-        paymentId: picpayData?.referenceId || referenceId,
-        status: picpayData?.status || 'pending',
-        paymentMethod: 'pix', // PicPay usa Pix por trás ao gerar QR
-        qrCode: picpayQrContent,
-        qrCodeBase64: picpayQrBase64,
-        paymentUrl: picpayData.paymentUrl || null,
-        referenceId: referenceId,
-        amount: amount,
-        currency: 'BRL',
-        description: description,
-        provider: 'picpay'
-      }
-      return NextResponse.json({ ...flatResponse, data: { ...flatResponse, raw: picpayData } })
-    }
+      return NextResponse.json({ ...response, data: response })
   } catch (error) {
     return NextResponse.json(
       { error: 'Erro ao processar requisição', details: error.message },
