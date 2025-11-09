@@ -38,6 +38,7 @@ export default function UsuariosPage() {
   const [addCreditsErr, setAddCreditsErr] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [cpf, setCpf] = useState('')
   const [role, setRole] = useState('user')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -60,6 +61,7 @@ export default function UsuariosPage() {
   // edit state
   const [editingId, setEditingId] = useState('')
   const [editRole, setEditRole] = useState('user')
+  const [editCpf, setEditCpf] = useState('')
   const [editEmpresaId, setEditEmpresaId] = useState('')
   const [editAllowedTables, setEditAllowedTables] = useState([])
   const [editSelectedSectors, setEditSelectedSectors] = useState([])
@@ -176,6 +178,7 @@ export default function UsuariosPage() {
       const payload = {
         email,
         password,
+        cpf,
         role,
         empresaId: selectedEmpresaId,
         allowedTables: allowedTablesNew,
@@ -193,6 +196,7 @@ export default function UsuariosPage() {
         setMessage('Usuário criado com sucesso.')
         setEmail('')
         setPassword('')
+        setCpf('')
         setRole('user')
         setSelectedEmpresaId('')
         setAllowedTablesNew([])
@@ -244,6 +248,7 @@ export default function UsuariosPage() {
   setEditingId(u.id)
   const meta = u.user_metadata || {}
   setEditRole(meta.role || 'user')
+  setEditCpf(meta.cpf || '')
   setEditEmpresaId(meta.empresaId || '')
   const allowed = meta.permissions?.allowedTables || []
   setEditAllowedTables(allowed)
@@ -297,6 +302,7 @@ export default function UsuariosPage() {
       const payload = {
         id: editingId,
         role: editRole,
+        cpf: editCpf,
         empresaId: editEmpresaId,
         allowedTables: editAllowedTables,
         filtersByTable: editFiltersByTable,
@@ -309,6 +315,7 @@ export default function UsuariosPage() {
       if (res.ok) {
         setMessage('Usuário atualizado com sucesso.')
         setEditingId('')
+        setEditCpf('')
         setEditPassword('')
         await fetchUsers()
       } else {
@@ -360,7 +367,7 @@ export default function UsuariosPage() {
                 <CardDescription>Informe e-mail, senha, papel, empresa e acesso</CardDescription>
               </CardHeader>
               <CardContent>
-                <form className="grid grid-cols-1 md:grid-cols-5 gap-4" onSubmit={onSubmit}>
+                <form className="grid grid-cols-1 md:grid-cols-6 gap-4" onSubmit={onSubmit}>
                   <Input
                     type="email"
                     placeholder="email@exemplo.com"
@@ -375,6 +382,13 @@ export default function UsuariosPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     minLength={8}
+                  />
+                  <Input
+                    type="text"
+                    placeholder="CPF (opcional)"
+                    value={cpf}
+                    onChange={(e) => setCpf(e.target.value)}
+                    maxLength={14}
                   />
                   <Select value={role} onValueChange={setRole}>
                     <SelectTrigger>
@@ -502,7 +516,7 @@ export default function UsuariosPage() {
                     <CardDescription>ID: {editingId}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                       <Select value={editRole} onValueChange={setEditRole}>
                         <SelectTrigger>
                           <SelectValue placeholder="Papel" />
@@ -523,9 +537,10 @@ export default function UsuariosPage() {
                           ))}
                         </SelectContent>
                       </Select>
+                      <Input type="text" placeholder="CPF (opcional)" value={editCpf} onChange={(e)=> setEditCpf(e.target.value)} maxLength={14} />
                       <Input type="password" placeholder="Nova senha (opcional)" value={editPassword} onChange={(e)=> setEditPassword(e.target.value)} minLength={8} />
                       <div className="md:col-span-2 flex gap-2 justify-end">
-                        <Button variant="outline" onClick={() => { setEditingId(''); setEditPassword('') }}>Cancelar</Button>
+                        <Button variant="outline" onClick={() => { setEditingId(''); setEditCpf(''); setEditPassword('') }}>Cancelar</Button>
                         <Button onClick={saveEdit} disabled={loading}>{loading ? 'Salvando...' : 'Salvar alterações'}</Button>
                       </div>
                     </div>
