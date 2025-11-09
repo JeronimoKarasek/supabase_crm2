@@ -172,18 +172,10 @@ export async function POST(request) {
       .single()
 
     const settings = settingsRow?.data || {}
-    // AccessKey fixa como fallback para o login na Shift Data
-    const accessKey = (settings.shiftDataAccessKey || '96FA65CEC7234FFDA72D2D97EA6A457B')
-    const costPerQuery = parseFloat(settings.shiftDataCostPerQuery) || 0.10
-    // Nunca bloqueia por falta de accessKey, sempre usa fallback
+    const webhookTokenUrl = settings.shiftDataWebhookToken || 'https://weebserver6.farolchat.com/webhook/gerarToken'
+    const costPerQuery = parseFloat(settings.shiftDataCostPerQuery) || 0.07
 
-    // Atualizar status para processando
-    await supabaseAdmin
-      .from('enrichment_jobs')
-      .update({ status: 'processando', updated_at: new Date().toISOString() })
-      .eq('lote_id', lote_id)
-
-    // Buscar registros pendentes
+    // Buscar registros pendentes ANTES de validar saldo
     const { data: records } = await supabaseAdmin
       .from('enrichment_records')
       .select('*')
@@ -203,43 +195,86 @@ export async function POST(request) {
       })
     }
 
+    // Buscar empresa do usuário
+    const { data: empresaLink, error: linkError } = await supabaseAdmin
+      .from('empresa_users')
+      .select('empresa_id')
+      .eq('user_id', user.id)
+      .single()
+
+    if (linkError || !empresaLink?.empresa_id) {
+      return NextResponse.json({ 
+        error: 'Usuário não está vinculado a nenhuma empresa' 
+      }, { status: 404 })
+    }
+
+    // Verificar saldo da empresa antes de processar
+    const { data: empresaData, error: empresaError } = await supabaseAdmin
+      .from('empresa')
+      .select('credits')
+      .eq('id', empresaLink.empresa_id)
+      .single()
+
+    if (empresaError || !empresaData) {
+      return NextResponse.json({ 
+        error: 'Empresa não encontrada no sistema' 
+      }, { status: 404 })
+    }
+
+    const currentCredits = parseFloat(empresaData.credits) || 0
+    const requiredCredits = records.length * costPerQuery
+
+    if (currentCredits < requiredCredits) {
+      return NextResponse.json({ 
+        error: `Saldo insuficiente para processar ${records.length} registros. Necessário: R$ ${requiredCredits.toFixed(2)} | Disponível: R$ ${currentCredits.toFixed(2)}`,
+        requiredCredits: requiredCredits,
+        availableCredits: currentCredits,
+        recordCount: records.length,
+        costPerRecord: costPerQuery
+      }, { status: 402 })
+    }
+
+    // Atualizar status para processando
+    await supabaseAdmin
+      .from('enrichment_jobs')
+      .update({ status: 'processando', updated_at: new Date().toISOString() })
+      .eq('lote_id', lote_id)
+
     console.log('📋 [Enrich Process] Processing', records.length, 'records')
 
-    // 1. Fazer login na API Shift Data
+    // 1. Buscar token via webhook
     let authToken = null
     try {
-      const loginRes = await fetch('https://api.shiftdata.com.br/api/Login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        // Algumas integrações exigem "AccessKey" (case-sensitive). Enviamos ambos.
-        body: JSON.stringify({ accessKey, AccessKey: accessKey })
+      console.log('🔑 [Enrich Process] Buscando token via webhook:', webhookTokenUrl)
+      const tokenRes = await fetch(webhookTokenUrl, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
       })
-      const loginData = await parseJsonSafe(loginRes)
+      const tokenData = await parseJsonSafe(tokenRes)
       
-      if (!loginRes.ok) {
-        throw new Error(loginData?.message || 'Falha no login Shift Data')
+      if (!tokenRes.ok) {
+        throw new Error(tokenData?.message || tokenData?.error || 'Falha ao obter token do webhook')
       }
       
-      // Extração resiliente do token, cobrindo variações comuns
+      // Extrair token de múltiplas estruturas possíveis
       const candidates = [
-        loginData?.token,
-        loginData?.Token,
-        loginData?.access_token,
-        loginData?.accessToken,
-        loginData?.data?.token,
-        loginData?.data?.Token,
-        loginData?.data?.access_token,
-        loginData?.data?.accessToken,
+        tokenData?.token,
+        tokenData?.Token,
+        tokenData?.access_token,
+        tokenData?.accessToken,
+        tokenData?.data?.token,
+        tokenData?.data?.Token,
+        typeof tokenData === 'string' ? tokenData : null
       ]
       authToken = candidates.find(Boolean)
+      
       if (!authToken) {
-        console.warn('⚠️ [Enrich Process] Login sem token. Usando AccessKey como Bearer fallback. Body:', loginData)
-        authToken = accessKey // Fallback: usar a chave diretamente como token
+        throw new Error('Token não encontrado na resposta do webhook')
       }
       
-  console.log('✅ [Enrich Process] Login successful. Query type:', job.query_type)
-    } catch (loginError) {
-      console.error('❌ [Enrich Process] Login error:', loginError)
+      console.log('✅ [Enrich Process] Token obtido com sucesso. Query type:', job.query_type)
+    } catch (tokenError) {
+      console.error('❌ [Enrich Process] Erro ao buscar token:', tokenError)
       await supabaseAdmin
         .from('enrichment_jobs')
         .update({ 
@@ -249,8 +284,8 @@ export async function POST(request) {
         .eq('lote_id', lote_id)
       
       return NextResponse.json({ 
-        error: 'Erro ao fazer login na API Shift Data', 
-        details: loginError.message 
+        error: 'Erro ao obter token de autenticação', 
+        details: tokenError.message 
       }, { status: 500 })
     }
 
@@ -337,6 +372,22 @@ export async function POST(request) {
       })
       .eq('lote_id', lote_id)
 
+    // Descontar créditos da empresa
+    if (creditsUsed > 0) {
+      const newCredits = Math.max(0, currentCredits - creditsUsed)
+      
+      const { error: updateError } = await supabaseAdmin
+        .from('empresa')
+        .update({ credits: newCredits })
+        .eq('id', empresaLink.empresa_id)
+
+      if (updateError) {
+        console.error('❌ [Enrich Process] Erro ao descontar créditos:', updateError)
+      } else {
+        console.log(`💰 [Enrich Process] Créditos descontados: Empresa ${empresaLink.empresa_id} | ${currentCredits.toFixed(2)} → ${newCredits.toFixed(2)} (${successCount} consultas × R$ ${costPerQuery.toFixed(2)} = R$ ${creditsUsed.toFixed(2)})`)
+      }
+    }
+
     console.log('✅ [Enrich Process] Complete! Success:', successCount, 'Failed:', failedCount)
 
     return NextResponse.json({
@@ -345,7 +396,8 @@ export async function POST(request) {
       success_count: successCount,
       failed_count: failedCount,
       credits_used: creditsUsed,
-      is_complete: isComplete
+      is_complete: isComplete,
+      remaining_credits: Math.max(0, currentCredits - creditsUsed)
     })
 
   } catch (error) {

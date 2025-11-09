@@ -32,6 +32,10 @@ export default function UsuariosPage() {
   const [editEmpresaMsg, setEditEmpresaMsg] = useState('')
   const [editEmpresaErr, setEditEmpresaErr] = useState('')
   const [editingEmpresaId, setEditingEmpresaId] = useState('')
+  const [addCreditsEmpresaId, setAddCreditsEmpresaId] = useState('')
+  const [addCreditsAmount, setAddCreditsAmount] = useState('')
+  const [addCreditsMsg, setAddCreditsMsg] = useState('')
+  const [addCreditsErr, setAddCreditsErr] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('user')
@@ -343,9 +347,9 @@ export default function UsuariosPage() {
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
       <div className="container mx-auto py-6 px-6">
         <Tabs defaultValue="usuarios" className="space-y-6">
-          <TabsList className="grid grid-cols-2 w-full md:max-w-md mb-6">
+          <TabsList className={`grid w-full md:max-w-md mb-6 ${currentUserRole === 'admin' ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <TabsTrigger value="usuarios">Usuários</TabsTrigger>
-            <TabsTrigger value="empresas">Empresas</TabsTrigger>
+            {currentUserRole === 'admin' && <TabsTrigger value="empresas">Empresas</TabsTrigger>}
           </TabsList>
 
           {/* Tab Usuários */}
@@ -633,6 +637,7 @@ export default function UsuariosPage() {
                             <TableCell>{u.user_metadata?.empresaId || '—'}</TableCell>
                             <TableCell className="flex gap-2">
                               <Button size="sm" variant="outline" onClick={() => startEdit(u)}>Editar</Button>
+                              <Button size="sm" variant="destructive" onClick={() => onDeleteUser(u)}>Excluir</Button>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -646,8 +651,8 @@ export default function UsuariosPage() {
             </Card>
           </TabsContent>
 
-          {/* Tab Empresas */}
-          <TabsContent value="empresas">
+          {/* Tab Empresas - apenas para admins */}
+          {currentUserRole === 'admin' && <TabsContent value="empresas">
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle>Nova Empresa</CardTitle>
@@ -674,7 +679,10 @@ export default function UsuariosPage() {
                       const data2 = await res2.json()
                       if (res2.ok) setEmpresas(data2.empresas || [])
                     } else {
-                      setEmpresaErr(data?.error || 'Falha ao cadastrar empresa')
+                      const errorMsg = data?.details 
+                        ? `${data.error}\n\nDetalhes: ${data.details}\nCódigo: ${data.code}\n\nDica: ${data.hint || 'Execute o script SQL em scripts/sql/add_credits_to_empresa.sql no Supabase SQL Editor'}`
+                        : (data?.error || 'Falha ao cadastrar empresa')
+                      setEmpresaErr(errorMsg)
                     }
                   } catch (err) {
                     setEmpresaErr('Erro inesperado ao cadastrar empresa')
@@ -705,6 +713,7 @@ export default function UsuariosPage() {
                         <TableHead>Responsável</TableHead>
                         <TableHead>Telefone</TableHead>
                         <TableHead>Limite</TableHead>
+                        <TableHead>Créditos</TableHead>
                         <TableHead>ID</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
@@ -717,16 +726,47 @@ export default function UsuariosPage() {
                           <TableCell>{e.responsavel}</TableCell>
                           <TableCell>{e.telefone}</TableCell>
                           <TableCell>{e.user_limit || 1}</TableCell>
+                          <TableCell>R$ {(parseFloat(e.credits) || 0).toFixed(2)}</TableCell>
                           <TableCell className="font-mono text-xs">{e.id}</TableCell>
                           <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => {
-                              setEditingEmpresaId(e.id)
-                              setEditEmpresaNome(e.nome || '')
-                              setEditEmpresaCnpj(e.cnpj || '')
-                              setEditEmpresaResp(e.responsavel || '')
-                              setEditEmpresaTel(e.telefone || '')
-                              setEditEmpresaUserLimit(String(e.user_limit || 1))
-                            }}>Editar</Button>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => {
+                                setEditingEmpresaId(e.id)
+                                setEditEmpresaNome(e.nome || '')
+                                setEditEmpresaCnpj(e.cnpj || '')
+                                setEditEmpresaResp(e.responsavel || '')
+                                setEditEmpresaTel(e.telefone || '')
+                                setEditEmpresaUserLimit(String(e.user_limit || 1))
+                              }}>Editar</Button>
+                              <Button size="sm" variant="outline" onClick={() => {
+                                setAddCreditsEmpresaId(e.id)
+                                setAddCreditsAmount('')
+                                setAddCreditsMsg('')
+                                setAddCreditsErr('')
+                              }}>+ Créditos</Button>
+                              <Button size="sm" variant="destructive" onClick={async () => {
+                                if (!window.confirm(`Excluir empresa "${e.nome}"?`)) return
+                                try {
+                                  const { data: sessionData } = await supabase.auth.getSession()
+                                  const token = sessionData?.session?.access_token
+                                  const res = await fetch('/api/empresas', {
+                                    method: 'DELETE',
+                                    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                                    body: JSON.stringify({ id: e.id })
+                                  })
+                                  const data = await res.json()
+                                  if (res.ok) {
+                                    const res2 = await fetch('/api/empresas', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+                                    const data2 = await res2.json()
+                                    if (res2.ok) setEmpresas(data2.empresas || [])
+                                  } else {
+                                    alert(data?.error || 'Falha ao excluir empresa')
+                                  }
+                                } catch (err) {
+                                  alert('Erro ao excluir empresa')
+                                }
+                              }}>Excluir</Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -769,7 +809,10 @@ export default function UsuariosPage() {
                         if (res2.ok) setEmpresas(data2.empresas || [])
                         setTimeout(() => setEditingEmpresaId(''), 1500)
                       } else {
-                        setEditEmpresaErr(data?.error || data?.details || 'Falha ao atualizar empresa')
+                        const errorMsg = data?.details 
+                          ? `${data.error}\n\nDetalhes: ${data.details}\nCódigo: ${data.code}\n\nDica: ${data.hint || 'Execute o script SQL em scripts/sql/add_credits_to_empresa.sql'}`
+                          : (data?.error || 'Falha ao atualizar empresa')
+                        setEditEmpresaErr(errorMsg)
                       }
                     } catch (err) {
                       setEditEmpresaErr('Erro inesperado ao atualizar empresa')
@@ -790,7 +833,85 @@ export default function UsuariosPage() {
                 </CardContent>
               </Card>
             )}
-          </TabsContent>
+            {addCreditsEmpresaId && (
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle>Ajustar Créditos</CardTitle>
+                  <CardDescription>
+                    Empresa: {empresas.find(e => e.id === addCreditsEmpresaId)?.nome} | 
+                    Saldo atual: R$ {(parseFloat(empresas.find(e => e.id === addCreditsEmpresaId)?.credits) || 0).toFixed(2)}
+                    <br />
+                    <span className="text-xs text-muted-foreground">
+                      Use valores positivos para adicionar ou negativos para remover créditos
+                    </span>
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form className="grid grid-cols-1 md:grid-cols-3 gap-4" onSubmit={async (e) => {
+                    e.preventDefault()
+                    setAddCreditsMsg(''); setAddCreditsErr('')
+                    try {
+                      const empresa = empresas.find(e => e.id === addCreditsEmpresaId)
+                      const currentCredits = parseFloat(empresa?.credits) || 0
+                      const adjustAmount = parseFloat(addCreditsAmount) || 0
+                      if (adjustAmount === 0) {
+                        setAddCreditsErr('Valor não pode ser zero')
+                        return
+                      }
+                      // Calcular novo saldo, não permitindo negativo
+                      const newCredits = Math.max(0, currentCredits + adjustAmount)
+                      const { data: sessionData } = await supabase.auth.getSession()
+                      const token = sessionData?.session?.access_token
+                      const res = await fetch('/api/empresas', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                        body: JSON.stringify({ 
+                          id: addCreditsEmpresaId, 
+                          nome: empresa.nome,
+                          cnpj: empresa.cnpj,
+                          responsavel: empresa.responsavel,
+                          telefone: empresa.telefone,
+                          user_limit: empresa.user_limit,
+                          credits: newCredits
+                        })
+                      })
+                      const data = await res.json()
+                      if (res.ok) {
+                        const acao = adjustAmount > 0 ? 'adicionados' : 'removidos'
+                        setAddCreditsMsg(`Créditos ${acao}! Novo saldo: R$ ${newCredits.toFixed(2)}`)
+                        const res2 = await fetch('/api/empresas', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+                        const data2 = await res2.json()
+                        if (res2.ok) setEmpresas(data2.empresas || [])
+                        setTimeout(() => setAddCreditsEmpresaId(''), 2000)
+                      } else {
+                        const errorMsg = data?.details 
+                          ? `${data.error}\n\nDetalhes: ${data.details}\n\nDica: ${data.hint || 'Execute o script SQL em scripts/sql/add_credits_to_empresa.sql'}`
+                          : (data?.error || 'Falha ao ajustar créditos')
+                        setAddCreditsErr(errorMsg)
+                      }
+                    } catch (err) {
+                      setAddCreditsErr('Erro inesperado')
+                    }
+                  }}>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="Valor (positivo ou negativo)" 
+                      value={addCreditsAmount} 
+                      onChange={e=>setAddCreditsAmount(e.target.value)} 
+                      required 
+                    />
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" onClick={() => setAddCreditsEmpresaId('')}>Cancelar</Button>
+                      <Button type="submit">Aplicar</Button>
+                    </div>
+                  </form>
+                  {addCreditsMsg && <div className="mt-2 text-emerald-700 dark:text-emerald-300 text-sm">{addCreditsMsg}</div>}
+                  {addCreditsErr && <div className="mt-2 text-red-600 dark:text-red-400 text-sm">{addCreditsErr}</div>}
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>}
 
 
         </Tabs>

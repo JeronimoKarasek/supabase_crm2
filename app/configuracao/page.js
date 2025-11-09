@@ -48,6 +48,7 @@ export default function ConfiguracaoPage() {
   // Shift Data API
   const [shiftDataAccessKey, setShiftDataAccessKey] = useState('')
   const [shiftDataCostPerQuery, setShiftDataCostPerQuery] = useState('')
+  const [shiftDataWebhookToken, setShiftDataWebhookToken] = useState('')
 
   const [message, setMessage] = useState('')
 
@@ -122,7 +123,8 @@ export default function ConfiguracaoPage() {
           setSmsMessageValue(s.smsMessageValue || '')
           // AccessKey fixa (fallback) apenas para exibição; não editável
           setShiftDataAccessKey(s.shiftDataAccessKey || '96FA65CEC7234FFDA72D2D97EA6A457B')
-          setShiftDataCostPerQuery(s.shiftDataCostPerQuery || '')
+          setShiftDataCostPerQuery(s.shiftDataCostPerQuery || '0.07')
+          setShiftDataWebhookToken(s.shiftDataWebhookToken || 'https://weebserver6.farolchat.com/webhook/gerarToken')
         }
       } catch {}
     })()
@@ -526,20 +528,20 @@ export default function ConfiguracaoPage() {
             <Card className="bg-card">
               <CardHeader>
                 <CardTitle>Shift Data - Higienização de Dados</CardTitle>
-                <CardDescription>Token de acesso da API Shift Data (fixo, não editável)</CardDescription>
+                <CardDescription>Configuração do webhook que retorna o token de autenticação</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="shift_access_key">Access Key (fixo)</Label>
+                    <Label htmlFor="shift_webhook_token">Webhook para Obter Token *</Label>
                     <Input 
-                      id="shift_access_key"
-                      type="text"
-                      value={shiftDataAccessKey}
-                      readOnly
-                      className="bg-slate-100 cursor-not-allowed"
+                      id="shift_webhook_token"
+                      type="url"
+                      placeholder="https://seu-servidor.com/webhook/gerarToken" 
+                      value={shiftDataWebhookToken} 
+                      onChange={(e) => setShiftDataWebhookToken(e.target.value)} 
                     />
-                    <p className="text-xs text-muted-foreground">Chave de acesso fornecida pela Shift Data. Não é possível alterar.</p>
+                    <p className="text-xs text-muted-foreground">URL do webhook que retorna o token (método GET). Exemplo: https://weebserver6.farolchat.com/webhook/gerarToken</p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="shift_cost_per_query">Custo por Consulta (R$) *</Label>
@@ -556,25 +558,29 @@ export default function ConfiguracaoPage() {
                   </div>
                 </div>
                 <div className="p-4 bg-muted/50 rounded-md border border-border/50">
-                  <h4 className="font-medium text-sm mb-2">Informações da API</h4>
+                  <h4 className="font-medium text-sm mb-2">Como funciona</h4>
                   <ul className="text-xs text-muted-foreground space-y-1">
-                    <li>• <strong>Login:</strong> https://api.shiftdata.com.br/api/Login</li>
-                    <li>• <strong>Consulta CPF:</strong> https://api.shiftdata.com.br/api/PessoaFisica</li>
-                    <li>• <strong>Consulta CNPJ:</strong> https://api.shiftdata.com.br/api/PessoaJuridica</li>
-                    <li>• <strong>Consulta Placa:</strong> https://api.shiftdata.com.br/api/Veiculos</li>
-                    <li>• <strong>Consulta Telefone:</strong> https://api.shiftdata.com.br/api/Telefone</li>
-                    <li>• A Access Key é usada para autenticação e obtenção do token</li>
+                    <li>• O sistema faz um GET no webhook configurado acima</li>
+                    <li>• O webhook deve retornar um JSON com o token válido</li>
+                    <li>• Esse token é usado para autenticar nas APIs da Shift Data:</li>
+                    <li className="ml-4">- <strong>CPF:</strong> https://api.shiftdata.com.br/api/PessoaFisica</li>
+                    <li className="ml-4">- <strong>CNPJ:</strong> https://api.shiftdata.com.br/api/PessoaJuridica</li>
+                    <li className="ml-4">- <strong>Placa:</strong> https://api.shiftdata.com.br/api/Veiculos</li>
+                    <li className="ml-4">- <strong>Telefone:</strong> https://api.shiftdata.com.br/api/Telefone</li>
                   </ul>
                 </div>
                 <Button onClick={async () => {
-                  const body = { shiftDataCostPerQuery }
+                  const body = { 
+                    shiftDataCostPerQuery,
+                    shiftDataWebhookToken 
+                  }
                   await fetch('/api/global-settings', {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
                   })
-                  setMessage('Configuração de custo salva!')
+                  setMessage('Configurações salvas com sucesso!')
                   setTimeout(() => setMessage(''), 2000)
-                }} disabled={!shiftDataCostPerQuery}>
-                  Salvar Custo por Consulta
+                }} disabled={!shiftDataCostPerQuery || !shiftDataWebhookToken}>
+                  Salvar Configurações
                 </Button>
                 {message && <div className="text-emerald-600 text-sm">{message}</div>}
               </CardContent>

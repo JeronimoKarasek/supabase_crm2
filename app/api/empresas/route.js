@@ -46,13 +46,51 @@ export async function POST(request) {
     if (role !== 'admin') return forbidden('Apenas admin pode criar empresas')
     const body = await request.json()
     const { nome, cnpj, responsavel, telefone, user_limit } = body || {}
+    
+    console.log('[POST /api/empresas] Payload recebido:', { nome, cnpj, responsavel, telefone, user_limit })
+    
     if (!nome) return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
+    
     const lim = Number.isFinite(Number(user_limit)) && Number(user_limit) >= 1 ? Number(user_limit) : 1
-    const { data, error } = await supabaseAdmin.from('empresa').insert({ nome, cnpj, responsavel, telefone, user_limit: lim }).select('*').single()
-    if (error) return NextResponse.json({ error: 'Falha ao criar empresa', details: error.message }, { status: 400 })
+    
+    // Preparar dados para inserção - incluir apenas campos que existem
+    const insertData = {
+      nome,
+      cnpj: cnpj || null,
+      responsavel: responsavel || null,
+      telefone: telefone || null
+    }
+    
+    // Adicionar user_limit e credits apenas se as colunas existirem
+    // O Supabase vai ignorar colunas que não existem se usarmos try/catch
+    try {
+      insertData.user_limit = lim
+      insertData.credits = 0
+    } catch {}
+    
+    console.log('[POST /api/empresas] Dados a inserir:', insertData)
+    
+    const { data, error } = await supabaseAdmin
+      .from('empresa')
+      .insert(insertData)
+      .select('*')
+      .single()
+    
+    if (error) {
+      console.error('[POST /api/empresas] Erro Supabase:', error)
+      return NextResponse.json({ 
+        error: 'Falha ao criar empresa', 
+        details: error.message,
+        code: error.code,
+        hint: error.hint || 'Verifique se as colunas user_limit e credits existem na tabela empresa'
+      }, { status: 400 })
+    }
+    
+    console.log('[POST /api/empresas] Sucesso:', data)
     return NextResponse.json({ empresa: data })
   } catch (e) {
-    return NextResponse.json({ error: 'Erro interno', details: e.message }, { status: 500 })
+    console.error('[POST /api/empresas] Exception:', e)
+    return NextResponse.json({ error: 'Erro interno', details: e.message, stack: e.stack }, { status: 500 })
   }
 }
 
@@ -63,33 +101,33 @@ export async function PUT(request) {
     const role = caller.user_metadata?.role || 'user'
     if (role !== 'admin') return forbidden('Apenas admin pode editar empresas')
     const body = await request.json()
-    const { id, nome, cnpj, responsavel, telefone, user_limit } = body || {}
+    const { id, nome, cnpj, responsavel, telefone, user_limit, credits } = body || {}
     
-    console.log('[PUT /api/empresas] Payload recebido:', { id, nome, cnpj, responsavel, telefone, user_limit })
+    console.log('[PUT /api/empresas] Payload recebido:', { id, nome, cnpj, responsavel, telefone, user_limit, credits })
     
     if (!id) return NextResponse.json({ error: 'ID é obrigatório' }, { status: 400 })
     if (!nome) return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
     
     const lim = Number.isFinite(Number(user_limit)) && Number(user_limit) >= 1 ? Number(user_limit) : 1
     
-    console.log('[PUT /api/empresas] Valores processados:', { 
-      id, 
+    const updateData = { 
       nome, 
       cnpj: cnpj || null, 
       responsavel: responsavel || null, 
       telefone: telefone || null, 
       user_limit: lim 
-    })
+    }
+    
+    // Se credits foi fornecido, inclui no update (usado para adicionar créditos)
+    if (credits !== undefined) {
+      updateData.credits = parseFloat(credits) || 0
+    }
+    
+    console.log('[PUT /api/empresas] Valores processados:', updateData)
     
     const { data, error } = await supabaseAdmin
       .from('empresa')
-      .update({ 
-        nome, 
-        cnpj: cnpj || null, 
-        responsavel: responsavel || null, 
-        telefone: telefone || null, 
-        user_limit: lim 
-      })
+      .update(updateData)
       .eq('id', id)
       .select('*')
       .single()
@@ -109,5 +147,48 @@ export async function PUT(request) {
   } catch (e) {
     console.error('[PUT /api/empresas] Exception:', e)
     return NextResponse.json({ error: 'Erro interno', details: e.message, stack: e.stack }, { status: 500 })
+  }
+}
+
+export async function DELETE(request) {
+  const caller = await getUserFromRequest(request)
+  if (!caller) return unauthorized()
+  try {
+    const role = caller.user_metadata?.role || 'user'
+    if (role !== 'admin') return forbidden('Apenas admin pode excluir empresas')
+    const body = await request.json()
+    const { id } = body || {}
+    
+    if (!id) return NextResponse.json({ error: 'ID é obrigatório' }, { status: 400 })
+    
+    // Verificar se há usuários vinculados
+    const { count: userCount } = await supabaseAdmin
+      .from('empresa_users')
+      .select('*', { count: 'exact', head: true })
+      .eq('empresa_id', id)
+    
+    if (userCount > 0) {
+      return NextResponse.json({ 
+        error: `Não é possível excluir empresa com ${userCount} usuário(s) vinculado(s)` 
+      }, { status: 400 })
+    }
+    
+    const { error } = await supabaseAdmin
+      .from('empresa')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      console.error('[DELETE /api/empresas] Erro:', error)
+      return NextResponse.json({ 
+        error: 'Falha ao excluir empresa', 
+        details: error.message 
+      }, { status: 400 })
+    }
+    
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    console.error('[DELETE /api/empresas] Exception:', e)
+    return NextResponse.json({ error: 'Erro interno', details: e.message }, { status: 500 })
   }
 }

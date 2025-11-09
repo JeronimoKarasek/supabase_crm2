@@ -28,18 +28,44 @@ async function getCallerEmpresaId(userId) {
 
 async function checkEmpresaUserLimit(empresaId) {
   if (!empresaId) return { allowed: true, count: 0, limit: Infinity }
-  // get limit
-  const { data: emp, error: empErr } = await supabaseAdmin.from('empresa').select('user_limit').eq('id', empresaId).single()
-  if (empErr || !emp) return { allowed: false, count: 0, limit: 0, error: 'Empresa não encontrada' }
-  const limit = Number(emp.user_limit) || 1
-  // count current users in empresa
-  const { count, error: cntErr } = await supabaseAdmin
-    .from('empresa_users')
-    .select('*', { count: 'exact', head: true })
-    .eq('empresa_id', empresaId)
-  if (cntErr) return { allowed: false, count: 0, limit, error: 'Falha ao contar usuários' }
-  const allowed = (count || 0) < limit
-  return { allowed, count: count || 0, limit }
+  
+  try {
+    // Buscar empresa com fallback se user_limit não existir
+    const { data: emp, error: empErr } = await supabaseAdmin
+      .from('empresa')
+      .select('*')
+      .eq('id', empresaId)
+      .single()
+    
+    if (empErr || !emp) {
+      console.error('[checkEmpresaUserLimit] Empresa não encontrada:', empresaId, empErr)
+      return { allowed: false, count: 0, limit: 0, error: 'Empresa não encontrada' }
+    }
+    
+    // Usar user_limit se existir, senão padrão 1
+    const limit = Number(emp.user_limit) >= 1 ? Number(emp.user_limit) : 1
+    
+    // Contar usuários vinculados à empresa
+    const { count, error: cntErr } = await supabaseAdmin
+      .from('empresa_users')
+      .select('*', { count: 'exact', head: true })
+      .eq('empresa_id', empresaId)
+    
+    if (cntErr) {
+      console.error('[checkEmpresaUserLimit] Falha ao contar usuários:', cntErr)
+      return { allowed: false, count: 0, limit, error: 'Falha ao contar usuários' }
+    }
+    
+    const currentCount = count || 0
+    const allowed = currentCount < limit
+    
+    console.log(`[checkEmpresaUserLimit] Empresa ${empresaId}: ${currentCount}/${limit} usuários`)
+    
+    return { allowed, count: currentCount, limit }
+  } catch (e) {
+    console.error('[checkEmpresaUserLimit] Exception:', e)
+    return { allowed: false, count: 0, limit: 0, error: e.message }
+  }
 }
 
 export async function GET(request) {
@@ -290,10 +316,12 @@ export async function PUT(request) {
             const callerEmp = await getCallerEmpresaId(caller.id)
             if (!callerEmp || callerEmp !== empresaId) return forbidden('Gestor só pode mover usuários para sua própria empresa')
           }
-          // Check if changing empresa increases usage; enforce limit
+          // Check if changing empresa increases usage; enforce limit only if moving TO a different empresa
           const { data: currentLink } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', user.id).single()
           const currentEmp = currentLink?.empresa_id || null
-          if (!currentEmp || currentEmp !== empresaId) {
+          
+          // Só valida limite se estiver mudando de empresa (ou não tinha empresa antes)
+          if (currentEmp !== empresaId) {
             const limitInfo = await checkEmpresaUserLimit(empresaId)
             if (!limitInfo.allowed) {
               return forbidden(`Limite de usuários da empresa atingido (${limitInfo.count}/${limitInfo.limit})`)

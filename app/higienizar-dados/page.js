@@ -8,9 +8,285 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
-import { Upload, Download, RefreshCw, FileText, Sparkles, AlertCircle } from 'lucide-react'
+import { Upload, Download, RefreshCw, FileText, Sparkles, AlertCircle, User, Phone, Mail, MapPin, Calendar, DollarSign, Briefcase, Home } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Separator } from '@/components/ui/separator'
+
+// Componente para exibir dados enriquecidos de forma visual
+function EnrichedDataDisplay({ data }) {
+  // Extrair dados do result ou da raiz
+  const result = data?.result || data
+  
+  // Se não houver result, mostrar JSON raw
+  if (!result || typeof result !== 'object') {
+    return (
+      <div className="p-4 border rounded bg-muted/40 text-sm overflow-auto max-h-96">
+        <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(data, null, 2)}</pre>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Informações Principais */}
+      {(result.Nome || result.CPF || result.CNPJ) && (
+        <Card className="border-l-4 border-l-blue-500">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <User className="h-5 w-5 text-blue-500" />
+              Informações Pessoais
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {result.Nome && (
+              <div>
+                <p className="text-xs text-muted-foreground">Nome Completo</p>
+                <p className="font-medium">{result.Nome}</p>
+              </div>
+            )}
+            {result.CPF && (
+              <div>
+                <p className="text-xs text-muted-foreground">CPF</p>
+                <p className="font-mono">{result.CPF.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}</p>
+              </div>
+            )}
+            {result.CNPJ && (
+              <div>
+                <p className="text-xs text-muted-foreground">CNPJ</p>
+                <p className="font-mono">{result.CNPJ}</p>
+              </div>
+            )}
+            {result.DataNascimento && (
+              <div>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Calendar className="h-3 w-3" /> Data de Nascimento
+                </p>
+                <p>{new Date(result.DataNascimento).toLocaleDateString('pt-BR')} {result.Idade && `(${result.Idade} anos)`}</p>
+              </div>
+            )}
+            {result.Sexo && (
+              <div>
+                <p className="text-xs text-muted-foreground">Sexo</p>
+                <p>{result.Sexo === 'M' ? 'Masculino' : result.Sexo === 'F' ? 'Feminino' : result.Sexo}</p>
+              </div>
+            )}
+            {result.EstadoCivil && (
+              <div>
+                <p className="text-xs text-muted-foreground">Estado Civil</p>
+                <p>{result.EstadoCivil}</p>
+              </div>
+            )}
+            {result.NomeMae && (
+              <div>
+                <p className="text-xs text-muted-foreground">Nome da Mãe</p>
+                <p>{result.NomeMae}</p>
+              </div>
+            )}
+            {result.NomePai && result.NomePai.trim() && (
+              <div>
+                <p className="text-xs text-muted-foreground">Nome do Pai</p>
+                <p>{result.NomePai}</p>
+              </div>
+            )}
+            {result.Signo && (
+              <div>
+                <p className="text-xs text-muted-foreground">Signo</p>
+                <p>{result.Signo}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Informações Profissionais */}
+      {(result.CodigoCbo || result.DescricaoCbo || result.Renda) && (
+        <Card className="border-l-4 border-l-green-500">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Briefcase className="h-5 w-5 text-green-500" />
+              Informações Profissionais
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {result.DescricaoCbo && (
+              <div>
+                <p className="text-xs text-muted-foreground">Profissão (CBO)</p>
+                <p className="font-medium">{result.DescricaoCbo}</p>
+                {result.CodigoCbo && <p className="text-xs text-muted-foreground">Código: {result.CodigoCbo}</p>}
+              </div>
+            )}
+            {result.Renda && (
+              <div>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <DollarSign className="h-3 w-3" /> Renda Estimada
+                </p>
+                <p className="font-medium text-green-600">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(result.Renda)}
+                </p>
+              </div>
+            )}
+            {result.Escolaridade && (
+              <div>
+                <p className="text-xs text-muted-foreground">Escolaridade</p>
+                <p>{result.Escolaridade}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Endereços */}
+      {result.Enderecos && Array.isArray(result.Enderecos) && result.Enderecos.length > 0 && (
+        <Card className="border-l-4 border-l-orange-500">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <MapPin className="h-5 w-5 text-orange-500" />
+              Endereços ({result.Enderecos.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {result.Enderecos.map((end, idx) => (
+              <div key={idx} className="p-3 border rounded-lg bg-muted/30">
+                <div className="flex items-start justify-between mb-2">
+                  <Badge variant="outline" className="text-xs">
+                    {end.Tipo === 'R' ? 'Residencial' : end.Tipo === 'C' ? 'Comercial' : end.Tipo}
+                  </Badge>
+                  {end.Ranking && (
+                    <span className="text-xs text-muted-foreground">Ranking: {end.Ranking}</span>
+                  )}
+                </div>
+                <p className="font-medium text-sm mb-1">
+                  {end.Logradouro && `${end.Logradouro}, `}
+                  {end.Numero}
+                  {end.Complemento && ` - ${end.Complemento}`}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {end.Bairro && `${end.Bairro} - `}
+                  {end.Cidade}/{end.UF}
+                  {end.CEP && ` - CEP: ${end.CEP.replace(/(\d{5})(\d{3})/, '$1-$2')}`}
+                </p>
+                {(end.Latitude || end.Longitude) && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    📍 Lat: {end.Latitude?.toFixed(6)}, Long: {end.Longitude?.toFixed(6)}
+                  </p>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Telefones */}
+      {result.Telefones && Array.isArray(result.Telefones) && result.Telefones.length > 0 && (
+        <Card className="border-l-4 border-l-purple-500">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Phone className="h-5 w-5 text-purple-500" />
+              Telefones ({result.Telefones.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {result.Telefones.map((tel, idx) => (
+              <div key={idx} className="flex items-center justify-between p-2 border rounded-lg bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="font-mono font-medium">
+                      ({tel.DDD}) {tel.Telefone.replace(/(\d{4,5})(\d{4})/, '$1-$2')}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-muted-foreground">{tel.TipoTelefone}</span>
+                      {tel.Operadora && (
+                        <Badge variant="secondary" className="text-xs">{tel.Operadora}</Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {tel.WhatsApp && (
+                    <Badge variant="default" className="bg-green-500 text-xs">WhatsApp</Badge>
+                  )}
+                  {tel.Procon === false && (
+                    <Badge variant="outline" className="text-xs text-green-600">Sem Procon</Badge>
+                  )}
+                  {tel.Ranking && (
+                    <span className="text-xs text-muted-foreground">#{tel.Ranking}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Emails */}
+      {result.Emails && Array.isArray(result.Emails) && result.Emails.length > 0 && (
+        <Card className="border-l-4 border-l-cyan-500">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Mail className="h-5 w-5 text-cyan-500" />
+              E-mails ({result.Emails.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {result.Emails.map((email, idx) => (
+              <div key={idx} className="flex items-center justify-between p-2 border rounded-lg bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <p className="font-mono text-sm">{email.Email}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {email.Particular && (
+                    <Badge variant="secondary" className="text-xs">Particular</Badge>
+                  )}
+                  {email.Ranking && (
+                    <span className="text-xs text-muted-foreground">#{email.Ranking}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Informações Adicionais da API */}
+      {(data.code || data.message || data.elapsedTimeInMilliseconds) && (
+        <Card className="border-dashed">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-muted-foreground">Informações da Consulta</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            {data.code && (
+              <div>
+                <p className="text-muted-foreground">Status</p>
+                <Badge variant={data.code === 200 ? 'default' : 'destructive'}>{data.code}</Badge>
+              </div>
+            )}
+            {data.message && (
+              <div>
+                <p className="text-muted-foreground">Mensagem</p>
+                <p>{data.message}</p>
+              </div>
+            )}
+            {data.elapsedTimeInMilliseconds && (
+              <div>
+                <p className="text-muted-foreground">Tempo de Resposta</p>
+                <p className="font-mono">{data.elapsedTimeInMilliseconds}ms</p>
+              </div>
+            )}
+            {data.apiVersion && (
+              <div>
+                <p className="text-muted-foreground">Versão da API</p>
+                <p>{data.apiVersion}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
 
 export default function HigienizarDadosPage() {
   const [jobs, setJobs] = useState([])
@@ -42,7 +318,7 @@ export default function HigienizarDadosPage() {
           console.log('🔧 [Higienizar] Config loaded:', { hasCost, settings })
           // Não bloquear por token ausente: fallback é aplicado no backend
           setHasConfig(true)
-          setCostPerQuery(settings.shiftDataCostPerQuery || '0.10')
+          setCostPerQuery(settings.shiftDataCostPerQuery || '0.07')
         }
       } catch (e) {
         console.error('🔧 [Higienizar] Error loading config:', e)
@@ -70,8 +346,15 @@ export default function HigienizarDadosPage() {
       const json = await res.json()
       if (res.ok) {
         setIndividualResult(json?.data || json)
+        setMessage(`✅ Consulta realizada! Custo: R$ ${(json?.cost || costPerQuery || 0.07).toFixed(2)}`)
+        setTimeout(() => setMessage(''), 3000)
       } else {
-        setIndividualError(json?.error || 'Erro na consulta')
+        // Destacar erro de saldo insuficiente
+        if (res.status === 402) {
+          setIndividualError(`💳 ${json?.error || 'Saldo insuficiente'}`)
+        } else {
+          setIndividualError(json?.error || 'Erro na consulta')
+        }
       }
     } catch (e) {
       setIndividualError(e.message)
@@ -190,10 +473,15 @@ export default function HigienizarDadosPage() {
 
       const json = await res.json()
       if (res.ok) {
-        setMessage(`Processados: ${json.processed}. Sucesso: ${json.success_count}. Falhas: ${json.failed_count}. Créditos: ${json.credits_used.toFixed(2)}`)
+        setMessage(`✅ Processados: ${json.processed} | Sucesso: ${json.success_count} | Falhas: ${json.failed_count} | Créditos usados: R$ ${json.credits_used.toFixed(2)} | Saldo restante: R$ ${json.remaining_credits?.toFixed(2) || '0.00'}`)
         loadJobs()
       } else {
-        setError(json?.error || 'Erro ao processar')
+        // Destacar erro de saldo insuficiente
+        if (res.status === 402) {
+          setError(`💳 ${json?.error || 'Saldo insuficiente para processar este lote'}`)
+        } else {
+          setError(json?.error || 'Erro ao processar')
+        }
       }
     } catch (e) {
       setError(e?.message || 'Erro ao processar')
@@ -481,7 +769,12 @@ export default function HigienizarDadosPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Consulta Individual</CardTitle>
-                <CardDescription>Faça consultas pontuais de CPF, CNPJ, Placa ou Telefone sem subir planilha.</CardDescription>
+                <CardDescription>
+                  Faça consultas pontuais de CPF, CNPJ, Placa ou Telefone sem subir planilha.
+                  <span className="ml-2 text-orange-600 font-semibold">
+                    💰 Custo: R$ {parseFloat(costPerQuery || 0.07).toFixed(2)} por consulta
+                  </span>
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
@@ -496,7 +789,16 @@ export default function HigienizarDadosPage() {
                   </div>
                   <div className="md:col-span-2 space-y-2">
                     <label className="text-xs font-medium">Valor</label>
-                    <Input placeholder="Digite o valor (ex: 12345678901, 12345678000190, ABC1234, 11999999999)" value={individualValue} onChange={e => setIndividualValue(e.target.value)} />
+                    <Input 
+                      placeholder="Digite o valor (ex: 12345678901, 12345678000190, ABC1234, 11999999999)" 
+                      value={individualValue} 
+                      onChange={e => setIndividualValue(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && individualValue.trim() && !individualLoading) {
+                          runIndividualQuery()
+                        }
+                      }}
+                    />
                   </div>
                   <div className="flex flex-col gap-2">
                     <Button onClick={runIndividualQuery} disabled={individualLoading || !individualValue}> {individualLoading ? 'Consultando...' : 'Consultar'} </Button>
@@ -509,9 +811,7 @@ export default function HigienizarDadosPage() {
                   </Alert>
                 )}
                 {individualResult && (
-                  <div className="p-4 border rounded bg-muted/40 text-sm overflow-auto max-h-80">
-                    <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(individualResult, null, 2)}</pre>
-                  </div>
+                  <EnrichedDataDisplay data={individualResult} />
                 )}
                 {!individualResult && !individualError && (
                   <p className="text-xs text-muted-foreground">Insira o valor e clique em Consultar para ver os dados enriquecidos.</p>

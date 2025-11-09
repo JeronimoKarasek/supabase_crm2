@@ -32,18 +32,80 @@ export async function GET(request){
         return NextResponse.json({ error: 'Unauthorized (invalid x-api-key)' }, { status: 401 })
       }
       if (!queryUserId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
-      const cents = await credits.getBalanceCents(queryUserId)
-      return NextResponse.json({ userId: queryUserId, balanceCents: cents, balanceBRL: credits.formatBRL(cents) })
+      
+      // Buscar empresa do usuário
+      const { data: empresaLink } = await supabaseAdmin
+        .from('empresa_users')
+        .select('empresa_id')
+        .eq('user_id', queryUserId)
+        .single()
+      
+      if (!empresaLink?.empresa_id) {
+        return NextResponse.json({ 
+          userId: queryUserId, 
+          balanceCents: 0, 
+          balanceBRL: 'R$ 0,00',
+          warning: 'Usuário não vinculado a empresa' 
+        })
+      }
+      
+      // Buscar créditos da empresa
+      const { data: empresa } = await supabaseAdmin
+        .from('empresa')
+        .select('credits')
+        .eq('id', empresaLink.empresa_id)
+        .single()
+      
+      const creditsInReais = parseFloat(empresa?.credits) || 0
+      const cents = Math.round(creditsInReais * 100)
+      
+      return NextResponse.json({ 
+        userId: queryUserId, 
+        empresaId: empresaLink.empresa_id,
+        balanceCents: cents, 
+        balanceBRL: credits.formatBRL(cents) 
+      })
     }
 
-    // Otherwise, read from authenticated user or explicit same user
+    // Otherwise, read from authenticated user
     const user = await getUserFromAuth(request)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const targetUserId = queryUserId && queryUserId !== user.id ? null : user.id
     if (!targetUserId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    const cents = await credits.getBalanceCents(targetUserId)
-    return NextResponse.json({ userId: targetUserId, balanceCents: cents, balanceBRL: credits.formatBRL(cents) })
+    
+    // Buscar empresa do usuário autenticado
+    const { data: empresaLink } = await supabaseAdmin
+      .from('empresa_users')
+      .select('empresa_id')
+      .eq('user_id', targetUserId)
+      .single()
+    
+    if (!empresaLink?.empresa_id) {
+      return NextResponse.json({ 
+        userId: targetUserId, 
+        balanceCents: 0, 
+        balanceBRL: 'R$ 0,00',
+        warning: 'Usuário não vinculado a empresa' 
+      })
+    }
+    
+    // Buscar créditos da empresa
+    const { data: empresa } = await supabaseAdmin
+      .from('empresa')
+      .select('credits')
+      .eq('id', empresaLink.empresa_id)
+      .single()
+    
+    const creditsInReais = parseFloat(empresa?.credits) || 0
+    const cents = Math.round(creditsInReais * 100)
+    
+    return NextResponse.json({ 
+      userId: targetUserId, 
+      empresaId: empresaLink.empresa_id,
+      balanceCents: cents, 
+      balanceBRL: credits.formatBRL(cents) 
+    })
   }catch(e){
     return NextResponse.json({ error: 'Failed to get credits', details: e.message }, { status: 500 })
   }

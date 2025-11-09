@@ -7,6 +7,17 @@ function unauthorized(msg = 'Unauthorized') {
   return NextResponse.json({ error: msg }, { status: 401 })
 }
 
+/**
+ * Normaliza CPF: remove pontuação e adiciona zeros à esquerda até 11 dígitos
+ */
+function normalizeCPF(cpf) {
+  if (!cpf) return ''
+  // Remove tudo que não é número
+  const onlyNumbers = String(cpf).replace(/\D/g, '')
+  // Adiciona zeros à esquerda até completar 11 dígitos
+  return onlyNumbers.padStart(11, '0')
+}
+
 async function getUserFromRequest(request) {
   const auth = request.headers.get('authorization') || request.headers.get('Authorization')
   if (!auth || !auth.toLowerCase().startsWith('bearer ')) return null
@@ -127,20 +138,25 @@ export async function POST(request) {
       }, { status: 500 })
     }
 
-    // Inserir registros
-    const records = rows.map(row => ({
-      lote_id,
-  query_type: queryType,
-  query_value: row[queryColumn] || '',
-  cpf: queryType === 'cpf' ? (row[queryColumn] || '') : '',
-  cnpj: queryType === 'cnpj' ? (row[queryColumn] || '') : '',
-  placa: queryType === 'placa' ? (row[queryColumn] || '') : '',
-  telefone: queryType === 'telefone' ? (row[queryColumn] || '') : (row.telefone || row.phone || row.celular || ''),
-      nome: row.nome || row.name || '',
-      email: row.email || '',
-      original_data: row,
-      status: 'pending'
-    }))
+    // Inserir registros (normalizando CPF quando necessário)
+    const records = rows.map(row => {
+      const rawValue = row[queryColumn] || ''
+      const normalizedValue = queryType === 'cpf' ? normalizeCPF(rawValue) : rawValue
+      
+      return {
+        lote_id,
+        query_type: queryType,
+        query_value: normalizedValue,
+        cpf: queryType === 'cpf' ? normalizedValue : '',
+        cnpj: queryType === 'cnpj' ? rawValue : '',
+        placa: queryType === 'placa' ? rawValue : '',
+        telefone: queryType === 'telefone' ? rawValue : (row.telefone || row.phone || row.celular || ''),
+        nome: row.nome || row.name || '',
+        email: row.email || '',
+        original_data: row,
+        status: 'pending'
+      }
+    })
 
     const { error: recordsError } = await supabaseAdmin
       .from('enrichment_records')

@@ -64,48 +64,81 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Nenhum registro encontrado' }, { status: 404 })
     }
 
-    // Gerar CSV combinando dados originais + enriquecidos
-    const headers = new Set()
-    
-    // Adicionar headers dos dados originais
-    records.forEach(r => {
-      if (r.original_data) {
-        Object.keys(r.original_data).forEach(k => headers.add(`original_${k}`))
-      }
-    })
+    // Gerar CSV combinando dados originais + enriquecidos estruturados
+    const headerArray = [
+      'status_enriquecimento',
+      'erro_enriquecimento',
+      // Dados originais
+      ...Object.keys(records[0]?.original_data || {}).map(k => `original_${k}`),
+      // Dados principais enriquecidos
+      'cpf', 'cnpj', 'nome', 'data_nascimento', 'idade', 'sexo', 'nome_mae', 'nome_pai',
+      'renda', 'profissao_cbo', 'signo', 'estado_civil',
+      // Telefones (até 5)
+      'telefone_1', 'whatsapp_1', 'operadora_1',
+      'telefone_2', 'whatsapp_2', 'operadora_2',
+      'telefone_3', 'whatsapp_3', 'operadora_3',
+      'telefone_4', 'whatsapp_4', 'operadora_4',
+      'telefone_5', 'whatsapp_5', 'operadora_5',
+      // Emails (até 3)
+      'email_1', 'email_2', 'email_3',
+      // Endereços (até 2)
+      'endereco_1_completo', 'endereco_1_cep', 'endereco_1_cidade', 'endereco_1_uf',
+      'endereco_2_completo', 'endereco_2_cep', 'endereco_2_cidade', 'endereco_2_uf'
+    ]
 
-    // Adicionar headers dos dados enriquecidos
-    headers.add('status_enriquecimento')
-    headers.add('erro_enriquecimento')
-    records.forEach(r => {
-      if (r.enriched_data) {
-        Object.keys(r.enriched_data).forEach(k => headers.add(`enriquecido_${k}`))
-      }
-    })
-
-    const headerArray = Array.from(headers)
     const csvLines = [headerArray.join(';')]
 
     // Adicionar linhas
     records.forEach(r => {
-      const row = []
-      headerArray.forEach(h => {
-        if (h === 'status_enriquecimento') {
-          row.push(r.status || '')
-        } else if (h === 'erro_enriquecimento') {
-          row.push(r.error_message || '')
-        } else if (h.startsWith('original_')) {
-          const key = h.replace('original_', '')
-          row.push(r.original_data?.[key] || '')
-        } else if (h.startsWith('enriquecido_')) {
-          const key = h.replace('enriquecido_', '')
-          const value = r.enriched_data?.[key]
-          row.push(typeof value === 'object' ? JSON.stringify(value) : (value || ''))
-        } else {
-          row.push('')
-        }
-      })
-      csvLines.push(row.join(';'))
+      const result = r.enriched_data?.result || r.enriched_data || {}
+      const telefones = result.Telefones || []
+      const emails = result.Emails || []
+      const enderecos = result.Enderecos || []
+
+      const row = [
+        r.status || '',
+        r.error_message || '',
+        // Dados originais
+        ...Object.values(r.original_data || {}).map(v => String(v || '')),
+        // Dados principais
+        result.CPF || r.cpf || '',
+        result.CNPJ || r.cnpj || '',
+        result.Nome || '',
+        result.DataNascimento ? new Date(result.DataNascimento).toLocaleDateString('pt-BR') : '',
+        result.Idade || '',
+        result.Sexo || '',
+        result.NomeMae || '',
+        result.NomePai || '',
+        result.Renda || '',
+        result.DescricaoCbo || '',
+        result.Signo || '',
+        result.EstadoCivil || '',
+        // Telefones (até 5)
+        ...Array.from({length: 5}, (_, i) => {
+          const tel = telefones[i]
+          if (!tel) return ['', '', '']
+          return [
+            `(${tel.DDD}) ${tel.Telefone}`,
+            tel.WhatsApp ? 'SIM' : 'NAO',
+            tel.Operadora || ''
+          ]
+        }).flat(),
+        // Emails (até 3)
+        ...Array.from({length: 3}, (_, i) => emails[i]?.Email || ''),
+        // Endereços (até 2)
+        ...Array.from({length: 2}, (_, i) => {
+          const end = enderecos[i]
+          if (!end) return ['', '', '', '']
+          return [
+            end.EnderecoCompleto || `${end.Logradouro || ''}, ${end.Numero || ''} - ${end.Bairro || ''}`,
+            end.CEP || '',
+            end.Cidade || '',
+            end.UF || ''
+          ]
+        }).flat()
+      ]
+
+      csvLines.push(row.map(v => String(v).replace(/;/g, ',')).join(';'))
     })
 
     const csv = csvLines.join('\n')

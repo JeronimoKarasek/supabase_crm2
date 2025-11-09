@@ -97,32 +97,65 @@ export async function POST(request) {
     // Buscar configurações
     const { data: settingsRow } = await supabaseAdmin.from('global_settings').select('data').eq('id', 'global').single()
     const settings = settingsRow?.data || {}
-    const accessKey = (settings.shiftDataAccessKey || '96FA65CEC7234FFDA72D2D97EA6A457B')
+    const webhookTokenUrl = settings.shiftDataWebhookToken || 'https://weebserver6.farolchat.com/webhook/gerarToken'
+    const costPerQuery = parseFloat(settings.shiftDataCostPerQuery) || 0.07
 
-    // Login na Shift Data
-    const loginRes = await fetch('https://api.shiftdata.com.br/api/Login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ accessKey, AccessKey: accessKey })
+    // Buscar empresa do usuário
+    const { data: empresaLink, error: linkError } = await supabaseAdmin
+      .from('empresa_users')
+      .select('empresa_id')
+      .eq('user_id', user.id)
+      .single()
+
+    if (linkError || !empresaLink?.empresa_id) {
+      return NextResponse.json({ 
+        error: 'Usuário não está vinculado a nenhuma empresa' 
+      }, { status: 404 })
+    }
+
+    // Verificar saldo da empresa antes da consulta
+    const { data: empresaData, error: empresaError } = await supabaseAdmin
+      .from('empresa')
+      .select('credits')
+      .eq('id', empresaLink.empresa_id)
+      .single()
+
+    if (empresaError || !empresaData) {
+      return NextResponse.json({ 
+        error: 'Empresa não encontrada no sistema' 
+      }, { status: 404 })
+    }
+
+    const currentCredits = parseFloat(empresaData.credits) || 0
+    if (currentCredits < costPerQuery) {
+      return NextResponse.json({ 
+        error: `Saldo insuficiente. Necessário: R$ ${costPerQuery.toFixed(2)} | Disponível: R$ ${currentCredits.toFixed(2)}`,
+        requiredCredits: costPerQuery,
+        availableCredits: currentCredits
+      }, { status: 402 })
+    }
+
+    // Buscar token via webhook
+    const tokenRes = await fetch(webhookTokenUrl, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
     })
-    const loginData = await parseJsonSafe(loginRes)
-    if (!loginRes.ok) {
-      return NextResponse.json({ error: loginData?.message || 'Falha no login' }, { status: 500 })
+    const tokenData = await parseJsonSafe(tokenRes)
+    if (!tokenRes.ok) {
+      return NextResponse.json({ error: tokenData?.message || tokenData?.error || 'Falha ao obter token' }, { status: 500 })
     }
     const tokenCandidates = [
-      loginData?.token,
-      loginData?.Token,
-      loginData?.access_token,
-      loginData?.accessToken,
-      loginData?.data?.token,
-      loginData?.data?.Token,
-      loginData?.data?.access_token,
-      loginData?.data?.accessToken,
+      tokenData?.token,
+      tokenData?.Token,
+      tokenData?.access_token,
+      tokenData?.accessToken,
+      tokenData?.data?.token,
+      tokenData?.data?.Token,
+      typeof tokenData === 'string' ? tokenData : null
     ]
     let token = tokenCandidates.find(Boolean)
     if (!token) {
-      console.warn('⚠️ [Enrich Individual] Login sem token. Usando AccessKey como Bearer fallback. Body:', loginData)
-      token = accessKey // fallback
+      return NextResponse.json({ error: 'Token não encontrado na resposta do webhook' }, { status: 500 })
     }
 
     // Determinar endpoint
@@ -135,7 +168,27 @@ export async function POST(request) {
       return NextResponse.json({ error: result.error || 'Erro na consulta' }, { status: 502 })
     }
 
-    return NextResponse.json({ success: true, type, value, data: result.data })
+    // Descontar créditos da empresa
+    const newCredits = Math.max(0, currentCredits - costPerQuery)
+    
+    const { error: updateError } = await supabaseAdmin
+      .from('empresa')
+      .update({ credits: newCredits })
+      .eq('id', empresaLink.empresa_id)
+
+    if (updateError) {
+      console.error('❌ [Enrich Individual] Erro ao descontar créditos:', updateError)
+    } else {
+      console.log(`💰 [Enrich Individual] Créditos descontados: Empresa ${empresaLink.empresa_id} | ${currentCredits.toFixed(2)} → ${newCredits.toFixed(2)} (R$ ${costPerQuery.toFixed(2)})`)
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      type, 
+      value, 
+      data: result.data,
+      cost: costPerQuery
+    })
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }

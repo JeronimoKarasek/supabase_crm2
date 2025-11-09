@@ -91,6 +91,12 @@ export async function PUT(request) {
       const mv = typeof body.smsMessageValue === 'string' ? parseFloat(body.smsMessageValue.replace(',', '.')) : Number(body.smsMessageValue)
       next.smsMessageValue = Number.isFinite(mv) && mv >= 0 ? mv : 0
     }
+    // Shift Data - Higienização de Dados
+    if (typeof body.shiftDataWebhookToken === 'string') next.shiftDataWebhookToken = body.shiftDataWebhookToken.trim()
+    if (typeof body.shiftDataCostPerQuery === 'string' || typeof body.shiftDataCostPerQuery === 'number') {
+      const cost = typeof body.shiftDataCostPerQuery === 'string' ? parseFloat(body.shiftDataCostPerQuery.replace(',', '.')) : Number(body.shiftDataCostPerQuery)
+      next.shiftDataCostPerQuery = Number.isFinite(cost) && cost >= 0 ? cost : 0.07
+    }
     if (typeof body.payments === 'object' && body.payments !== null) {
       const pay = body.payments
       next.payments = {
