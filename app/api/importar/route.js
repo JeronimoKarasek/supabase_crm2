@@ -154,12 +154,15 @@ export async function GET(request) {
     .from('importar')
     .select('lote_id, produto, banco_simulado, status, created_at')
     .eq('cliente', user.email)
+    .not('lote_id', 'is', null)
     .order('created_at', { ascending: false })
   
   if (error) {
     console.error('❌ Erro ao listar lotes:', error)
     return NextResponse.json({ error: 'List failed', details: error.message }, { status: 500 })
   }
+  
+  console.log(`📊 Total de registros encontrados: ${data?.length || 0}`)
   
   const seen = new Set()
   const items = []
@@ -175,6 +178,8 @@ export async function GET(request) {
       })
     }
   }
+  
+  console.log(`📦 Total de lotes únicos: ${items.length}`)
   
   // Compute progress (consultado true/total) per lote_id
   for (const it of items) {
