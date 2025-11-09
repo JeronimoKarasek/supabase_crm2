@@ -51,6 +51,7 @@ export default function ConfiguracaoPage() {
   const [shiftDataWebhookToken, setShiftDataWebhookToken] = useState('')
 
   const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
 
   const getAuthHeaders = async () => {
     const { data: sessionData } = await supabase.auth.getSession()
@@ -426,23 +427,27 @@ export default function ConfiguracaoPage() {
               <div className="space-y-3 p-4 border rounded-lg bg-muted/40">
                 <div className="text-sm font-semibold text-foreground">Credenciais Mercado Pago</div>
                 <div>
-                  <div className="text-sm font-medium">Access Token (Server-side)</div>
+                  <div className="text-sm font-medium">Access Token (Server-side) *</div>
                   <Input 
-                    type="password" 
+                    type="text" 
                     value={mercadopagoAccessToken} 
                     onChange={(e)=> setMercadopagoAccessToken(e.target.value)} 
-                    placeholder="APP_USR-XXXX-XXXX-XXXX" 
+                    placeholder="APP_USR-6832397982878428-110522-..." 
                   />
-                  <div className="text-xs text-slate-500 mt-1">Token privado usado no backend para criar pagamentos</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Token <strong>APP_USR-</strong> usado no backend para criar pagamentos PIX
+                  </div>
                 </div>
                 <div>
-                  <div className="text-sm font-medium">Public Key (opcional)</div>
+                  <div className="text-sm font-medium">Public Key (Frontend - opcional)</div>
                   <Input 
                     value={mercadopagoPublicKey} 
                     onChange={(e)=> setMercadopagoPublicKey(e.target.value)} 
-                    placeholder="APP_USR-XXXX-XXXX-XXXX-pub" 
+                    placeholder="APP_USR-60cda7b7-9cb9-4c89-..." 
                   />
-                  <div className="text-xs text-slate-500 mt-1">Chave pública para uso no frontend (se necessário)</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Chave <strong>APP_USR-</strong> pública para uso no frontend (se necessário)
+                  </div>
                 </div>
               </div>
             )}
@@ -710,8 +715,10 @@ export default function ConfiguracaoPage() {
                   )})}
                 </div>
                 <div className="flex justify-end">
-                  <Button onClick={saveProducts}>Salvar produtos</Button>
+                  <Button onClick={savePayments}>Salvar pagamentos</Button>
                 </div>
+                {message && <div className="text-emerald-600 text-sm font-medium">{message}</div>}
+                {error && <div className="text-red-600 text-sm font-medium">{error}</div>}
               </CardContent>
             </Card>
           </TabsContent>

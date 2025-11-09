@@ -14,11 +14,11 @@ if (!SUPABASE_SERVICE_ROLE_KEY) {
   process.exit(1)
 }
 
-// Credenciais do Mercado Pago
+// Credenciais do Mercado Pago (CORRETAS - fornecidas pelo usuário)
 const MERCADOPAGO_CONFIG = {
   provider: 'mercadopago',
   mercadopagoAccessToken: 'APP_USR-6832397982878428-110522-8212ccd1ba3e1dc85d31fe48a1cdb1ae-834403024',
-  mercadopagoPublicKey: 'PP_USR-60cda7b7-9cb9-4c89-985f-f13741831fc7',
+  mercadopagoPublicKey: 'APP_USR-60cda7b7-9cb9-4c89-985f-f13741831fc7',
   picpaySellerToken: '',
   picpayClientId: '',
   picpayClientSecret: '',
