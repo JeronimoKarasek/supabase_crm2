@@ -135,6 +135,7 @@ export async function POST(request) {
         ? `Acesso ao produto ${productData.name} da plataforma FarolTech CRM`
         : `Adição de ${amount.toFixed(2)} créditos na plataforma FarolTech CRM`
       
+      // Monta payload "rico" (com additional_info)
       const payment = {
         transaction_amount: Number(amount.toFixed(2)),
         description: itemDescription,
@@ -172,6 +173,29 @@ export async function POST(request) {
           user_email: user.email
         }
       }
+
+      // Payload mínimo (fallback) — remove additional_info e campos possivelmente sensíveis
+      const paymentMinimal = {
+        transaction_amount: Number(amount.toFixed(2)),
+        description: itemDescription,
+        payment_method_id: 'pix',
+        payer: {
+          email: user.email || 'contato@faroltech.com',
+          identification: {
+            type: 'CPF',
+            number: cpfValido,
+          },
+        },
+        notification_url: `${baseUrl}/api/mercadopago/webhook`,
+        external_reference: `${referenceId}-min`,
+        metadata: {
+          type: productData ? 'product_purchase' : 'credit_addition',
+          user_id: user.id,
+          product_key: productKey || null,
+          user_email: user.email,
+          fallback: true,
+        },
+      }
       
       console.log('📋 Payment payload:', {
         ...payment,
@@ -206,22 +230,92 @@ export async function POST(request) {
           data: mpData,
           tokenUsed: accessToken.substring(0, 20) + '...'
         })
-        
         // Extrai mensagem de erro mais específica
         const errorMessage = mpData?.message || mpData?.error || 'Erro ao gerar pagamento Pix'
         const errorCause = mpData?.cause?.[0]?.description || mpData?.cause?.[0]?.code || ''
         const fullError = errorCause ? `${errorMessage}: ${errorCause}` : errorMessage
-        
+        const isCollectorPixKeyError = /collector user without key enabled for qr render/i.test(`${errorMessage} ${errorCause}`)
+          || /financial identity/i.test(`${errorMessage} ${errorCause}`)
+
+        // Tenta fallback com payload mínimo se erro parecer relacionado a validação/sinalização
+        if (isCollectorPixKeyError) {
+          console.warn('⚠️ Detected PIX Key/Identity error. Retrying with minimal payload...')
+          const mpResponseMin = await fetch('https://api.mercadopago.com/v1/payments', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`,
+              'X-Idempotency-Key': `${referenceId}-min`
+            },
+            body: JSON.stringify(paymentMinimal),
+          })
+          const mpDataMin = await mpResponseMin.json().catch(() => ({}))
+          console.log('📥 Resposta Fallback (Minimal) Mercado Pago:', JSON.stringify(mpDataMin, null, 2))
+          if (mpResponseMin.ok) {
+            const response = {
+              paymentId: mpDataMin.id,
+              status: mpDataMin.status,
+              paymentMethod: 'pix',
+              qrCode: mpDataMin.point_of_interaction?.transaction_data?.qr_code || null,
+              qrCodeBase64: mpDataMin.point_of_interaction?.transaction_data?.qr_code_base64 || null,
+              ticketUrl: mpDataMin.point_of_interaction?.transaction_data?.ticket_url || null,
+              referenceId: `${referenceId}-min`,
+              amount: amount,
+              currency: 'BRL',
+              description: description,
+              provider: 'mercadopago',
+              expirationDate: mpDataMin.date_of_expiration || null
+            }
+            return NextResponse.json({ ...response, data: response })
+          }
+
+          // Coletar diagnóstico da conta do coletor
+          let diag = {}
+          try {
+            const who = await fetch('https://api.mercadopago.com/users/me', {
+              headers: { 'Authorization': `Bearer ${accessToken}` }
+            })
+            const whoJson = await who.json().catch(() => ({}))
+            diag = {
+              collector_id: whoJson?.id,
+              live_mode: whoJson?.live_mode,
+              site_id: whoJson?.site_id,
+              tags: whoJson?.tags,
+              identification_type: whoJson?.identification?.type,
+              identification_number_masked: whoJson?.identification?.number ? String(whoJson.identification.number).slice(0,3) + '****' : undefined,
+              status: whoJson?.status,
+            }
+          } catch {}
+
+          return NextResponse.json(
+            {
+              error: fullError,
+              details: {
+                mercadoPagoError: mpData,
+                fallbackTried: true,
+                fallbackResponse: mpDataMin,
+                diagnostics: diag,
+                status: mpResponse.status,
+                statusText: mpResponse.statusText,
+              },
+              hint:
+                'A conta recebedora parece não ter PIX habilitado (chave PIX ausente) ou identidade financeira pendente. Entre no painel do Mercado Pago > Seu negócio > Configurações > PIX e habilite/registre uma chave PIX. Garanta também que o Access Token usado é da conta vendedora correta.'
+            },
+            { status: mpResponse.status }
+          )
+        }
+
+        // Erro genérico: retorna com dicas padrão
         return NextResponse.json(
-          { 
+          {
             error: fullError,
             details: {
               mercadoPagoError: mpData,
               status: mpResponse.status,
               statusText: mpResponse.statusText
             },
-            hint: mpResponse.status === 401 
-              ? 'Token de acesso inválido. Verifique se o Access Token está correto e não expirou.' 
+            hint: mpResponse.status === 401
+              ? 'Token de acesso inválido. Verifique se o Access Token está correto e não expirou.'
               : 'Verifique se o Access Token do Mercado Pago está configurado corretamente em Configuração > Pagamentos'
           },
           { status: mpResponse.status }
