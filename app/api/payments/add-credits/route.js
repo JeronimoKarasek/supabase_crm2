@@ -124,25 +124,27 @@ export async function POST(request) {
     })
 
       // Cria pagamento Pix direto (sem checkout redirect)
+      // IMPORTANTE: O Mercado Pago exige CPF válido para gerar QR Code PIX
       const payment = {
         transaction_amount: Number(amount.toFixed(2)),
-        description: `Créditos - ${user.email}`,
+        description: productData ? `${productData.name} - FarolTech` : `Créditos - ${amount.toFixed(2)} - FarolTech`,
         payment_method_id: 'pix', // Pagamento via Pix
         payer: {
-          email: user.email,
-          first_name: user.user_metadata?.name?.split(' ')[0] || user.email.split('@')[0],
-          last_name: user.user_metadata?.name?.split(' ').slice(1).join(' ') || 'Usuario',
+          email: user.email || 'contato@faroltech.com',
+          first_name: user.user_metadata?.name?.split(' ')[0] || user.email?.split('@')[0] || 'Cliente',
+          last_name: user.user_metadata?.name?.split(' ').slice(1).join(' ') || 'FarolTech',
           identification: {
             type: 'CPF',
-            number: user.user_metadata?.document || '00000000000'
+            number: (user.user_metadata?.document || user.user_metadata?.cpf || '00000000000').replace(/\D/g, '').padStart(11, '0')
           }
         },
         notification_url: `${baseUrl}/api/mercadopago/webhook`,
         external_reference: referenceId,
-        statement_descriptor: 'FAROLTECH CREDITOS',
+        statement_descriptor: 'FAROLTECH',
         metadata: {
-          type: 'credit_addition',
-          user_id: user.id
+          type: productData ? 'product_purchase' : 'credit_addition',
+          user_id: user.id,
+          product_key: productKey || null
         }
       }
 
