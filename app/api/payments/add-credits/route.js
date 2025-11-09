@@ -128,9 +128,14 @@ export async function POST(request) {
       const { getValidCPF } = require('@/lib/mercadopago')
       const cpfValido = getValidCPF(user.user_metadata?.document || user.user_metadata?.cpf)
       
+      const itemTitle = productData ? productData.name : `Créditos FarolTech - R$ ${amount.toFixed(2)}`
+      const itemDescription = productData 
+        ? `Acesso ao produto ${productData.name} da plataforma FarolTech CRM`
+        : `Adição de ${amount.toFixed(2)} créditos na plataforma FarolTech CRM`
+      
       const payment = {
         transaction_amount: Number(amount.toFixed(2)),
-        description: productData ? `${productData.name} - FarolTech` : `Créditos - ${amount.toFixed(2)} - FarolTech`,
+        description: itemDescription,
         payment_method_id: 'pix', // Pagamento via Pix
         payer: {
           email: user.email || 'contato@faroltech.com',
@@ -141,13 +146,35 @@ export async function POST(request) {
             number: cpfValido // CPF válido com dígito verificador correto
           }
         },
+        // Adiciona items[] conforme solicitado pelo Mercado Pago para melhorar taxa de aprovação
+        additional_info: {
+          items: [
+            {
+              id: productKey || `credit_${Date.now()}`, // ID único do item
+              title: itemTitle, // Nome do item
+              description: itemDescription, // Descrição detalhada
+              category_id: productData ? 'services' : 'virtual_goods', // Categoria
+              quantity: 1, // Quantidade
+              unit_price: Number(amount.toFixed(2)) // Preço unitário
+            }
+          ],
+          payer: {
+            first_name: user.user_metadata?.name?.split(' ')[0] || user.email?.split('@')[0] || 'Cliente',
+            last_name: user.user_metadata?.name?.split(' ').slice(1).join(' ') || 'FarolTech',
+            phone: {
+              area_code: user.user_metadata?.phone?.substring(0, 2) || '11',
+              number: user.user_metadata?.phone?.substring(2) || '999999999'
+            }
+          }
+        },
         notification_url: `${baseUrl}/api/mercadopago/webhook`,
         external_reference: referenceId,
         statement_descriptor: 'FAROLTECH',
         metadata: {
           type: productData ? 'product_purchase' : 'credit_addition',
           user_id: user.id,
-          product_key: productKey || null
+          product_key: productKey || null,
+          user_email: user.email
         }
       }
       
