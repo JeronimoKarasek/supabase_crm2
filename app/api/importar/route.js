@@ -90,23 +90,57 @@ export async function GET(request) {
       .limit(100000)
     if (error) return NextResponse.json({ error: 'Export failed', details: error.message }, { status: 500 })
     const rows = Array.isArray(data) ? data : []
-    // Build headers as union of keys across rows, preserving first-row order first
-    let headers = []
-    if (rows.length > 0) {
-      const first = Object.keys(rows[0])
-      const set = new Set(first)
-      headers = [...first]
-      for (let i = 1; i < rows.length; i++) {
-        const ks = Object.keys(rows[i] || {})
-        for (const k of ks) { if (!set.has(k)) { set.add(k); headers.push(k) } }
-      }
+    
+    // Define TODAS as colunas possíveis da tabela importar
+    // Inclui colunas base + colunas que o webhook pode adicionar
+    const knownColumns = [
+      'id',
+      'created_at',
+      'nome',
+      'telefone',
+      'cpf',
+      'nb',
+      'cliente',
+      'produto',
+      'banco_simulado',
+      'status',
+      'lote_id',
+      'consultado',
+      'erro',
+      'tentativas',
+      'ultima_tentativa',
+      // Adicione aqui outras colunas que o webhook pode retornar
+      'resultado',
+      'mensagem',
+      'codigo_retorno',
+      'valor_emprestimo',
+      'taxa_juros',
+      'parcelas',
+      'valor_parcela',
+      'data_consulta',
+      'observacoes'
+    ]
+    
+    // Coleta TODAS as colunas que existem nos dados (incluindo as dinâmicas do webhook)
+    const dynamicColumns = new Set()
+    for (const row of rows) {
+      Object.keys(row || {}).forEach(k => dynamicColumns.add(k))
     }
+    
+    // Combina colunas conhecidas + dinâmicas (remove duplicatas)
+    const allColumnsSet = new Set([...knownColumns, ...Array.from(dynamicColumns)])
+    const headers = Array.from(allColumnsSet)
+    
+    console.log(`📊 Exportando ${rows.length} registros com ${headers.length} colunas`)
+    console.log(`📋 Colunas: ${headers.join(', ')}`)
+    
     const esc = (val) => {
       if (val === null || typeof val === 'undefined') return ''
       const s = String(val)
       if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"'
       return s
     }
+    
     const lines = []
     if (headers.length) lines.push(headers.map(esc).join(','))
     for (const row of rows) {
