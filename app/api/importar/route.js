@@ -345,19 +345,22 @@ export async function PUT(request) {
     const id = body?.id
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-    // Busca lote na tabela dedicada
-    const { data: lote, error: loteErr } = await supabaseAdmin
-      .from('lotes')
-      .select('*')
-      .eq('id', id)
-      .eq('user_email', user.email)
-      .single()
+    // Busca informações do lote na tabela importar (primeiro registro do lote_id)
+    const { data: loteRows, error: loteErr } = await supabaseAdmin
+      .from('importar')
+      .select('produto, banco_simulado')
+      .eq('lote_id', id)
+      .eq('cliente', user.email)
+      .limit(1)
 
-    if (loteErr || !lote) {
+    if (loteErr || !loteRows || loteRows.length === 0) {
       return NextResponse.json({ error: 'Lote not found', details: loteErr?.message }, { status: 404 })
     }
 
-    // Busca configuração do banco usando banco_name
+    const lote = loteRows[0]
+    const bancoKey = lote.banco_simulado
+
+    // Busca configuração do banco
     const { data: gsRow } = await supabaseAdmin
       .from('global_settings')
       .select('data')
@@ -365,8 +368,8 @@ export async function PUT(request) {
       .single()
     
     const banks = Array.isArray(gsRow?.data?.banks) ? gsRow.data.banks : []
-    let bank = banks.find(b => (b.name || '').toLowerCase() === String(lote.banco_name).toLowerCase())
-    if (!bank) bank = banks.find(b => (b.key || '').toLowerCase() === String(lote.banco_name).toLowerCase())
+    let bank = banks.find(b => b.key === bancoKey)
+    if (!bank) bank = banks.find(b => (b.name || '').toLowerCase() === String(bancoKey).toLowerCase())
     
     if (!bank?.webhookUrl) {
       return NextResponse.json({ error: 'Webhook not configured for this bank' }, { status: 400 })
@@ -381,7 +384,7 @@ export async function PUT(request) {
       .single()
     const userCreds = credsRows?.credentials || {}
 
-    // Fire webhook again (no lotes table - status tracked via importar records)
+    // Fire webhook again (status tracked via importar records)
     await fetch(bank.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
