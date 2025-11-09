@@ -157,15 +157,8 @@ export async function POST(request) {
               quantity: 1, // Quantidade
               unit_price: Number(amount.toFixed(2)) // Preço unitário
             }
-          ],
-          payer: {
-            first_name: user.user_metadata?.name?.split(' ')[0] || user.email?.split('@')[0] || 'Cliente',
-            last_name: user.user_metadata?.name?.split(' ').slice(1).join(' ') || 'FarolTech',
-            phone: {
-              area_code: user.user_metadata?.phone?.substring(0, 2) || '11',
-              number: user.user_metadata?.phone?.substring(2) || '999999999'
-            }
-          }
+          ]
+          // NOTA: payer.phone removido pois valores fake causam erro "Collector user without key"
         },
         notification_url: `${baseUrl}/api/mercadopago/webhook`,
         external_reference: referenceId,
