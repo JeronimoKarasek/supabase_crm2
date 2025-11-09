@@ -279,6 +279,7 @@ export default function ConsultaLotePage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Lote</TableHead>
+                  <TableHead>Data/Hora Envio</TableHead>
                   <TableHead>Produto</TableHead>
                   <TableHead>Banco</TableHead>
                   <TableHead>Status</TableHead>
@@ -287,27 +288,55 @@ export default function ConsultaLotePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((it) => (
-                  <TableRow key={it.id}>
-                    <TableCell className="font-mono text-xs">{String(it.id).slice(0, 12)}</TableCell>
-                    <TableCell>{it.produto || '-'}</TableCell>
-                    <TableCell>{it.bancoName || '-'}</TableCell>
-                    <TableCell>{it.status || '-'}</TableCell>
-                    <TableCell>
-                      {it.progress ? (
-                        <span className="text-sm">{it.progress.done}/{it.progress.total} ({it.progress.percent}%)</span>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">N/D</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="space-x-2 whitespace-nowrap">
-                      <Button size="sm" variant="outline" onClick={() => onDownload(it.id)}>Baixar</Button>
-                      <Button size="sm" variant="outline" onClick={() => onReprocess(it.id)} disabled={!!busy[it.id]}>Reprocessar</Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {items.map((it) => {
+                  const formatDate = (dateStr) => {
+                    if (!dateStr) return '-'
+                    try {
+                      const date = new Date(dateStr)
+                      return date.toLocaleString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
+                    } catch {
+                      return '-'
+                    }
+                  }
+                  
+                  return (
+                    <TableRow key={it.id}>
+                      <TableCell className="font-mono text-xs">{String(it.id).slice(0, 12)}</TableCell>
+                      <TableCell className="text-sm whitespace-nowrap">{formatDate(it.createdAt)}</TableCell>
+                      <TableCell>{it.produto || '-'}</TableCell>
+                      <TableCell>{it.bancoName || '-'}</TableCell>
+                      <TableCell>
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          it.status === 'concluido' ? 'bg-green-500/20 text-green-700' :
+                          it.status === 'processando' ? 'bg-blue-500/20 text-blue-700' :
+                          it.status === 'erro' ? 'bg-red-500/20 text-red-700' :
+                          'bg-yellow-500/20 text-yellow-700'
+                        }`}>
+                          {it.status || 'pendente'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {it.progress ? (
+                          <span className="text-sm">{it.progress.done}/{it.progress.total} ({it.progress.percent}%)</span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">N/D</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="space-x-2 whitespace-nowrap">
+                        <Button size="sm" variant="outline" onClick={() => onDownload(it.id)}>Baixar</Button>
+                        <Button size="sm" variant="outline" onClick={() => onReprocess(it.id)} disabled={!!busy[it.id]}>Reprocessar</Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
                 {(!items || items.length === 0) && (
-                  <TableRow><TableCell colSpan={6} className="text-center text-sm text-muted-foreground">Nenhum lote encontrado.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground">Nenhum lote encontrado.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>

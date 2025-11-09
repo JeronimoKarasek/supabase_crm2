@@ -20,6 +20,8 @@ export default function SimularDigitarPage() {
   const [digForm, setDigForm] = useState({})
   const [digLoading, setDigLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [linkPopupOpen, setLinkPopupOpen] = useState(false)
+  const [linkData, setLinkData] = useState(null)
 
   useEffect(() => {
     ;(async () => {
@@ -166,39 +168,74 @@ export default function SimularDigitarPage() {
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch('/api/digitar', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ bankKey: currentBank.key, cpf, payload: digForm, product: currentProduct }) })
+      const res = await fetch('/api/digitar', { 
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json', 
+          ...(token ? { Authorization: `Bearer ${token}` } : {}) 
+        }, 
+        body: JSON.stringify({ 
+          bankKey: currentBank.key, 
+          cpf, 
+          payload: digForm, 
+          product: currentProduct 
+        }) 
+      })
+      
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Falha ao enviar digitação')
+      
       setOpen(false)
-      // Extrai link retornado pelo webhook e anexa ao cartão
+      
+      // Extrai link da resposta normalizada
       const resp = json?.response || {}
-      const urlKnown = resp.link || resp.url || resp.proposta_url || resp.propostaLink || resp.proposta || resp.pdf || resp.contrato || ''
-      const findFirstUrl = (obj) => {
-        if (!obj || typeof obj !== 'object') return ''
-        for (const [k,v] of Object.entries(obj)) {
-          if (typeof v === 'string' && v.startsWith('http')) return v
-          if (v && typeof v === 'object') { const r = findFirstUrl(v); if (r) return r }
-        }
-        return ''
-      }
-      const url = (typeof urlKnown === 'string' && urlKnown.startsWith('http')) ? urlKnown : findFirstUrl(resp)
-      const mensagem = resp.mensagem || resp.message || resp.msg || ''
+      const url = resp.link || ''
+      const mensagem = resp.mensagem || resp.status || ''
+      const protocolo = resp.protocolo || ''
+      
+      // Atualiza resultados com dados da digitação
       setResults(prev => prev.map(r => {
-        if (r.bankKey !== (currentBank?.key)) return r
+        if (r.bankKey !== currentBank.key) return r
         const next = (r.products || []).map(p => {
           if (p.product !== currentProduct) return p
-          return { ...p, submit: { url, mensagem, raw: resp } }
+          return { ...p, submit: { url, mensagem, protocolo, raw: resp._raw } }
         })
         return { ...r, products: next }
       }))
-      setMessage('Enviado com sucesso')
-      setTimeout(()=>setMessage(''), 2000)
+      
+      // Se retornou link, mostra popup
+      if (url) {
+        setLinkData({ 
+          url, 
+          mensagem: mensagem || 'Link de formalização disponível', 
+          protocolo,
+          bankName: currentBank.name, 
+          product: currentProduct 
+        })
+        setLinkPopupOpen(true)
+        setMessage('✅ Link de formalização recebido!')
+        setTimeout(()=>setMessage(''), 3000)
+      } else {
+        // Sem link - mostra mensagem de sucesso
+        setMessage(mensagem || '✅ Digitação enviada com sucesso')
+        setTimeout(()=>setMessage(''), 3000)
+      }
     } catch (e) {
-      setMessage(e?.message || 'Erro ao enviar')
-      setTimeout(()=>setMessage(''), 2500)
+      setMessage(`❌ ${e?.message || 'Erro ao enviar'}`)
+      setTimeout(()=>setMessage(''), 3000)
     } finally {
       setDigLoading(false)
     }
+  }
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setMessage('Link copiado!')
+      setTimeout(()=>setMessage(''), 2000)
+    }).catch(() => {
+      setMessage('Erro ao copiar')
+      setTimeout(()=>setMessage(''), 2000)
+    })
   }
 
   return (
@@ -264,14 +301,40 @@ export default function SimularDigitarPage() {
                               {typeof d.valor_bloqueado !== 'undefined' && <div><span className="font-medium">Valor bloqueado:</span> {String(d.valor_bloqueado)}</div>}
                             </div>
                             {item.submit && (item.submit.url || item.submit.mensagem) ? (
-                              <div className="border rounded p-2 bg-muted/30">
-                                <div className="text-xs font-medium mb-1">Proposta</div>
-                                {item.submit.url ? (
-                                  <div><a className="text-primary underline" href={item.submit.url} target="_blank" rel="noreferrer">Abrir proposta</a></div>
-                                ) : null}
-                                {item.submit.mensagem ? (
-                                  <div className="text-xs text-muted-foreground">{item.submit.mensagem}</div>
-                                ) : null}
+                              <div className="border rounded p-3 bg-muted/30 space-y-2">
+                                <div className="text-xs font-medium">🎉 Proposta Disponível</div>
+                                
+                                {item.submit.mensagem && (
+                                  <div className="text-xs text-muted-foreground border-l-2 border-primary pl-2">
+                                    {item.submit.mensagem}
+                                  </div>
+                                )}
+                                
+                                {item.submit.protocolo && (
+                                  <div className="text-xs">
+                                    <span className="font-medium">Protocolo:</span> {item.submit.protocolo}
+                                  </div>
+                                )}
+                                
+                                {item.submit.url && (
+                                  <div className="space-y-1">
+                                    <div className="text-xs font-medium">Link para formalização:</div>
+                                    <div className="flex gap-2">
+                                      <div className="flex-1 border rounded px-2 py-1.5 bg-background text-xs font-mono break-all overflow-x-auto">
+                                        {item.submit.url}
+                                      </div>
+                                      <Button 
+                                        size="sm"
+                                        variant="outline" 
+                                        onClick={() => copyToClipboard(item.submit.url)}
+                                        className="shrink-0 h-auto py-1.5"
+                                        title="Copiar link"
+                                      >
+                                        📋
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             ) : null}
                             {(() => {
@@ -325,6 +388,63 @@ export default function SimularDigitarPage() {
               <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
               <Button onClick={doDigitar} disabled={digLoading}>{digLoading ? 'Enviando...' : 'Enviar'}</Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={linkPopupOpen} onOpenChange={setLinkPopupOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>🎉 Link de Formalização Disponível</DialogTitle>
+              <DialogDescription>
+                {linkData?.bankName} {linkData?.product ? `- ${linkData.product}` : ''}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {linkData?.mensagem && (
+                <div className="text-sm text-muted-foreground border-l-4 border-primary pl-3">
+                  {linkData.mensagem}
+                </div>
+              )}
+              
+              {linkData?.protocolo && (
+                <div className="text-sm">
+                  <span className="font-medium">Protocolo:</span> {linkData.protocolo}
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Link para formalização:</div>
+                <div className="flex gap-2">
+                  <div className="flex-1 border rounded px-3 py-2 bg-muted/50 overflow-x-auto text-sm font-mono break-all">
+                    {linkData?.url}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => copyToClipboard(linkData?.url)}
+                    className="shrink-0"
+                    title="Copiar link"
+                  >
+                    📋 Copiar
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button 
+                  className="flex-1" 
+                  onClick={() => window.open(linkData?.url, '_blank')}
+                >
+                  🔗 Abrir em nova aba
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => setLinkPopupOpen(false)}
+                >
+                  Fechar
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

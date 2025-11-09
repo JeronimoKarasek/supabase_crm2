@@ -114,7 +114,7 @@ export async function GET(request) {
     const otherColumns = Array.from(allColumnsSet).filter(c => !baseColumns.includes(c))
     const headers = [...baseColumns.filter(c => allColumnsSet.has(c)), ...otherColumns]
     
-    console.log(`� Total de colunas no CSV: ${headers.length}`)
+    console.log(`📊 Total de colunas no CSV: ${headers.length}`)
     console.log(`📋 Colunas: ${headers.join(', ')}`)
     
     // Função para escapar valores CSV
@@ -148,24 +148,35 @@ export async function GET(request) {
       } 
     })
   }
-  // List lots for this user
+  
+  // List lots (agregação da tabela importar - SEM LIMIT para não desaparecer)
   const { data, error } = await supabaseAdmin
     .from('importar')
     .select('lote_id, produto, banco_simulado, status, created_at')
     .eq('cliente', user.email)
     .order('created_at', { ascending: false })
-    .limit(1000)
-  if (error) return NextResponse.json({ error: 'List failed', details: error.message }, { status: 500 })
-  // Reduce to unique lote_id
+  
+  if (error) {
+    console.error('❌ Erro ao listar lotes:', error)
+    return NextResponse.json({ error: 'List failed', details: error.message }, { status: 500 })
+  }
+  
   const seen = new Set()
   const items = []
   for (const r of (data || [])) {
     if (r.lote_id && !seen.has(r.lote_id)) {
       seen.add(r.lote_id)
-      items.push({ id: r.lote_id, produto: r.produto, bancoName: r.banco_simulado, status: r.status || 'pendente' })
+      items.push({ 
+        id: r.lote_id, 
+        produto: r.produto, 
+        bancoName: r.banco_simulado, 
+        status: r.status || 'pendente', 
+        createdAt: r.created_at 
+      })
     }
   }
-  // compute progress (consultado true/total) per lote_id
+  
+  // Compute progress (consultado true/total) per lote_id
   for (const it of items) {
     try {
       const { count: total } = await supabaseAdmin
@@ -184,6 +195,7 @@ export async function GET(request) {
       if (percent === 100 && it.status !== 'concluido') it.status = 'concluido'
     } catch {}
   }
+  
   return NextResponse.json({ items })
 }
 
@@ -200,6 +212,7 @@ export async function POST(request) {
 
     // Map bank key -> bank name from global settings
     let bancoName = bancoKey
+    let webhookUrl = null
     try {
       const { data: gsRow } = await supabaseAdmin
         .from('global_settings')
@@ -209,6 +222,7 @@ export async function POST(request) {
       const banks = Array.isArray(gsRow?.data?.banks) ? gsRow.data.banks : []
       const bank = banks.find(b => (b.key === bancoKey))
       if (bank?.name) bancoName = bank.name
+      if (bank?.webhookUrl) webhookUrl = bank.webhookUrl
     } catch {}
 
     // Insert into Supabase table 'importar'
@@ -225,19 +239,14 @@ export async function POST(request) {
     }))
     if (payload.length > 0) {
       const { error: insErr } = await supabaseAdmin.from('importar').insert(payload)
-      if (insErr) return NextResponse.json({ error: 'Insert failed', details: insErr.message }, { status: 500 })
+      if (insErr) {
+        return NextResponse.json({ error: 'Insert failed', details: insErr.message }, { status: 500 })
+      }
     }
 
     // Trigger webhook if configured
-    try {
-      const { data: gsRow } = await supabaseAdmin
-        .from('global_settings')
-        .select('data')
-        .eq('id', 'global')
-        .single()
-      const banks = Array.isArray(gsRow?.data?.banks) ? gsRow.data.banks : []
-      const bank = banks.find(b => (b.key === bancoKey))
-      if (bank?.webhookUrl) {
+    if (webhookUrl) {
+      try {
         // Load user credentials from Supabase table
         const { data: credsRows } = await supabaseAdmin
           .from('bank_credentials')
@@ -246,7 +255,8 @@ export async function POST(request) {
           .eq('bank_key', bancoKey)
           .single()
         const userCreds = credsRows?.credentials || {}
-        await fetch(bank.webhookUrl, {
+        
+        await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -258,25 +268,50 @@ export async function POST(request) {
             userId: user.id
           })
         })
+      } catch (webhookError) {
+        console.error('❌ Erro ao chamar webhook:', webhookError)
+        // Não retorna erro para não bloquear criação do lote
       }
-    } catch {}
+    }
 
-    // Return updated lots list
+    // Return updated lots list (agregação da tabela importar)
     const { data, error } = await supabaseAdmin
       .from('importar')
       .select('lote_id, produto, banco_simulado, status, created_at')
       .eq('cliente', user.email)
       .order('created_at', { ascending: false })
-      .limit(1000)
+    
     if (error) return NextResponse.json({ error: 'List failed', details: error.message }, { status: 500 })
+    
     const seen = new Set()
     const items = []
     for (const r of (data || [])) {
       if (r.lote_id && !seen.has(r.lote_id)) {
         seen.add(r.lote_id)
-        items.push({ id: r.lote_id, produto: r.produto, bancoName: r.banco_simulado, status: r.status || 'pendente' })
+        items.push({ id: r.lote_id, produto: r.produto, bancoName: r.banco_simulado, status: r.status || 'pendente', createdAt: r.created_at })
       }
     }
+    
+    // compute progress (consultado true/total) per lote_id
+    for (const it of items) {
+      try {
+        const { count: total } = await supabaseAdmin
+          .from('importar')
+          .select('*', { count: 'exact', head: true })
+          .eq('cliente', user.email)
+          .eq('lote_id', it.id)
+        const { count: done } = await supabaseAdmin
+          .from('importar')
+          .select('*', { count: 'exact', head: true })
+          .eq('cliente', user.email)
+          .eq('lote_id', it.id)
+          .eq('consultado', true)
+        const percent = total ? Math.round(((done || 0) / total) * 100) : 0
+        it.progress = { done: done || 0, total: total || 0, percent }
+        if (percent === 100 && it.status !== 'concluido') it.status = 'concluido'
+      } catch {}
+    }
+    
     return NextResponse.json({ items })
   } catch (e) {
     return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
@@ -310,48 +345,49 @@ export async function PUT(request) {
     const id = body?.id
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-    // Find one row of the lote to get banco_simulado (name)
-    const { data: one, error: oneErr } = await supabaseAdmin
-      .from('importar')
-      .select('banco_simulado, produto')
-      .eq('cliente', user.email)
-      .eq('lote_id', id)
-      .limit(1)
+    // Busca lote na tabela dedicada
+    const { data: lote, error: loteErr } = await supabaseAdmin
+      .from('lotes')
+      .select('*')
+      .eq('id', id)
+      .eq('user_email', user.email)
+      .single()
 
-    if (oneErr) return NextResponse.json({ error: 'Failed to load lote', details: oneErr.message }, { status: 400 })
-    const bancoName = one?.[0]?.banco_simulado || ''
-    if (!bancoName) return NextResponse.json({ error: 'Bank not found for lote' }, { status: 404 })
+    if (loteErr || !lote) {
+      return NextResponse.json({ error: 'Lote not found', details: loteErr?.message }, { status: 404 })
+    }
 
-    // Load banks configuration
+    // Busca configuração do banco usando banco_name
     const { data: gsRow } = await supabaseAdmin
       .from('global_settings')
       .select('data')
       .eq('id', 'global')
       .single()
+    
     const banks = Array.isArray(gsRow?.data?.banks) ? gsRow.data.banks : []
-    // Find bank by name (fallback by key)
-    let bank = banks.find(b => (b.name || '').toLowerCase() === String(bancoName).toLowerCase())
-    if (!bank) bank = banks.find(b => (b.key || '').toLowerCase() === String(bancoName).toLowerCase())
-    if (!bank?.webhookUrl) return NextResponse.json({ error: 'Webhook not configured for bank' }, { status: 400 })
+    let bank = banks.find(b => (b.name || '').toLowerCase() === String(lote.banco_name).toLowerCase())
+    if (!bank) bank = banks.find(b => (b.key || '').toLowerCase() === String(lote.banco_name).toLowerCase())
+    
+    if (!bank?.webhookUrl) {
+      return NextResponse.json({ error: 'Webhook not configured for this bank' }, { status: 400 })
+    }
 
     // Load user credentials using bank key
-    const bankKey = bank.key
     const { data: credsRows } = await supabaseAdmin
       .from('bank_credentials')
       .select('credentials')
       .eq('user_id', user.id)
-      .eq('bank_key', bankKey)
+      .eq('bank_key', bank.key)
       .single()
     const userCreds = credsRows?.credentials || {}
 
-    // Fire webhook again (no re-insert)
-    const produto = one?.[0]?.produto || ''
+    // Fire webhook again (no lotes table - status tracked via importar records)
     await fetch(bank.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        banco: bankKey,
-        produto,
+        banco: bank.key,
+        produto: lote.produto,
         credentials: userCreds,
         itemId: id,
         email: user.email,
