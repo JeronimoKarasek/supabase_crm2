@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 const credits = require('@/lib/credits')
 import { setNX } from '@/lib/redis'
+import { getMercadoPagoAccessToken, mpFetch } from '@/lib/mercadopago'
 
 export const dynamic = 'force-dynamic'
 
@@ -119,13 +120,7 @@ export async function POST(request) {
     }
 
     // Busca access token do Mercado Pago
-    let accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
-    if (!accessToken) {
-      try {
-        const { data } = await supabaseAdmin.from('global_settings').select('data').eq('id','global').single()
-        accessToken = data?.data?.payments?.mercadopagoAccessToken || ''
-      } catch {}
-    }
+    const { token: accessToken } = await getMercadoPagoAccessToken()
     if (!accessToken) return NextResponse.json({ ok: true })
 
     // Processa notificação de pagamento
@@ -139,9 +134,7 @@ export async function POST(request) {
       }
 
       // Consulta detalhes do pagamento na API do Mercado Pago
-      const paymentRes = await fetch(`https://api.mercadopago.com/v1/payments/${dataId}`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      })
+      const paymentRes = await mpFetch(`https://api.mercadopago.com/v1/payments/${dataId}`)
       
       if (!paymentRes.ok) return NextResponse.json({ ok: true })
       

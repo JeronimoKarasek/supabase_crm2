@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getMercadoPagoAccessToken, mpFetch } from '@/lib/mercadopago'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,18 +11,10 @@ export async function GET(request) {
     if (!paymentId) return NextResponse.json({ error: 'paymentId obrigatório' }, { status: 400 })
 
     // Busca access token do Mercado Pago (env > global settings)
-    let accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
-    if (!accessToken) {
-      try {
-        const { data } = await supabaseAdmin.from('global_settings').select('data').eq('id','global').single()
-        accessToken = data?.data?.payments?.mercadopagoAccessToken || ''
-      } catch {}
-    }
+    const { token: accessToken } = await getMercadoPagoAccessToken()
     if (!accessToken) return NextResponse.json({ error: 'Mercado Pago access token não configurado' }, { status: 500 })
 
-    const res = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
-      headers: { 'Authorization': `Bearer ${accessToken}` }
-    })
+    const res = await mpFetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {})
     const json = await res.json().catch(() => ({}))
     if (!res.ok) return NextResponse.json({ error: 'Erro ao consultar status', details: json }, { status: res.status })
 

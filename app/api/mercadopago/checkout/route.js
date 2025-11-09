@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getMercadoPagoAccessToken, mpFetch, ensureCreditsReference } from '@/lib/mercadopago'
 
 export const dynamic = 'force-dynamic'
 /**
@@ -33,20 +34,15 @@ export async function POST(request) {
     const amount = Number(amountRaw)
     if (!Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: 'invalid amount' }, { status: 400 })
 
-    // Busca access token do Mercado Pago (env > global settings)
-    let accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
-    if (!accessToken) {
-      try {
-        const { data } = await supabaseAdmin.from('global_settings').select('data').eq('id','global').single()
-        accessToken = data?.data?.payments?.mercadopagoAccessToken || ''
-      } catch {}
-    }
+    // Busca access token do Mercado Pago (env > global settings) com helper
+    const { token: accessToken, source } = await getMercadoPagoAccessToken()
     if (!accessToken) return NextResponse.json({ error: 'Mercado Pago access token not configured' }, { status: 500 })
 
     const baseUrl = process.env.APP_BASE_URL || new URL(request.url).origin
-    const referenceId = (body.referenceId || `mp_${Date.now()}_${Math.random().toString(36).slice(2,8)}`).replace(/[^a-zA-Z0-9_\-]/g,'_')
+  let referenceId = (body.referenceId || `mp_${Date.now()}_${Math.random().toString(36).slice(2,8)}`).replace(/[^a-zA-Z0-9_\-]/g,'_')
     const productKey = body.productKey || null
     const isCredits = body.isCredits === true || (typeof body.productType === 'string' && body.productType === 'credits')
+  referenceId = ensureCreditsReference(referenceId, isCredits)
     const paymentMethod = body.paymentMethod || 'pix'
     const buyer = body.buyer || {}
     const user = await getUser(request)
@@ -125,11 +121,10 @@ export async function POST(request) {
 
     // Chama API do Mercado Pago para criar pagamento
     console.info('[MP Checkout] Creating payment', { referenceId, amount, paymentMethod, isCredits, productKey })
-    const res = await fetch('https://api.mercadopago.com/v1/payments', {
+    const res = await mpFetch('https://api.mercadopago.com/v1/payments', {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
         'X-Idempotency-Key': referenceId
       },
       body: JSON.stringify(payment),
