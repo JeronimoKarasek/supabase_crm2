@@ -124,7 +124,10 @@ export async function POST(request) {
     })
 
       // Cria pagamento Pix direto (sem checkout redirect)
-      // IMPORTANTE: O Mercado Pago exige CPF válido para gerar QR Code PIX
+      // IMPORTANTE: O Mercado Pago exige CPF VÁLIDO (com dígito verificador correto) para gerar QR Code PIX
+      const { getValidCPF } = require('@/lib/mercadopago')
+      const cpfValido = getValidCPF(user.user_metadata?.document || user.user_metadata?.cpf)
+      
       const payment = {
         transaction_amount: Number(amount.toFixed(2)),
         description: productData ? `${productData.name} - FarolTech` : `Créditos - ${amount.toFixed(2)} - FarolTech`,
@@ -135,7 +138,7 @@ export async function POST(request) {
           last_name: user.user_metadata?.name?.split(' ').slice(1).join(' ') || 'FarolTech',
           identification: {
             type: 'CPF',
-            number: (user.user_metadata?.document || user.user_metadata?.cpf || '00000000000').replace(/\D/g, '').padStart(11, '0')
+            number: cpfValido // CPF válido com dígito verificador correto
           }
         },
         notification_url: `${baseUrl}/api/mercadopago/webhook`,
@@ -147,6 +150,17 @@ export async function POST(request) {
           product_key: productKey || null
         }
       }
+      
+      console.log('📋 Payment payload:', {
+        ...payment,
+        payer: {
+          ...payment.payer,
+          identification: {
+            type: payment.payer.identification.type,
+            number: payment.payer.identification.number.substring(0, 3) + '****' + payment.payer.identification.number.substring(9)
+          }
+        }
+      })
 
       console.log('📤 Enviando para Mercado Pago:', JSON.stringify(payment, null, 2))
 

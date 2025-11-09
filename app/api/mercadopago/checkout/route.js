@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getMercadoPagoAccessToken, mpFetch, ensureCreditsReference } from '@/lib/mercadopago'
+import { getMercadoPagoAccessToken, mpFetch, ensureCreditsReference, getValidCPF } from '@/lib/mercadopago'
 
 export const dynamic = 'force-dynamic'
 /**
@@ -87,17 +87,20 @@ export async function POST(request) {
     }).catch(()=>{})
 
     // Prepara payload para criar pagamento direto (Pix ou Débito)
+    // CRÍTICO: Mercado Pago exige CPF VÁLIDO (com dígito verificador) para PIX
+    const cpfValido = getValidCPF(buyer?.document || user?.user_metadata?.cpf || user?.user_metadata?.document)
+    
     const payment = {
       transaction_amount: amount,
       description: body.title || body.description || 'Produto',
       payment_method_id: paymentMethod, // 'pix', 'debit_card', etc
       payer: {
-        email: buyer?.email || '',
-        first_name: buyer?.firstName || buyer?.name || '',
-        last_name: buyer?.lastName || '',
+        email: buyer?.email || user?.email || 'contato@faroltech.com',
+        first_name: buyer?.firstName || buyer?.name || user?.user_metadata?.name?.split(' ')[0] || 'Cliente',
+        last_name: buyer?.lastName || user?.user_metadata?.name?.split(' ').slice(1).join(' ') || 'FarolTech',
         identification: {
           type: (buyer?.documentType || 'CPF'),
-          number: buyer?.document || ''
+          number: cpfValido // CPF válido obrigatório para PIX
         }
       },
       notification_url: `${baseUrl}/api/mercadopago/webhook`,
