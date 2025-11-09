@@ -209,24 +209,36 @@ export default function ConfiguracaoPage() {
 
   const savePayments = async () => {
     try {
+      setError('')
+      setMessage('')
+      
       const res = await fetch('/api/global-settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           payments: {
             provider: payProvider,
-            picpaySellerToken: picpayToken,
-            picpayClientId,
-            picpayClientSecret,
-            mercadopagoAccessToken,
-            mercadopagoPublicKey,
-            creditsWebhook,
-            addCreditsWebhook
+            picpaySellerToken: picpayToken?.trim() || '',
+            picpayClientId: picpayClientId?.trim() || '',
+            picpayClientSecret: picpayClientSecret?.trim() || '',
+            mercadopagoAccessToken: mercadopagoAccessToken?.trim() || '',
+            mercadopagoPublicKey: mercadopagoPublicKey?.trim() || '',
+            creditsWebhook: creditsWebhook?.trim() || '',
+            addCreditsWebhook: addCreditsWebhook?.trim() || ''
           }
         })
       })
-      if (res.ok) { setMessage('Configuracoes salvas'); setTimeout(()=>setMessage(''), 2000) }
-    } catch {}
+      
+      if (res.ok) { 
+        setMessage('✅ Configurações de pagamento salvas com sucesso!') 
+        setTimeout(()=>setMessage(''), 3000) 
+      } else {
+        const json = await res.json().catch(() => ({}))
+        setError('Erro ao salvar: ' + (json?.error || 'Erro desconhecido'))
+      }
+    } catch (e) {
+      setError('Erro ao salvar configurações: ' + (e?.message || 'Erro desconhecido'))
+    }
   }
 
   const saveAdminEmails = async () => {

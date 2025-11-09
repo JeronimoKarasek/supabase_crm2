@@ -81,8 +81,8 @@ export async function POST(request) {
       }
     }
 
-    // Busca Access Token do Mercado Pago
-    const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN || settings.mercadopagoAccessToken
+    // Busca Access Token do Mercado Pago (com trim para remover espaços)
+    let accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN || settings.mercadopagoAccessToken
     
     if (!accessToken) {
       console.error('❌ Mercado Pago Access Token não configurado!')
@@ -91,6 +91,17 @@ export async function POST(request) {
         hint: 'Configure o Access Token em: Configuração > Pagamentos > Mercado Pago Access Token'
       }, { status: 500 })
     }
+    
+    // Remove espaços em branco no início e fim
+    accessToken = String(accessToken).trim()
+    
+    console.log('🔑 Token Info:', {
+      tokenLength: accessToken.length,
+      tokenStart: accessToken.substring(0, 15),
+      tokenEnd: accessToken.substring(accessToken.length - 10),
+      hasSpaces: accessToken.includes(' '),
+      hasNewlines: accessToken.includes('\n') || accessToken.includes('\r')
+    })
 
     // Gera referenceId único
     // IMPORTANTE: Para produtos usa "product_", para créditos usa "credits_"
@@ -148,7 +159,12 @@ export async function POST(request) {
       console.log('📥 Resposta Mercado Pago:', JSON.stringify(mpData, null, 2))
 
       if (!mpResponse.ok) {
-        console.error('❌ Erro do Mercado Pago:', mpData)
+        console.error('❌ Erro do Mercado Pago:', {
+          status: mpResponse.status,
+          statusText: mpResponse.statusText,
+          data: mpData,
+          tokenUsed: accessToken.substring(0, 20) + '...'
+        })
         
         // Extrai mensagem de erro mais específica
         const errorMessage = mpData?.message || mpData?.error || 'Erro ao gerar pagamento Pix'
@@ -158,8 +174,14 @@ export async function POST(request) {
         return NextResponse.json(
           { 
             error: fullError,
-            details: mpData,
-            hint: 'Verifique se o Access Token do Mercado Pago está configurado corretamente em Configuração > Pagamentos'
+            details: {
+              mercadoPagoError: mpData,
+              status: mpResponse.status,
+              statusText: mpResponse.statusText
+            },
+            hint: mpResponse.status === 401 
+              ? 'Token de acesso inválido. Verifique se o Access Token está correto e não expirou.' 
+              : 'Verifique se o Access Token do Mercado Pago está configurado corretamente em Configuração > Pagamentos'
           },
           { status: mpResponse.status }
         )

@@ -100,14 +100,14 @@ export async function PUT(request) {
     if (typeof body.payments === 'object' && body.payments !== null) {
       const pay = body.payments
       next.payments = {
-        provider: typeof pay.provider === 'string' ? pay.provider : (next.payments?.provider || 'picpay'),
-        picpaySellerToken: typeof pay.picpaySellerToken === 'string' ? pay.picpaySellerToken : (next.payments?.picpaySellerToken || ''),
-        picpayClientId: typeof pay.picpayClientId === 'string' ? pay.picpayClientId : (next.payments?.picpayClientId || ''),
-        picpayClientSecret: typeof pay.picpayClientSecret === 'string' ? pay.picpayClientSecret : (next.payments?.picpayClientSecret || ''),
-        mercadopagoAccessToken: typeof pay.mercadopagoAccessToken === 'string' ? pay.mercadopagoAccessToken : (next.payments?.mercadopagoAccessToken || ''),
-        mercadopagoPublicKey: typeof pay.mercadopagoPublicKey === 'string' ? pay.mercadopagoPublicKey : (next.payments?.mercadopagoPublicKey || ''),
-        creditsWebhook: typeof pay.creditsWebhook === 'string' ? pay.creditsWebhook : (next.payments?.creditsWebhook || ''),
-        addCreditsWebhook: typeof pay.addCreditsWebhook === 'string' ? pay.addCreditsWebhook : (next.payments?.addCreditsWebhook || ''),
+        provider: typeof pay.provider === 'string' ? pay.provider.trim() : (next.payments?.provider || 'picpay'),
+        picpaySellerToken: typeof pay.picpaySellerToken === 'string' ? pay.picpaySellerToken.trim() : (next.payments?.picpaySellerToken || ''),
+        picpayClientId: typeof pay.picpayClientId === 'string' ? pay.picpayClientId.trim() : (next.payments?.picpayClientId || ''),
+        picpayClientSecret: typeof pay.picpayClientSecret === 'string' ? pay.picpayClientSecret.trim() : (next.payments?.picpayClientSecret || ''),
+        mercadopagoAccessToken: typeof pay.mercadopagoAccessToken === 'string' ? pay.mercadopagoAccessToken.trim() : (next.payments?.mercadopagoAccessToken || ''),
+        mercadopagoPublicKey: typeof pay.mercadopagoPublicKey === 'string' ? pay.mercadopagoPublicKey.trim() : (next.payments?.mercadopagoPublicKey || ''),
+        creditsWebhook: typeof pay.creditsWebhook === 'string' ? pay.creditsWebhook.trim() : (next.payments?.creditsWebhook || ''),
+        addCreditsWebhook: typeof pay.addCreditsWebhook === 'string' ? pay.addCreditsWebhook.trim() : (next.payments?.addCreditsWebhook || ''),
       }
     }
     await writeSettingsToDb(next)
@@ -173,14 +173,14 @@ export async function POST(request) {
     if (typeof body.payments === 'object' && body.payments !== null) {
       const pay = body.payments
       next.payments = {
-        provider: typeof pay.provider === 'string' ? pay.provider : (next.payments?.provider || 'picpay'),
-        picpaySellerToken: typeof pay.picpaySellerToken === 'string' ? pay.picpaySellerToken : (next.payments?.picpaySellerToken || ''),
-        picpayClientId: typeof pay.picpayClientId === 'string' ? pay.picpayClientId : (next.payments?.picpayClientId || ''),
-        picpayClientSecret: typeof pay.picpayClientSecret === 'string' ? pay.picpayClientSecret : (next.payments?.picpayClientSecret || ''),
-        mercadopagoAccessToken: typeof pay.mercadopagoAccessToken === 'string' ? pay.mercadopagoAccessToken : (next.payments?.mercadopagoAccessToken || ''),
-        mercadopagoPublicKey: typeof pay.mercadopagoPublicKey === 'string' ? pay.mercadopagoPublicKey : (next.payments?.mercadopagoPublicKey || ''),
-        creditsWebhook: typeof pay.creditsWebhook === 'string' ? pay.creditsWebhook : (next.payments?.creditsWebhook || ''),
-        addCreditsWebhook: typeof pay.addCreditsWebhook === 'string' ? pay.addCreditsWebhook : (next.payments?.addCreditsWebhook || ''),
+        provider: typeof pay.provider === 'string' ? pay.provider.trim() : (next.payments?.provider || 'picpay'),
+        picpaySellerToken: typeof pay.picpaySellerToken === 'string' ? pay.picpaySellerToken.trim() : (next.payments?.picpaySellerToken || ''),
+        picpayClientId: typeof pay.picpayClientId === 'string' ? pay.picpayClientId.trim() : (next.payments?.picpayClientId || ''),
+        picpayClientSecret: typeof pay.picpayClientSecret === 'string' ? pay.picpayClientSecret.trim() : (next.payments?.picpayClientSecret || ''),
+        mercadopagoAccessToken: typeof pay.mercadopagoAccessToken === 'string' ? pay.mercadopagoAccessToken.trim() : (next.payments?.mercadopagoAccessToken || ''),
+        mercadopagoPublicKey: typeof pay.mercadopagoPublicKey === 'string' ? pay.mercadopagoPublicKey.trim() : (next.payments?.mercadopagoPublicKey || ''),
+        creditsWebhook: typeof pay.creditsWebhook === 'string' ? pay.creditsWebhook.trim() : (next.payments?.creditsWebhook || ''),
+        addCreditsWebhook: typeof pay.addCreditsWebhook === 'string' ? pay.addCreditsWebhook.trim() : (next.payments?.addCreditsWebhook || ''),
       }
     }
     await writeSettingsToDb(next)
