@@ -81,59 +81,59 @@ export async function GET(request) {
   const url = new URL(request.url)
   const downloadId = url.searchParams.get('downloadId')
   if (downloadId) {
-    // Export all columns from Supabase table 'importar' for this user's lote_id
+    // Primeiro, busca uma linha de amostra para identificar TODAS as colunas disponíveis
+    const { data: sampleData } = await supabaseAdmin
+      .from('importar')
+      .select('*')
+      .eq('cliente', user.email)
+      .eq('lote_id', downloadId)
+      .limit(1)
+    
+    // Se tiver dados, pega todas as chaves (colunas) da primeira linha
+    let allPossibleColumns = []
+    if (sampleData && sampleData.length > 0) {
+      allPossibleColumns = Object.keys(sampleData[0])
+      console.log(`🔍 Colunas detectadas na tabela: ${allPossibleColumns.join(', ')}`)
+    }
+    
+    // Agora busca TODOS os dados
     const { data, error } = await supabaseAdmin
       .from('importar')
       .select('*')
       .eq('cliente', user.email)
       .eq('lote_id', downloadId)
       .limit(100000)
-    if (error) return NextResponse.json({ error: 'Export failed', details: error.message }, { status: 500 })
-    const rows = Array.isArray(data) ? data : []
     
-    // Define TODAS as colunas possíveis da tabela importar
-    // Inclui colunas base + colunas que o webhook pode adicionar
-    const knownColumns = [
-      'id',
-      'created_at',
-      'nome',
-      'telefone',
-      'cpf',
-      'nb',
-      'cliente',
-      'produto',
-      'banco_simulado',
-      'status',
-      'lote_id',
-      'consultado',
-      'erro',
-      'tentativas',
-      'ultima_tentativa',
-      // Adicione aqui outras colunas que o webhook pode retornar
-      'resultado',
-      'mensagem',
-      'codigo_retorno',
-      'valor_emprestimo',
-      'taxa_juros',
-      'parcelas',
-      'valor_parcela',
-      'data_consulta',
-      'observacoes'
-    ]
-    
-    // Coleta TODAS as colunas que existem nos dados (incluindo as dinâmicas do webhook)
-    const dynamicColumns = new Set()
-    for (const row of rows) {
-      Object.keys(row || {}).forEach(k => dynamicColumns.add(k))
+    if (error) {
+      console.error('❌ Erro ao buscar dados:', error)
+      return NextResponse.json({ error: 'Export failed', details: error.message }, { status: 500 })
     }
     
-    // Combina colunas conhecidas + dinâmicas (remove duplicatas)
-    const allColumnsSet = new Set([...knownColumns, ...Array.from(dynamicColumns)])
-    const headers = Array.from(allColumnsSet)
+    const rows = Array.isArray(data) ? data : []
+    console.log(`📊 Total de registros encontrados: ${rows.length}`)
     
-    console.log(`📊 Exportando ${rows.length} registros com ${headers.length} colunas`)
+    if (rows.length === 0) {
+      return NextResponse.json({ error: 'Nenhum dado encontrado para este lote' }, { status: 404 })
+    }
+    
+    // Coleta TODAS as colunas que aparecem em QUALQUER linha
+    const allColumnsSet = new Set(allPossibleColumns)
+    
+    // Adiciona também quaisquer colunas que possam aparecer em outras linhas
+    for (const row of rows) {
+      Object.keys(row || {}).forEach(k => allColumnsSet.add(k))
+    }
+    
+    // Converte para array mantendo ordem: colunas base primeiro
+    const baseColumns = ['id', 'created_at', 'lote_id', 'cliente', 'produto', 'banco_simulado', 
+                         'nome', 'telefone', 'cpf', 'nb', 'status', 'consultado']
+    const otherColumns = Array.from(allColumnsSet).filter(c => !baseColumns.includes(c))
+    const headers = [...baseColumns.filter(c => allColumnsSet.has(c)), ...otherColumns]
+    
+    console.log(`� Total de colunas no CSV: ${headers.length}`)
     console.log(`📋 Colunas: ${headers.join(', ')}`)
     
+    // Função para escapar valores CSV
     const esc = (val) => {
       if (val === null || typeof val === 'undefined') return ''
       const s = String(val)
@@ -141,14 +141,28 @@ export async function GET(request) {
       return s
     }
     
+    // Monta CSV com TODAS as colunas
     const lines = []
-    if (headers.length) lines.push(headers.map(esc).join(','))
+    if (headers.length) {
+      lines.push(headers.map(esc).join(','))
+    }
+    
     for (const row of rows) {
       const line = headers.map((h) => esc(row[h]))
       lines.push(line.join(','))
     }
+    
     const csv = lines.join('\n')
-    return new NextResponse(csv, { status: 200, headers: { 'Content-Type': 'text/csv; charset=utf-8' } })
+    
+    console.log(`✅ CSV gerado com sucesso: ${lines.length} linhas (incluindo cabeçalho)`)
+    
+    return new NextResponse(csv, { 
+      status: 200, 
+      headers: { 
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="lote_${downloadId}.csv"`
+      } 
+    })
   }
   // List lots for this user
   const { data, error } = await supabaseAdmin

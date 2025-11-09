@@ -49,10 +49,13 @@ export async function POST(request) {
         .single()
       settings = settingsData?.data?.payments || {}
       
-      console.log('⚙️ Configurações Mercado Pago:', {
+      console.log('⚙️ Configurações completas:', {
+        settingsData: settingsData,
+        payments: settings,
         hasMercadoPagoToken: !!(settings.mercadopagoAccessToken || process.env.MERCADOPAGO_ACCESS_TOKEN),
         hasEnvToken: !!process.env.MERCADOPAGO_ACCESS_TOKEN,
-        hasSettingsToken: !!settings.mercadopagoAccessToken
+        hasSettingsToken: !!settings.mercadopagoAccessToken,
+        tokenPreview: settings.mercadopagoAccessToken ? settings.mercadopagoAccessToken.substring(0, 20) + '...' : 'VAZIO'
       })
     } catch (e) {
       console.error('❌ Erro ao buscar configurações:', e)
