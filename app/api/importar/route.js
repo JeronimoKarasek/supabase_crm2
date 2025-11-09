@@ -150,54 +150,132 @@ export async function GET(request) {
   }
   
   // List lots (agregação da tabela importar - SEM LIMIT para não desaparecer)
-  const { data, error } = await supabaseAdmin
-    .from('importar')
-    .select('lote_id, produto, banco_simulado, status, created_at')
-    .eq('cliente', user.email)
-    .not('lote_id', 'is', null)
-    .order('created_at', { ascending: false })
-  
-  if (error) {
-    console.error('❌ Erro ao listar lotes:', error)
-    return NextResponse.json({ error: 'List failed', details: error.message }, { status: 500 })
-  }
-  
-  console.log(`📊 Total de registros encontrados: ${data?.length || 0}`)
-  
-  const seen = new Set()
-  const items = []
-  for (const r of (data || [])) {
-    if (r.lote_id && !seen.has(r.lote_id)) {
-      seen.add(r.lote_id)
-      items.push({ 
-        id: r.lote_id, 
-        produto: r.produto, 
-        bancoName: r.banco_simulado, 
-        status: r.status || 'pendente', 
-        createdAt: r.created_at 
-      })
+  // List lots - sem limite: pagina registros do usuário e agrega por lote_id (ou cria ID temporário)
+  console.log(`🔍 Buscando lotes para usuário: ${user.email}`)
+
+  const pageSize = 1000 // evita limite padrão do PostgREST
+  let from = 0
+  let to = pageSize - 1
+  let page = 0
+  let fetched = 0
+
+  const rows = []
+  while (true) {
+    const { data: chunk, error } = await supabaseAdmin
+      .from('importar')
+      .select('id, lote_id, produto, banco_simulado, status, created_at, consultado')
+      .eq('cliente', user.email)
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    if (error) {
+      console.error('❌ Erro ao listar lotes (paginado):', error)
+      return NextResponse.json({ error: 'List failed', details: error.message }, { status: 500 })
+    }
+
+    const chunkLen = chunk?.length || 0
+    rows.push(...(chunk || []))
+    fetched += chunkLen
+    page += 1
+    console.log(`� Página ${page}: ${chunkLen} registros (acumulado: ${fetched})`)
+
+    if (chunkLen < pageSize) break // última página
+    from += pageSize
+    to += pageSize
+    if (page >= 50) { // guarda-chuva: evita loops infinitos (50k registros por usuário)
+      console.warn('⚠️ Limite de paginação atingido (50 páginas). Parando para evitar sobrecarga.')
+      break
     }
   }
-  
-  console.log(`📦 Total de lotes únicos: ${items.length}`)
+
+  console.log(`📊 Total de registros agregados: ${rows.length}`)
+
+  // Agrega por lote_id OU por minuto de criação (para registros sem lote_id)
+  const lotesMap = new Map()
+  const progByReal = new Map() // progresso por lote_id real
+
+  for (const r of rows) {
+    let loteKey = r.lote_id
+    const hasReal = !!(loteKey && String(loteKey).trim() !== '')
+
+    // Se não tem lote_id, cria um ID temporário baseado em produto+banco+minuto
+    if (!hasReal) {
+      const dateObj = new Date(r.created_at)
+      const minuto = Math.floor(dateObj.getTime() / 60000) // Agrupa por minuto
+      loteKey = `temp_${minuto}_${r.produto || '-'}_${r.banco_simulado || '-'}`.replace(/\s+/g, '_')
+    }
+
+    // Atualiza agregador principal
+    if (!lotesMap.has(loteKey)) {
+      lotesMap.set(loteKey, {
+        id: loteKey,
+        originalLoteId: hasReal ? r.lote_id : null,
+        produto: r.produto || '-',
+        bancoName: r.banco_simulado || '-',
+        status: r.status || 'pendente',
+        createdAt: r.created_at,
+        count: 0
+      })
+    }
+    const agg = lotesMap.get(loteKey)
+    agg.count += 1
+    // mantém a data mais antiga como createdAt (envio do lote)
+    if (r.created_at && agg.createdAt && new Date(r.created_at) < new Date(agg.createdAt)) {
+      agg.createdAt = r.created_at
+    }
+
+    // Atualiza progresso se tiver lote_id real
+    if (hasReal) {
+      if (!progByReal.has(r.lote_id)) progByReal.set(r.lote_id, { total: 0, done: 0 })
+      const pr = progByReal.get(r.lote_id)
+      pr.total += 1
+      if (r.consultado === true) pr.done += 1
+    }
+  }
+
+  // Constrói items com progresso
+  let items = Array.from(lotesMap.values()).map(it => {
+    if (it.originalLoteId && progByReal.has(it.originalLoteId)) {
+      const pr = progByReal.get(it.originalLoteId)
+      const percent = pr.total ? Math.round((pr.done / pr.total) * 100) : 0
+      return {
+        ...it,
+        progress: { done: pr.done, total: pr.total, percent },
+        status: percent === 100 ? 'concluido' : it.status
+      }
+    }
+    // Lotes temporários (sem lote_id): mostra total e 0% de progresso
+    return { ...it, progress: { done: 0, total: it.count, percent: 0 } }
+  })
+
+  // Ordena por data de envio (mais recente primeiro)
+  items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+
+  console.log(`📦 Total de lotes únicos retornados: ${items.length}`)
   
   // Compute progress (consultado true/total) per lote_id
   for (const it of items) {
     try {
-      const { count: total } = await supabaseAdmin
-        .from('importar')
-        .select('*', { count: 'exact', head: true })
-        .eq('cliente', user.email)
-        .eq('lote_id', it.id)
-      const { count: done } = await supabaseAdmin
-        .from('importar')
-        .select('*', { count: 'exact', head: true })
-        .eq('cliente', user.email)
-        .eq('lote_id', it.id)
-        .eq('consultado', true)
-      const percent = total ? Math.round(((done || 0) / total) * 100) : 0
-      it.progress = { done: done || 0, total: total || 0, percent }
-      if (percent === 100 && it.status !== 'concluido') it.status = 'concluido'
+      // Se tem lote_id original, usa ele. Senão, usa o count do Map
+      if (it.originalLoteId) {
+        const { count: total } = await supabaseAdmin
+          .from('importar')
+          .select('*', { count: 'exact', head: true })
+          .eq('cliente', user.email)
+          .eq('lote_id', it.originalLoteId)
+        const { count: done } = await supabaseAdmin
+          .from('importar')
+          .select('*', { count: 'exact', head: true })
+          .eq('cliente', user.email)
+          .eq('lote_id', it.originalLoteId)
+          .eq('consultado', true)
+        const percent = total ? Math.round(((done || 0) / total) * 100) : 0
+        it.progress = { done: done || 0, total: total || 0, percent }
+        if (percent === 100 && it.status !== 'concluido') it.status = 'concluido'
+      } else {
+        // Para lotes temporários (sem lote_id), usa o count já calculado
+        it.progress = { done: 0, total: it.count || 0, percent: 0 }
+      }
     } catch {}
   }
   
