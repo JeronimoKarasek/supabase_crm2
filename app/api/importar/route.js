@@ -81,28 +81,14 @@ export async function GET(request) {
   const url = new URL(request.url)
   const downloadId = url.searchParams.get('downloadId')
   if (downloadId) {
-    // Primeiro, busca uma linha de amostra para identificar TODAS as colunas disponíveis
-    const { data: sampleData } = await supabaseAdmin
-      .from('importar')
-      .select('*')
-      .eq('cliente', user.email)
-      .eq('lote_id', downloadId)
-      .limit(1)
+    console.log(`📥 Download - Lote: ${downloadId}, User: ${user.email}`)
     
-    // Se tiver dados, pega todas as chaves (colunas) da primeira linha
-    let allPossibleColumns = []
-    if (sampleData && sampleData.length > 0) {
-      allPossibleColumns = Object.keys(sampleData[0])
-      console.log(`🔍 Colunas detectadas na tabela: ${allPossibleColumns.join(', ')}`)
-    }
-    
-    // Agora busca TODOS os dados
+    // Busca TODOS os registros deste lote
     const { data, error } = await supabaseAdmin
       .from('importar')
       .select('*')
-      .eq('cliente', user.email)
       .eq('lote_id', downloadId)
-      .limit(100000)
+      .eq('cliente', user.email)
     
     if (error) {
       console.error('❌ Erro ao buscar dados:', error)
@@ -116,12 +102,10 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Nenhum dado encontrado para este lote' }, { status: 404 })
     }
     
-    // Coleta TODAS as colunas que aparecem em QUALQUER linha
-    const allColumnsSet = new Set(allPossibleColumns)
-    
-    // Adiciona também quaisquer colunas que possam aparecer em outras linhas
+    // Coleta TODAS as colunas de TODAS as linhas
+    const allColumnsSet = new Set()
     for (const row of rows) {
-      Object.keys(row || {}).forEach(k => allColumnsSet.add(k))
+      if (row) Object.keys(row).forEach(k => allColumnsSet.add(k))
     }
     
     // Converte para array mantendo ordem: colunas base primeiro
