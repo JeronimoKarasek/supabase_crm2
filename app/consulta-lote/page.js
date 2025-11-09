@@ -23,6 +23,7 @@ export default function ConsultaLotePage() {
   const [fileName, setFileName] = useState('')
   const [sending, setSending] = useState(false)
   const [canSendBatch, setCanSendBatch] = useState(false)
+  const [isAdminUser, setIsAdminUser] = useState(false)
 
   const loadItems = async () => {
     try {
@@ -67,19 +68,29 @@ export default function ConsultaLotePage() {
       try {
         const { data } = await supabase.auth.getUser()
         const user = data?.user
-        const role = user?.user_metadata?.role || 'viewer'
+  const email = user?.email || ''
+  const role = user?.user_metadata?.role || 'viewer'
         const sectors = Array.isArray(user?.user_metadata?.sectors) ? user.user_metadata.sectors : []
         const has = sectors.some((s) => norm(s) === norm('Consulta em lote'))
-        if (active) setCanSendBatch(role === 'admin' || has)
+        const isAdmin = email === 'junior.karaseks@gmail.com'
+        if (active) {
+          setCanSendBatch(role === 'admin' || has)
+          setIsAdminUser(isAdmin)
+        }
       } catch { if (active) setCanSendBatch(false) }
     }
     check()
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       const user = session?.user
-      const role = user?.user_metadata?.role || 'viewer'
+  const email = user?.email || ''
+  const role = user?.user_metadata?.role || 'viewer'
       const sectors = Array.isArray(user?.user_metadata?.sectors) ? user.user_metadata.sectors : []
       const has = sectors.some((s) => norm(s) === norm('Consulta em lote'))
-      if (active) setCanSendBatch(role === 'admin' || has)
+      const isAdmin = email === 'junior.karaseks@gmail.com'
+      if (active) {
+        setCanSendBatch(role === 'admin' || has)
+        setIsAdminUser(isAdmin)
+      }
     })
     return () => { active = false; sub?.subscription?.unsubscribe?.() }
   }, [])
@@ -203,7 +214,25 @@ export default function ConsultaLotePage() {
     }
   }
 
-  // Removido: ação de excluir lote (solicitado para retirar a opção de exclusão na lista)
+  const onCancelar = async (id) => {
+    if (!window.confirm('Tem certeza que deseja cancelar este lote? Todos os registros serão excluídos.')) return
+    try {
+      setBusy(prev => ({ ...prev, [id]: true }))
+      setError('')
+      setMessage('')
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const res = await fetch('/api/importar', { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id }) })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'Falha ao cancelar lote')
+      setMessage('Lote cancelado com sucesso.')
+      loadItems()
+    } catch (e) {
+      setError(e?.message || 'Falha ao cancelar lote')
+    } finally {
+      setBusy(prev => ({ ...prev, [id]: false }))
+    }
+  }
 
   return (
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
@@ -278,6 +307,7 @@ export default function ConsultaLotePage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {isAdminUser && <TableHead>Email</TableHead>}
                   <TableHead>Lote</TableHead>
                   <TableHead>Data/Hora Envio</TableHead>
                   <TableHead>Produto</TableHead>
@@ -307,6 +337,7 @@ export default function ConsultaLotePage() {
                   
                   return (
                     <TableRow key={it.id}>
+                      {isAdminUser && <TableCell className="text-sm">{it.userEmail || '-'}</TableCell>}
                       <TableCell className="font-mono text-xs">{String(it.id).slice(0, 12)}</TableCell>
                       <TableCell className="text-sm whitespace-nowrap">{formatDate(it.createdAt)}</TableCell>
                       <TableCell>{it.produto || '-'}</TableCell>
@@ -331,12 +362,15 @@ export default function ConsultaLotePage() {
                       <TableCell className="space-x-2 whitespace-nowrap">
                         <Button size="sm" variant="outline" onClick={() => onDownload(it.id)}>Baixar</Button>
                         <Button size="sm" variant="outline" onClick={() => onReprocess(it.id)} disabled={!!busy[it.id]}>Reprocessar</Button>
+                        {it.progress && it.progress.percent < 100 && (
+                          <Button size="sm" variant="destructive" onClick={() => onCancelar(it.id)} disabled={!!busy[it.id]}>Cancelar</Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   )
                 })}
                 {(!items || items.length === 0) && (
-                  <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground">Nenhum lote encontrado.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={isAdminUser ? 8 : 7} className="text-center text-sm text-muted-foreground">Nenhum lote encontrado.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>

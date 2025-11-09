@@ -30,7 +30,8 @@ export async function POST(request) {
     const body = await request.json()
     const amount = parseFloat(body.amount)
     const description = body.description || body.email || user.email
-    const productKey = body.productKey // Detecta se é compra de produto
+  const productKey = body.productKey // Detecta se é compra de produto
+  const cpfFromBody = body.cpf // CPF enviado pelo formulário (opcional)
 
     // Valida valor
     if (isNaN(amount) || amount <= 0) {
@@ -126,7 +127,8 @@ export async function POST(request) {
       // Cria pagamento Pix direto (sem checkout redirect)
       // IMPORTANTE: O Mercado Pago exige CPF VÁLIDO (com dígito verificador correto) para gerar QR Code PIX
       const { getValidCPF } = require('@/lib/mercadopago')
-      const cpfValido = getValidCPF(user.user_metadata?.document || user.user_metadata?.cpf)
+  // Prioriza CPF do body, depois do user_metadata
+  const cpfValido = getValidCPF(cpfFromBody || user.user_metadata?.cpf || user.user_metadata?.document)
       
       const itemTitle = productData ? productData.name : `Créditos FarolTech - R$ ${amount.toFixed(2)}`
       const itemDescription = productData 

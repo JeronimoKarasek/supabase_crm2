@@ -358,11 +358,17 @@ export async function POST(request) {
     }
 
     // Return updated lots list (agregação da tabela importar)
-    const { data, error } = await supabaseAdmin
+    // Admin (junior.karaseks@gmail.com) vê todos os lotes
+    const isAdmin = user.email === 'junior.karaseks@gmail.com'
+    let query = supabaseAdmin
       .from('importar')
-      .select('lote_id, produto, banco_simulado, status, created_at')
-      .eq('cliente', user.email)
-      .order('created_at', { ascending: false })
+      .select('lote_id, produto, banco_simulado, status, created_at, cliente')
+    
+    if (!isAdmin) {
+      query = query.eq('cliente', user.email)
+    }
+    
+    const { data, error } = await query.order('created_at', { ascending: false })
     
     if (error) return NextResponse.json({ error: 'List failed', details: error.message }, { status: 500 })
     
@@ -371,7 +377,14 @@ export async function POST(request) {
     for (const r of (data || [])) {
       if (r.lote_id && !seen.has(r.lote_id)) {
         seen.add(r.lote_id)
-        items.push({ id: r.lote_id, produto: r.produto, bancoName: r.banco_simulado, status: r.status || 'pendente', createdAt: r.created_at })
+        items.push({ 
+          id: r.lote_id, 
+          produto: r.produto, 
+          bancoName: r.banco_simulado, 
+          status: r.status || 'pendente', 
+          createdAt: r.created_at,
+          userEmail: r.cliente // Email do usuário que criou o lote
+        })
       }
     }
     
@@ -381,12 +394,12 @@ export async function POST(request) {
         const { count: total } = await supabaseAdmin
           .from('importar')
           .select('*', { count: 'exact', head: true })
-          .eq('cliente', user.email)
+          .eq('cliente', it.userEmail)
           .eq('lote_id', it.id)
         const { count: done } = await supabaseAdmin
           .from('importar')
           .select('*', { count: 'exact', head: true })
-          .eq('cliente', user.email)
+          .eq('cliente', it.userEmail)
           .eq('lote_id', it.id)
           .eq('consultado', true)
         const percent = total ? Math.round(((done || 0) / total) * 100) : 0

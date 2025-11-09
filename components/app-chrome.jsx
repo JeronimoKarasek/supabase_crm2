@@ -36,6 +36,8 @@ export default function AppChrome({ children }) {
   const [creditsDialog, setCreditsDialog] = useState({ open: false, data: null, error: null })
   const [addCreditsDialog, setAddCreditsDialog] = useState({ open: false, data: null, error: null, step: 'form' })
   const [addCreditsAmount, setAddCreditsAmount] = useState('')
+  const [addCreditsCpf, setAddCreditsCpf] = useState('')
+  const [userCpf, setUserCpf] = useState('')
 
   useEffect(() => {
     ;(async () => {
@@ -80,7 +82,9 @@ export default function AppChrome({ children }) {
       const { data: sessionData } = await supabase.auth.getSession()
       const user = sessionData?.session?.user
       const role = user?.user_metadata?.role || ''
-      console.log('🔍 [App Chrome] Loading SMS balance...', { role, isAdmin: role === 'admin' })
+  const cpf = user?.user_metadata?.cpf || user?.user_metadata?.document || ''
+  setUserCpf(cpf)
+  console.log('🔍 [App Chrome] Loading SMS balance...', { role, isAdmin: role === 'admin', hasCpf: !!cpf })
       setIsAdmin(role === 'admin')
       
       // Buscar saldo de SMS apenas para admin
@@ -109,9 +113,10 @@ export default function AppChrome({ children }) {
   }, [])
 
   const adicionarCreditos = async () => {
-    // Abre o dialog no step de formulário
-    setAddCreditsDialog({ open: true, data: null, error: null, step: 'form' })
-    setAddCreditsAmount('')
+  // Abre o dialog no step de formulário e inicializa CPF
+  setAddCreditsDialog({ open: true, data: null, error: null, step: 'form' })
+  setAddCreditsAmount('')
+  setAddCreditsCpf(userCpf) // Pre-fill com CPF do usuário se existir
   }
 
   const processarAddCreditos = async () => {
@@ -139,7 +144,8 @@ export default function AppChrome({ children }) {
         body: JSON.stringify({ 
           amount: valor,
           email: user?.email || '',
-          description: user?.email || '' // Email oculto na descrição
+          description: user?.email || '', // Email oculto na descrição
+          cpf: addCreditsCpf || undefined // Envia CPF se fornecido
         })
       })
       const json = await res.json()
@@ -286,6 +292,7 @@ export default function AppChrome({ children }) {
         if (!open) {
           // Reset ao fechar
           setAddCreditsAmount('')
+          setAddCreditsCpf('')
           setAddCreditsDialog({ open: false, data: null, error: null, step: 'form' })
         }
       }}>
@@ -321,6 +328,22 @@ export default function AppChrome({ children }) {
                 />
                 {addCreditsDialog.error && (
                   <div className="text-red-600 dark:text-red-400 text-sm">{addCreditsDialog.error}</div>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">CPF {userCpf ? '(do cadastro)' : '(opcional)'}</label>
+                <Input
+                  type="text"
+                  placeholder="000.000.000-00"
+                  value={addCreditsCpf}
+                  onChange={(e) => setAddCreditsCpf(e.target.value)}
+                  disabled={!!userCpf}
+                  maxLength={14}
+                  className={userCpf ? 'bg-muted cursor-not-allowed' : ''}
+                />
+                {userCpf && (
+                  <div className="text-xs text-muted-foreground">✓ CPF do seu cadastro será usado automaticamente</div>
                 )}
               </div>
               
