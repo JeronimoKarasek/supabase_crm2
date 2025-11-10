@@ -82,14 +82,46 @@ export async function POST(request){
       return NextResponse.json({ error: 'Créditos já aplicados para este pagamento', paymentId }, { status: 409 })
     }
 
-    // Adiciona créditos via RPC
-    const cents = Math.round(Number(amount) * 100)
-    const { data: newBalance, error: addErr } = await supabaseAdmin.rpc('empresa_add_credits', { p_empresa: empresaId, p_cents: cents })
-    if (addErr) {
-      return NextResponse.json({ error: 'Falha ao adicionar créditos à empresa', details: addErr.message }, { status: 500 })
+    // Adiciona créditos diretamente no campo 'credits' (float)
+    const amountFloat = Number(amount)
+    
+    // Busca saldo atual
+    const { data: empresaData, error: getErr } = await supabaseAdmin
+      .from('empresa')
+      .select('credits')
+      .eq('id', empresaId)
+      .single()
+    
+    if (getErr) {
+      return NextResponse.json({ error: 'Falha ao buscar empresa', details: getErr.message }, { status: 500 })
+    }
+    
+    const currentCredits = parseFloat(empresaData?.credits) || 0
+    const newCredits = currentCredits + amountFloat
+    
+    // Atualiza
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('empresa')
+      .update({ credits: newCredits })
+      .eq('id', empresaId)
+      .select('credits')
+      .single()
+    
+    if (updateErr) {
+      return NextResponse.json({ error: 'Falha ao atualizar créditos da empresa', details: updateErr.message }, { status: 500 })
     }
 
-    return NextResponse.json({ ok: true, paymentId, externalReference, userId: extractedUserId, empresaId, addedCents: cents, addedBRL: (cents/100).toFixed(2), newBalance })
+    return NextResponse.json({ 
+      ok: true, 
+      paymentId, 
+      externalReference, 
+      userId: extractedUserId, 
+      empresaId, 
+      addedAmount: amountFloat,
+      addedBRL: amountFloat.toFixed(2), 
+      previousBalance: currentCredits,
+      newBalance: updated.credits 
+    })
   } catch (e) {
     return NextResponse.json({ error: 'Falha no reprocessamento', details: e.message }, { status: 500 })
   }

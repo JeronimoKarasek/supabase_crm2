@@ -244,38 +244,65 @@ export async function POST(request) {
                 }
               }
 
-              // Atualiza créditos DA EMPRESA usando RPC (empresa_add_credits)
+              // Atualiza créditos DA EMPRESA diretamente no campo 'credits' (float)
               try {
-                const cents = Math.round(Number(amount) * 100)
+                const amountFloat = Number(amount)
                 console.info('[MP Webhook] 💰 Adding credits to EMPRESA...', { 
                   userId: user.id, 
                   empresaId,
-                  cents, 
-                  amountBRL: `R$ ${amount.toFixed(2)}` 
+                  amountFloat, 
+                  amountBRL: `R$ ${amountFloat.toFixed(2)}` 
                 })
                 
-                // Chama função do Supabase para adicionar créditos à empresa
-                const { data: newBalance, error: addError } = await supabaseAdmin.rpc('empresa_add_credits', {
-                  p_empresa: empresaId,
-                  p_cents: cents
-                })
+                // Busca saldo atual
+                const { data: empresaData, error: getError } = await supabaseAdmin
+                  .from('empresa')
+                  .select('credits')
+                  .eq('id', empresaId)
+                  .single()
                 
-                if (addError) {
-                  console.error('[MP Webhook] ❌❌❌ ERROR CALLING empresa_add_credits', { 
-                    error: addError, 
-                    message: addError?.message 
+                if (getError) {
+                  console.error('[MP Webhook] ❌ ERROR FETCHING EMPRESA', { 
+                    error: getError, 
+                    message: getError?.message 
                   })
-                  throw addError
+                  throw getError
+                }
+                
+                const currentCredits = parseFloat(empresaData?.credits) || 0
+                const newCredits = currentCredits + amountFloat
+                
+                console.info('[MP Webhook] 💰 Credits calculation', {
+                  currentCredits,
+                  addAmount: amountFloat,
+                  newCredits
+                })
+                
+                // Atualiza diretamente o campo 'credits' (float)
+                const { data: updated, error: updateError } = await supabaseAdmin
+                  .from('empresa')
+                  .update({ credits: newCredits })
+                  .eq('id', empresaId)
+                  .select('credits')
+                  .single()
+                
+                if (updateError) {
+                  console.error('[MP Webhook] ❌❌❌ ERROR UPDATING EMPRESA CREDITS', { 
+                    error: updateError, 
+                    message: updateError?.message 
+                  })
+                  throw updateError
                 }
                 
                 console.info('[MP Webhook] ✅✅✅ CREDITS SUCCESSFULLY ADDED TO EMPRESA!', { 
                   userId: user.id, 
                   email: user.email,
                   empresaId,
-                  addedCents: cents,
-                  addedBRL: `R$ ${(cents/100).toFixed(2)}`,
-                  newBalance: newBalance,
-                  newBalanceBRL: `R$ ${(newBalance/100).toFixed(2)}`
+                  addedAmount: amountFloat,
+                  addedBRL: `R$ ${amountFloat.toFixed(2)}`,
+                  previousBalance: currentCredits,
+                  newBalance: updated.credits,
+                  newBalanceBRL: `R$ ${updated.credits.toFixed(2)}`
                 })
               } catch (err) {
                 console.error('[MP Webhook] ❌❌❌ ERROR ADDING CREDITS TO EMPRESA', { 
