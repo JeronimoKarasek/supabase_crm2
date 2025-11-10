@@ -129,8 +129,10 @@ export async function POST(request) {
       const dedupeKey = `mp:payment:${dataId}`
       const firstTime = await setNX(dedupeKey, 60 * 60 * 24) // 24h
       if (!firstTime) {
-        console.info('[MP Webhook] Duplicate payment notification ignored', { paymentId: dataId })
-        return NextResponse.json({ ok: true })
+        console.warn('[MP Webhook] ⚠️ Duplicate payment notification (already processed)', { paymentId: dataId })
+        // Continua processando para debug, mas logamos o warning
+      } else {
+        console.info('[MP Webhook] ✅ First time processing this payment', { paymentId: dataId })
       }
 
       // Consulta detalhes do pagamento na API do Mercado Pago
@@ -148,16 +150,41 @@ export async function POST(request) {
 
       // Detecta se é adição de créditos (referenceId inicia com "credits_" e não é compra de produto)
       // Produtos usam padrão "product_*" então não entram nesta condição
-      if (externalReference.startsWith('credits_') && status === 'approved') {
+      if (externalReference.startsWith('credits_')) {
+        console.info('[MP Webhook] 🎯 Detected CREDITS payment', { externalReference, status })
+        
+        if (status === 'approved') {
+          console.info('[MP Webhook] ✅ Payment APPROVED - processing credits...')
+        } else {
+          console.info('[MP Webhook] ⏳ Payment not approved yet', { status })
+        }
+        
         try {
           // Extrai userId do referenceId: credits_{userId}_{timestamp}
           const parts = externalReference.split('_')
-          const userId = parts[1]
+          // UUID pode ter hífens, então pega tudo entre 'credits_' e o último '_timestamp'
+          const userId = parts.slice(1, -1).join('_')
           
-          if (userId) {
+          console.info('[MP Webhook] Extracted userId', { userId, parts })
+          
+          if (userId && status === 'approved') {
             // Busca dados do usuário
-            const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId)
+            console.info('[MP Webhook] Fetching user data...', { userId })
+            const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId)
+            
+            if (userError) {
+              console.error('[MP Webhook] ❌ Error fetching user', { userId, error: userError })
+              return NextResponse.json({ ok: true })
+            }
+            
             const user = userData?.user
+            
+            if (!user) {
+              console.error('[MP Webhook] ❌ User not found', { userId })
+              return NextResponse.json({ ok: true })
+            }
+            
+            console.info('[MP Webhook] ✅ User found', { userId, email: user.email })
             
             if (user) {
               // Busca webhook de add credits das configurações globais
@@ -169,6 +196,8 @@ export async function POST(request) {
               // Ajuste: campos de pagamentos ficam aninhados em data.payments
               const addCreditsWebhook = settings?.data?.payments?.addCreditsWebhook
               const amount = payment.transaction_amount || 0
+              
+              console.info('[MP Webhook] Payment amount', { amount, amountCents: Math.round(amount * 100) })
               
               if (addCreditsWebhook) {
                 try {
@@ -200,10 +229,20 @@ export async function POST(request) {
               // Atualiza créditos no Redis (independente do webhook externo)
               try {
                 const cents = Math.round(Number(amount) * 100)
-                await credits.addCents(user.id, cents)
-                console.info('[MP Webhook] Credits added to balance', { userId: user.id, cents })
+                console.info('[MP Webhook] 💰 Adding credits...', { userId: user.id, cents, amountBRL: `R$ ${amount.toFixed(2)}` })
+                
+                const newBalance = await credits.addCents(user.id, cents)
+                
+                console.info('[MP Webhook] ✅✅✅ CREDITS SUCCESSFULLY ADDED!', { 
+                  userId: user.id, 
+                  email: user.email,
+                  addedCents: cents,
+                  addedBRL: `R$ ${(cents/100).toFixed(2)}`,
+                  newBalance: newBalance,
+                  newBalanceBRL: `R$ ${(newBalance/100).toFixed(2)}`
+                })
               } catch (err) {
-                console.error('[MP Webhook] Error adding credits', err)
+                console.error('[MP Webhook] ❌❌❌ ERROR ADDING CREDITS', { error: err, message: err?.message, stack: err?.stack })
               }
             }
           }
