@@ -24,7 +24,14 @@ export async function GET(request) {
     if (role === 'admin') {
       const { data, error } = await supabaseAdmin.from('empresa').select('*').order('created_at', { ascending: false })
       if (error) return NextResponse.json({ error: 'Falha ao listar empresas', details: error.message }, { status: 400 })
-      return NextResponse.json({ empresas: data || [] })
+      
+      // Converter credits_balance_cents para reais e adicionar como credits
+      const empresasWithCredits = (data || []).map(e => ({
+        ...e,
+        credits: (e.credits_balance_cents || 0) / 100
+      }))
+      
+      return NextResponse.json({ empresas: empresasWithCredits })
     }
     // não admin: retorna apenas empresa vinculada ao usuário
     const { data: link, error: linkErr } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', caller.id).single()
@@ -32,7 +39,14 @@ export async function GET(request) {
     if (!link?.empresa_id) return NextResponse.json({ empresas: [] })
     const { data: empresa, error } = await supabaseAdmin.from('empresa').select('*').eq('id', link.empresa_id).single()
     if (error) return NextResponse.json({ empresas: [] })
-    return NextResponse.json({ empresas: [empresa] })
+    
+    // Converter credits_balance_cents para reais
+    const empresaWithCredits = {
+      ...empresa,
+      credits: (empresa.credits_balance_cents || 0) / 100
+    }
+    
+    return NextResponse.json({ empresas: [empresaWithCredits] })
   } catch (e) {
     return NextResponse.json({ error: 'Erro interno', details: e.message }, { status: 500 })
   }
@@ -61,12 +75,9 @@ export async function POST(request) {
       telefone: telefone || null
     }
     
-    // Adicionar user_limit e credits apenas se as colunas existirem
-    // O Supabase vai ignorar colunas que não existem se usarmos try/catch
-    try {
-      insertData.user_limit = lim
-      insertData.credits = 0
-    } catch {}
+    // Adicionar user_limit e credits_balance_cents (começa com 0)
+    insertData.user_limit = lim
+    insertData.credits_balance_cents = 0
     
     console.log('[POST /api/empresas] Dados a inserir:', insertData)
     
@@ -82,12 +93,18 @@ export async function POST(request) {
         error: 'Falha ao criar empresa', 
         details: error.message,
         code: error.code,
-        hint: error.hint || 'Verifique se as colunas user_limit e credits existem na tabela empresa'
+        hint: error.hint || 'Verifique se as colunas user_limit e credits_balance_cents existem na tabela empresa'
       }, { status: 400 })
     }
     
-    console.log('[POST /api/empresas] Sucesso:', data)
-    return NextResponse.json({ empresa: data })
+    // Converter credits_balance_cents para reais antes de retornar
+    const empresaWithCredits = {
+      ...data,
+      credits: (data.credits_balance_cents || 0) / 100
+    }
+    
+    console.log('[POST /api/empresas] Sucesso:', empresaWithCredits)
+    return NextResponse.json({ empresa: empresaWithCredits })
   } catch (e) {
     console.error('[POST /api/empresas] Exception:', e)
     return NextResponse.json({ error: 'Erro interno', details: e.message, stack: e.stack }, { status: 500 })
@@ -118,9 +135,10 @@ export async function PUT(request) {
       user_limit: lim 
     }
     
-    // Se credits foi fornecido, inclui no update (usado para adicionar créditos)
+    // Se credits foi fornecido, converte para centavos e atualiza credits_balance_cents
     if (credits !== undefined) {
-      updateData.credits = parseFloat(credits) || 0
+      const creditsFloat = parseFloat(credits) || 0
+      updateData.credits_balance_cents = Math.round(creditsFloat * 100)
     }
     
     console.log('[PUT /api/empresas] Valores processados:', updateData)
@@ -142,8 +160,14 @@ export async function PUT(request) {
       }, { status: 400 })
     }
     
-    console.log('[PUT /api/empresas] Sucesso:', data)
-    return NextResponse.json({ empresa: data })
+    // Converter credits_balance_cents para reais antes de retornar
+    const empresaWithCredits = {
+      ...data,
+      credits: (data.credits_balance_cents || 0) / 100
+    }
+    
+    console.log('[PUT /api/empresas] Sucesso:', empresaWithCredits)
+    return NextResponse.json({ empresa: empresaWithCredits })
   } catch (e) {
     console.error('[PUT /api/empresas] Exception:', e)
     return NextResponse.json({ error: 'Erro interno', details: e.message, stack: e.stack }, { status: 500 })
