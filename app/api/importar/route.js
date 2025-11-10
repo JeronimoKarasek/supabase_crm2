@@ -151,7 +151,8 @@ export async function GET(request) {
   
   // List lots (agregação da tabela importar - SEM LIMIT para não desaparecer)
   // List lots - sem limite: pagina registros do usuário e agrega por lote_id (ou cria ID temporário)
-  console.log(`🔍 Buscando lotes para usuário: ${user.email}`)
+  const isAdmin = user.email === 'junior.karaseks@gmail.com'
+  console.log(`🔍 Buscando lotes para usuário: ${user.email}${isAdmin ? ' (ADMIN - vendo todos)' : ''}`)
 
   const pageSize = 1000 // evita limite padrão do PostgREST
   let from = 0
@@ -161,10 +162,16 @@ export async function GET(request) {
 
   const rows = []
   while (true) {
-    const { data: chunk, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('importar')
-      .select('id, lote_id, produto, banco_simulado, status, created_at, consultado')
-      .eq('cliente', user.email)
+      .select('id, lote_id, produto, banco_simulado, status, created_at, consultado, cliente')
+      
+    // Se NÃO é admin, filtra por cliente
+    if (!isAdmin) {
+      query = query.eq('cliente', user.email)
+    }
+    
+    const { data: chunk, error } = await query
       .order('created_at', { ascending: false })
       .range(from, to)
 
@@ -214,6 +221,7 @@ export async function GET(request) {
         bancoName: r.banco_simulado || '-',
         status: r.status || 'pendente',
         createdAt: r.created_at,
+        userEmail: r.cliente || '-', // Email do usuário que enviou o lote
         count: 0
       })
     }
