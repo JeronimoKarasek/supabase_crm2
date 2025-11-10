@@ -24,6 +24,9 @@ export default function ConsultaLotePage() {
   const [sending, setSending] = useState(false)
   const [canSendBatch, setCanSendBatch] = useState(false)
   const [isAdminUser, setIsAdminUser] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const itemsPerPage = 10
 
   const loadItems = async () => {
     try {
@@ -34,7 +37,9 @@ export default function ConsultaLotePage() {
       const res = await fetch('/api/importar', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Falha ao listar lotes')
-      setItems(Array.isArray(json?.items) ? json.items : [])
+      const allItems = Array.isArray(json?.items) ? json.items : []
+      setTotalItems(allItems.length)
+      setItems(allItems)
     } catch (e) {
       setError(e?.message || 'Falha ao listar lotes')
     } finally {
@@ -234,13 +239,26 @@ export default function ConsultaLotePage() {
     }
   }
 
+  // Calcular items da página atual
+  const totalPages = Math.ceil(totalItems / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const currentItems = items.slice(startIndex, endIndex)
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
   return (
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
       <div className="py-6 px-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Consulta em lote</h1>
-          <p className="text-sm text-muted-foreground">Acompanhe os lotes enviados e seu progresso.</p>
+          <p className="text-sm text-muted-foreground">Acompanhe os lotes enviados e seu progresso. ({totalItems} lotes no total)</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={loadItems} disabled={loading}>Atualizar</Button>
@@ -318,7 +336,7 @@ export default function ConsultaLotePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((it) => {
+                {currentItems.map((it) => {
                   const formatDate = (dateStr) => {
                     if (!dateStr) return '-'
                     try {
@@ -369,12 +387,81 @@ export default function ConsultaLotePage() {
                     </TableRow>
                   )
                 })}
-                {(!items || items.length === 0) && (
+                {(!currentItems || currentItems.length === 0) && (
                   <TableRow><TableCell colSpan={isAdminUser ? 8 : 7} className="text-center text-sm text-muted-foreground">Nenhum lote encontrado.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
+          
+          {/* Paginação */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-2 py-4">
+              <div className="text-sm text-muted-foreground">
+                Mostrando {startIndex + 1} a {Math.min(endIndex, totalItems)} de {totalItems} lotes
+              </div>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1}
+                >
+                  Primeira
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  Anterior
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum
+                    if (totalPages <= 5) {
+                      pageNum = i + 1
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i
+                    } else {
+                      pageNum = currentPage - 2 + i
+                    }
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handlePageChange(pageNum)}
+                        className="w-10"
+                      >
+                        {pageNum}
+                      </Button>
+                    )
+                  })}
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  Próxima
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage === totalPages}
+                >
+                  Última
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
       </div>
