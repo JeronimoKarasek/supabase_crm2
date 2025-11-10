@@ -266,15 +266,18 @@ export async function GET(request) {
     try {
       // Se tem lote_id original, usa ele. Senão, usa o count do Map
       if (it.originalLoteId) {
+        // Usa o email do dono do lote (it.userEmail) e não o usuário logado
+        const loteOwnerEmail = it.userEmail || user.email
+        
         const { count: total } = await supabaseAdmin
           .from('importar')
           .select('*', { count: 'exact', head: true })
-          .eq('cliente', user.email)
+          .eq('cliente', loteOwnerEmail)
           .eq('lote_id', it.originalLoteId)
         const { count: done } = await supabaseAdmin
           .from('importar')
           .select('*', { count: 'exact', head: true })
-          .eq('cliente', user.email)
+          .eq('cliente', loteOwnerEmail)
           .eq('lote_id', it.originalLoteId)
           .eq('consultado', true)
         const percent = total ? Math.round(((done || 0) / total) * 100) : 0
