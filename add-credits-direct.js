@@ -23,75 +23,66 @@ const userId = '63e09cd6-5870-42c5-90ad-5130be525c33'
 const amountToAdd = 50 // 50 cents = R$ 0,50
 
 async function addCredits() {
-  console.log('\n🔄 Adicionando créditos...\n')
+  console.log('\n🔄 Adicionando créditos À EMPRESA...\n')
   
-  // 1. Verifica saldo atual no Redis
-  console.log('1️⃣ Verificando saldo atual no Redis...')
-  const key = `cr:bal:u:${userId}`
-  
-  if (!UPSTASH_URL || !UPSTASH_TOKEN) {
-    console.log('   ⚠️ Redis não configurado - usando Supabase')
-    
-    // Busca no Supabase
-    const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/user_credits?user_id=eq.${userId}&select=balance_cents`, {
-      headers: {
-        'apikey': SERVICE_KEY,
-        'Authorization': `Bearer ${SERVICE_KEY}`
-      }
-    })
-    const credits = await checkRes.json()
-    const currentBalance = credits[0]?.balance_cents || 0
-    console.log('   Saldo atual:', currentBalance, 'cents (R$', (currentBalance/100).toFixed(2), ')')
-    
-    // Adiciona créditos
-    console.log('\n2️⃣ Adicionando', amountToAdd, 'cents...')
-    const newBalance = currentBalance + amountToAdd
-    
-    const upsertRes = await fetch(`${SUPABASE_URL}/rest/v1/user_credits`, {
-      method: 'POST',
-      headers: {
-        'apikey': SERVICE_KEY,
-        'Authorization': `Bearer ${SERVICE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates'
-      },
-      body: JSON.stringify({
-        user_id: userId,
-        balance_cents: newBalance,
-        updated_at: new Date().toISOString()
-      })
-    })
-    
-    if (!upsertRes.ok) {
-      console.error('❌ Erro ao atualizar saldo:', await upsertRes.text())
-      return
+  // 1. Busca empresa do usuário
+  console.log('1️⃣ Buscando empresa do usuário...')
+  const empresaRes = await fetch(`${SUPABASE_URL}/rest/v1/empresa_users?user_id=eq.${userId}&select=empresa_id`, {
+    headers: {
+      'apikey': SERVICE_KEY,
+      'Authorization': `Bearer ${SERVICE_KEY}`
     }
-    
-    console.log('   ✅ Novo saldo:', newBalance, 'cents (R$', (newBalance/100).toFixed(2), ')')
-    
-  } else {
-    console.log('   ✅ Redis configurado')
-    
-    // GET atual
-    const getRes = await fetch(`${UPSTASH_URL}/get/${key}`, {
-      headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
-    })
-    const getData = await getRes.json()
-    const currentBalance = parseInt(getData.result || '0')
-    console.log('   Saldo atual:', currentBalance, 'cents (R$', (currentBalance/100).toFixed(2), ')')
-    
-    // INCRBY
-    console.log('\n2️⃣ Adicionando', amountToAdd, 'cents...')
-    const incrRes = await fetch(`${UPSTASH_URL}/incrby/${key}/${amountToAdd}`, {
-      headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
-    })
-    const incrData = await incrRes.json()
-    const newBalance = incrData.result
-    console.log('   ✅ Novo saldo:', newBalance, 'cents (R$', (newBalance/100).toFixed(2), ')')
+  })
+  const empresaData = await empresaRes.json()
+  
+  if (!empresaData || empresaData.length === 0 || !empresaData[0]?.empresa_id) {
+    console.error('❌ Usuário não vinculado a nenhuma empresa!')
+    console.log('   Execute o SQL de empresa.sql no Supabase antes de usar este script.')
+    return
   }
   
-  // 3. Busca dados do usuário
-  console.log('\n3️⃣ Dados do usuário:')
+  const empresaId = empresaData[0].empresa_id
+  console.log('   ✅ Empresa encontrada:', empresaId)
+  
+  // 2. Busca saldo atual da empresa
+  console.log('\n2️⃣ Verificando saldo atual da empresa...')
+  const empresaInfoRes = await fetch(`${SUPABASE_URL}/rest/v1/empresa?id=eq.${empresaId}&select=credits_balance_cents,nome`, {
+    headers: {
+      'apikey': SERVICE_KEY,
+      'Authorization': `Bearer ${SERVICE_KEY}`
+    }
+  })
+  const empresaInfo = await empresaInfoRes.json()
+  const currentBalance = empresaInfo[0]?.credits_balance_cents || 0
+  const empresaNome = empresaInfo[0]?.nome || 'N/A'
+  console.log('   Empresa:', empresaNome)
+  console.log('   Saldo atual:', currentBalance, 'cents (R$', (currentBalance/100).toFixed(2), ')')
+  
+  // 3. Adiciona créditos usando RPC
+  console.log('\n3️⃣ Adicionando', amountToAdd, 'cents via empresa_add_credits...')
+  const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/empresa_add_credits`, {
+    method: 'POST',
+    headers: {
+      'apikey': SERVICE_KEY,
+      'Authorization': `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      p_empresa: empresaId,
+      p_cents: amountToAdd
+    })
+  })
+  
+  if (!rpcRes.ok) {
+    console.error('❌ Erro ao adicionar créditos:', await rpcRes.text())
+    return
+  }
+  
+  const newBalance = await rpcRes.json()
+  console.log('   ✅ Novo saldo:', newBalance, 'cents (R$', (newBalance/100).toFixed(2), ')')
+  
+  // 4. Busca dados do usuário
+  console.log('\n4️⃣ Dados do usuário:')
   const userRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
     headers: {
       'apikey': SERVICE_KEY,
@@ -102,7 +93,8 @@ async function addCredits() {
   console.log('   Email:', userData.email)
   console.log('   Nome:', userData.user_metadata?.name || 'N/A')
   
-  console.log('\n✅ Créditos adicionados com sucesso!')
+  console.log('\n✅ Créditos adicionados à EMPRESA com sucesso!')
+  console.log('   Todos os usuários da empresa', empresaNome, 'agora têm acesso a estes créditos.')
 }
 
 addCredits()

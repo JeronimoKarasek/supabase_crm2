@@ -186,6 +186,22 @@ export async function POST(request) {
             
             console.info('[MP Webhook] ✅ User found', { userId, email: user.email })
             
+            // Busca empresa do usuário
+            console.info('[MP Webhook] Fetching user empresa...', { userId })
+            const { data: empresaLink, error: empresaError } = await supabaseAdmin
+              .from('empresa_users')
+              .select('empresa_id')
+              .eq('user_id', userId)
+              .single()
+            
+            if (empresaError || !empresaLink?.empresa_id) {
+              console.error('[MP Webhook] ❌ User not linked to empresa', { userId, error: empresaError })
+              return NextResponse.json({ ok: true })
+            }
+            
+            const empresaId = empresaLink.empresa_id
+            console.info('[MP Webhook] ✅ Empresa found', { userId, empresaId })
+            
             if (user) {
               // Busca webhook de add credits das configurações globais
               const { data: settings } = await supabaseAdmin
@@ -226,23 +242,45 @@ export async function POST(request) {
                 }
               }
 
-              // Atualiza créditos no Redis (independente do webhook externo)
+              // Atualiza créditos DA EMPRESA usando RPC (empresa_add_credits)
               try {
                 const cents = Math.round(Number(amount) * 100)
-                console.info('[MP Webhook] 💰 Adding credits...', { userId: user.id, cents, amountBRL: `R$ ${amount.toFixed(2)}` })
+                console.info('[MP Webhook] 💰 Adding credits to EMPRESA...', { 
+                  userId: user.id, 
+                  empresaId,
+                  cents, 
+                  amountBRL: `R$ ${amount.toFixed(2)}` 
+                })
                 
-                const newBalance = await credits.addCents(user.id, cents)
+                // Chama função do Supabase para adicionar créditos à empresa
+                const { data: newBalance, error: addError } = await supabaseAdmin.rpc('empresa_add_credits', {
+                  p_empresa: empresaId,
+                  p_cents: cents
+                })
                 
-                console.info('[MP Webhook] ✅✅✅ CREDITS SUCCESSFULLY ADDED!', { 
+                if (addError) {
+                  console.error('[MP Webhook] ❌❌❌ ERROR CALLING empresa_add_credits', { 
+                    error: addError, 
+                    message: addError?.message 
+                  })
+                  throw addError
+                }
+                
+                console.info('[MP Webhook] ✅✅✅ CREDITS SUCCESSFULLY ADDED TO EMPRESA!', { 
                   userId: user.id, 
                   email: user.email,
+                  empresaId,
                   addedCents: cents,
                   addedBRL: `R$ ${(cents/100).toFixed(2)}`,
                   newBalance: newBalance,
                   newBalanceBRL: `R$ ${(newBalance/100).toFixed(2)}`
                 })
               } catch (err) {
-                console.error('[MP Webhook] ❌❌❌ ERROR ADDING CREDITS', { error: err, message: err?.message, stack: err?.stack })
+                console.error('[MP Webhook] ❌❌❌ ERROR ADDING CREDITS TO EMPRESA', { 
+                  error: err, 
+                  message: err?.message, 
+                  stack: err?.stack 
+                })
               }
             }
           }
