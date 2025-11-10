@@ -16,6 +16,8 @@ export default function ComprarProdutoPage() {
   const [payment, setPayment] = useState(null)
   const [message, setMessage] = useState('')
   const [paymentApproved, setPaymentApproved] = useState(false)
+  const [userQty, setUserQty] = useState(0)
+  const [connectionQty, setConnectionQty] = useState(0)
 
   useEffect(() => {
     ;(async () => {
@@ -29,16 +31,55 @@ export default function ComprarProdutoPage() {
   }, [key])
 
   const basePrice = useMemo(() => Number(product?.pricing?.basePrice || 0), [product])
+  const userPrice = useMemo(() => Number(product?.pricing?.userPrice || 0), [product])
+  const connectionPrice = useMemo(() => Number(product?.pricing?.connectionPrice || 0), [product])
+  const total = useMemo(() => {
+    const t = (basePrice || 0) + (userPrice * (userQty||0)) + (connectionPrice * (connectionQty||0))
+    return Number.isFinite(t) ? Number(t.toFixed(2)) : 0
+  }, [basePrice, userPrice, connectionPrice, userQty, connectionQty])
 
   const concluir = async () => {
     if (!product) return
     setSubmitting(true)
     try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+
+      // Se assinatura com cartão -> criar preapproval
+      if (product?.billingMode === 'subscription' && product?.paymentMethod === 'card') {
+        console.log('[Purchase] Creating subscription', { productKey: key, userQty, connectionQty })
+        const res = await fetch('/api/mercadopago/subscription', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({ productKey: key, userQty, connectionQty })
+        })
+        const json = await res.json()
+        console.log('[Purchase] Subscription response', { status: res.status, json })
+        
+        if (!res.ok) {
+          const errorMsg = json?.message || json?.error || 'Falha ao criar assinatura'
+          const details = json?.details ? JSON.stringify(json.details, null, 2) : ''
+          console.error('[Purchase] Error creating subscription', json)
+          throw new Error(`${errorMsg}${details ? '\n' + details : ''}`)
+        }
+        
+        if (json.initPoint) {
+          console.log('[Purchase] Redirecting to initPoint', json.initPoint)
+          window.location.href = json.initPoint
+          return
+        }
+        setMessage('Assinatura criada, mas sem initPoint. Verifique o console.')
+        console.error('[Purchase] No initPoint in response', json)
+        setTimeout(()=>setMessage(''), 2500)
+        return
+      }
+
+      // Caso contrário, fluxo atual (ex.: PIX avulso)
       const referenceId = `${key}_${Date.now()}`
       const body = {
         productKey: key,
         returnPath: `/produtos/${key}/comprar`,
-        amount: Number(basePrice.toFixed(2)),
+        amount: Number(total.toFixed(2)),
         referenceId,
         buyer: {
           firstName: form.nome.split(' ')[0] || form.nome,
@@ -48,11 +89,9 @@ export default function ComprarProdutoPage() {
           phone: form.telefone,
         },
         buyerForm: { ...form },
-        metadata: { empresa: form.empresa },
+        metadata: { empresa: form.empresa, userQty, connectionQty },
       }
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData?.session?.access_token
-  const res = await fetch('/api/payments/add-credits', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) })
+      const res = await fetch('/api/payments/add-credits', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Falha ao iniciar pagamento')
       setPayment({ qrCode: json.qrCode, qrCodeBase64: json.qrCodeBase64, paymentId: json.paymentId })
@@ -122,20 +161,38 @@ export default function ComprarProdutoPage() {
               <Input placeholder="Email" type="email" value={form.email} onChange={(e)=> setForm(prev => ({...prev, email: e.target.value}))} />
               <Input placeholder="Nome da empresa" className="md:col-span-2" value={form.empresa} onChange={(e)=> setForm(prev => ({...prev, empresa: e.target.value}))} />
             </div>
+            {/* Quantidades dinâmicas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {userPrice > 0 && (
+                <div>
+                  <div className="text-sm font-medium">Quantidade de usuários</div>
+                  <Input type="number" min={0} value={userQty} onChange={(e)=> setUserQty(Math.max(0, parseInt(e.target.value||'0')))} />
+                  <div className="text-xs text-muted-foreground mt-1">R$ {userPrice.toFixed(2)} por usuário</div>
+                </div>
+              )}
+              {connectionPrice > 0 && (
+                <div>
+                  <div className="text-sm font-medium">Quantidade de conexões</div>
+                  <Input type="number" min={0} value={connectionQty} onChange={(e)=> setConnectionQty(Math.max(0, parseInt(e.target.value||'0')))} />
+                  <div className="text-xs text-muted-foreground mt-1">R$ {connectionPrice.toFixed(2)} por conexão</div>
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-between">
-              <div className="text-lg">Valor</div>
-              <div className="text-2xl font-bold">R$ {basePrice.toFixed(2)}</div>
+              <div className="text-lg">Valor total</div>
+              <div className="text-2xl font-bold">R$ {total.toFixed(2)}</div>
             </div>
             <div className="flex justify-end">
               {payment && !paymentApproved ? (
                 <Button onClick={gerarNovoQR} variant="outline">Gerar novo QR</Button>
               ) : (
-                <Button onClick={concluir} disabled={isSubmitting || !(basePrice > 0) || paymentApproved}>
+                <Button onClick={concluir} disabled={isSubmitting || !(total > 0) || paymentApproved}>
                   {isSubmitting ? 'Processando...' : paymentApproved ? '✓ Pagamento Aprovado' : 'Concluir'}
                 </Button>
               )}
             </div>
-            {payment && (
+            {payment && product?.billingMode !== 'subscription' && (
               <div className="border rounded p-3 space-y-3">
                 <div className="text-sm font-medium">Escaneie o QR Code para pagar via PIX</div>
                 {payment.qrCodeBase64 && (

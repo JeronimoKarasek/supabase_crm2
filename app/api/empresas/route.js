@@ -25,10 +25,10 @@ export async function GET(request) {
       const { data, error } = await supabaseAdmin.from('empresa').select('*').order('created_at', { ascending: false })
       if (error) return NextResponse.json({ error: 'Falha ao listar empresas', details: error.message }, { status: 400 })
       
-      // Converter credits_balance_cents para reais e adicionar como credits
+      // Garantir que credits sempre mostre o valor correto (campo credits float)
       const empresasWithCredits = (data || []).map(e => ({
         ...e,
-        credits: (e.credits_balance_cents || 0) / 100
+        credits: parseFloat(e.credits) || 0
       }))
       
       return NextResponse.json({ empresas: empresasWithCredits })
@@ -40,10 +40,10 @@ export async function GET(request) {
     const { data: empresa, error } = await supabaseAdmin.from('empresa').select('*').eq('id', link.empresa_id).single()
     if (error) return NextResponse.json({ empresas: [] })
     
-    // Converter credits_balance_cents para reais
+    // Garantir que credits sempre mostre o valor correto (campo credits float)
     const empresaWithCredits = {
       ...empresa,
-      credits: (empresa.credits_balance_cents || 0) / 100
+      credits: parseFloat(empresa.credits) || 0
     }
     
     return NextResponse.json({ empresas: [empresaWithCredits] })
@@ -75,9 +75,9 @@ export async function POST(request) {
       telefone: telefone || null
     }
     
-    // Adicionar user_limit e credits_balance_cents (começa com 0)
+    // Adicionar user_limit e credits (começa com 0)
     insertData.user_limit = lim
-    insertData.credits_balance_cents = 0
+    insertData.credits = 0
     
     console.log('[POST /api/empresas] Dados a inserir:', insertData)
     
@@ -93,14 +93,14 @@ export async function POST(request) {
         error: 'Falha ao criar empresa', 
         details: error.message,
         code: error.code,
-        hint: error.hint || 'Verifique se as colunas user_limit e credits_balance_cents existem na tabela empresa'
+        hint: error.hint || 'Verifique se as colunas user_limit e credits existem na tabela empresa'
       }, { status: 400 })
     }
     
-    // Converter credits_balance_cents para reais antes de retornar
+    // Garantir que credits sempre mostre o valor correto
     const empresaWithCredits = {
       ...data,
-      credits: (data.credits_balance_cents || 0) / 100
+      credits: parseFloat(data.credits) || 0
     }
     
     console.log('[POST /api/empresas] Sucesso:', empresaWithCredits)
@@ -135,10 +135,10 @@ export async function PUT(request) {
       user_limit: lim 
     }
     
-    // Se credits foi fornecido, converte para centavos e atualiza credits_balance_cents
+    // Se credits foi fornecido, atualiza campo credits (float)
     if (credits !== undefined) {
       const creditsFloat = parseFloat(credits) || 0
-      updateData.credits_balance_cents = Math.round(creditsFloat * 100)
+      updateData.credits = creditsFloat
     }
     
     console.log('[PUT /api/empresas] Valores processados:', updateData)
@@ -160,10 +160,10 @@ export async function PUT(request) {
       }, { status: 400 })
     }
     
-    // Converter credits_balance_cents para reais antes de retornar
+    // Garantir que credits sempre mostre o valor correto
     const empresaWithCredits = {
       ...data,
-      credits: (data.credits_balance_cents || 0) / 100
+      credits: parseFloat(data.credits) || 0
     }
     
     console.log('[PUT /api/empresas] Sucesso:', empresaWithCredits)

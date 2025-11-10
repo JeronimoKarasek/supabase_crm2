@@ -83,6 +83,25 @@ export async function GET(request) {
   if (downloadId) {
     console.log(`📥 Download - Lote: ${downloadId}, User: ${user.email}`)
     
+    // Busca o schema completo da tabela importar
+    const { data: schemaData, error: schemaError } = await supabaseAdmin
+      .from('information_schema.columns')
+      .select('column_name')
+      .eq('table_schema', 'public')
+      .eq('table_name', 'importar')
+      .order('ordinal_position', { ascending: true })
+    
+    let allSchemaColumns = []
+    if (!schemaError && Array.isArray(schemaData)) {
+      allSchemaColumns = schemaData.map(c => c.column_name)
+      console.log(`📋 Schema da tabela importar: ${allSchemaColumns.length} colunas`)
+    } else {
+      console.warn('⚠️ Não foi possível buscar schema, usando colunas base')
+      // Fallback para colunas base conhecidas
+      allSchemaColumns = ['id', 'created_at', 'lote_id', 'cliente', 'produto', 'banco_simulado', 
+                          'nome', 'telefone', 'cpf', 'nb', 'status', 'consultado']
+    }
+    
     // Busca TODOS os registros deste lote
     const { data, error } = await supabaseAdmin
       .from('importar')
@@ -102,17 +121,22 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Nenhum dado encontrado para este lote' }, { status: 404 })
     }
     
-    // Coleta TODAS as colunas de TODAS as linhas
-    const allColumnsSet = new Set()
+    // Coleta colunas extras que não estão no schema (caso existam)
+    const allColumnsSet = new Set(allSchemaColumns)
     for (const row of rows) {
       if (row) Object.keys(row).forEach(k => allColumnsSet.add(k))
     }
     
-    // Converte para array mantendo ordem: colunas base primeiro
+    // Converte para array mantendo ordem: colunas base primeiro, depois outras do schema, depois extras
     const baseColumns = ['id', 'created_at', 'lote_id', 'cliente', 'produto', 'banco_simulado', 
                          'nome', 'telefone', 'cpf', 'nb', 'status', 'consultado']
-    const otherColumns = Array.from(allColumnsSet).filter(c => !baseColumns.includes(c))
-    const headers = [...baseColumns.filter(c => allColumnsSet.has(c)), ...otherColumns]
+    const schemaColumns = allSchemaColumns.filter(c => !baseColumns.includes(c))
+    const extraColumns = Array.from(allColumnsSet).filter(c => !allSchemaColumns.includes(c))
+    const headers = [
+      ...baseColumns.filter(c => allColumnsSet.has(c)),
+      ...schemaColumns,
+      ...extraColumns
+    ]
     
     console.log(`📊 Total de colunas no CSV: ${headers.length}`)
     console.log(`📋 Colunas: ${headers.join(', ')}`)

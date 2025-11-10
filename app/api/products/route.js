@@ -28,10 +28,17 @@ export async function GET(request){
   // Especificar colunas explicitamente para evitar problemas de cache do PostgREST
   const { data, error } = await supabaseAdmin
     .from('products')
-    .select('id,key,name,description,learn_more_url,webhook_url,sectors,pricing,created_at,updated_at')
+  .select('id,key,name,description,learn_more_url,webhook_url,sectors,pricing,created_at,updated_at,product_type,payment_method,billing_mode')
     .order('created_at', { ascending: false })
   if(error) return NextResponse.json({ error: error.message }, { status: 400 })
-  return NextResponse.json({ products: data || [] })
+  // Mapear para camelCase no retorno
+  const products = (data || []).map(p => ({
+    ...p,
+    productType: p.product_type,
+    paymentMethod: p.payment_method,
+    billingMode: p.billing_mode
+  }))
+  return NextResponse.json({ products })
 }
 
 export async function POST(request){
@@ -48,6 +55,9 @@ export async function POST(request){
       webhook_url: body.webhook_url || null,
       sectors: Array.isArray(body.sectors) ? body.sectors : [],
       pricing: body.pricing || null,
+  product_type: body.productType || 'setor',
+  payment_method: body.paymentMethod || 'pix',
+  billing_mode: body.billingMode || 'one_time'
     }
     // Não incluir 'active' para evitar erro de schema cache
     if(!row.key || !row.name) return NextResponse.json({ error: 'key e name são obrigatórios' }, { status: 400 })
@@ -55,10 +65,17 @@ export async function POST(request){
     const { data, error } = await supabaseAdmin
       .from('products')
       .insert(row)
-      .select('id,key,name,description,learn_more_url,webhook_url,sectors,pricing,created_at,updated_at')
+  .select('id,key,name,description,learn_more_url,webhook_url,sectors,pricing,created_at,updated_at,product_type,payment_method,billing_mode')
       .single()
     if(error) return NextResponse.json({ error: error.message }, { status: 400 })
-    return NextResponse.json({ product: data })
+    return NextResponse.json({ 
+      product: {
+        ...data,
+        productType: data.product_type,
+        paymentMethod: data.payment_method,
+        billingMode: data.billing_mode
+      }
+    })
   }catch(e){
     return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
   }
@@ -76,15 +93,25 @@ export async function PUT(request){
     // Remover 'active' da lista para evitar erro de schema cache
     ;['key','name','description','learn_more_url','webhook_url','pricing'].forEach(f=>{ if(typeof body[f] !== 'undefined') patch[f]=body[f] })
     if(Array.isArray(body.sectors)) patch.sectors = body.sectors
+  if(body.productType) patch.product_type = body.productType
+  if(body.paymentMethod) patch.payment_method = body.paymentMethod
+  if(body.billingMode) patch.billing_mode = body.billingMode
     // Especificar colunas explicitamente no select
     const { data, error } = await supabaseAdmin
       .from('products')
       .update(patch)
       .eq('id', id)
-      .select('id,key,name,description,learn_more_url,webhook_url,sectors,pricing,created_at,updated_at')
+  .select('id,key,name,description,learn_more_url,webhook_url,sectors,pricing,created_at,updated_at,product_type,payment_method,billing_mode')
       .single()
     if(error) return NextResponse.json({ error: error.message }, { status: 400 })
-    return NextResponse.json({ product: data })
+    return NextResponse.json({ 
+      product: {
+        ...data,
+        productType: data.product_type,
+        paymentMethod: data.payment_method,
+        billingMode: data.billing_mode
+      }
+    })
   }catch(e){
     return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
   }

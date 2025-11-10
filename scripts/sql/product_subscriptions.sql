@@ -35,7 +35,7 @@ CREATE POLICY "Users can read own subscriptions"
   USING (auth.uid()::text = user_id);
 
 -- Comentários
-COMMENT ON TABLE product_subscriptions IS 'Assinaturas ativas de produtos com cobrança recorrente via créditos';
+COMMENT ON TABLE product_subscriptions IS 'Assinaturas ativas de produtos recorrentes (créditos ou cartão)';
 COMMENT ON COLUMN product_subscriptions.user_id IS 'UUID do usuário assinante';
 COMMENT ON COLUMN product_subscriptions.product_id IS 'ID do produto assinado';
 COMMENT ON COLUMN product_subscriptions.credit_price_cents IS 'Valor em centavos a ser cobrado mensalmente';
@@ -54,6 +54,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_product_subscriptions_updated_at ON product_subscriptions;
 CREATE TRIGGER trigger_update_product_subscriptions_updated_at
   BEFORE UPDATE ON product_subscriptions
   FOR EACH ROW
