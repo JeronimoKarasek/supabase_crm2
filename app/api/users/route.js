@@ -172,7 +172,30 @@ export async function POST(request) {
       }
     }
 
-    const sectorsArr = Array.isArray(sectors) ? (roleCaller === 'admin' ? sectors : sectors.filter(s => (sectorsCaller || []).includes(s))) : (role === 'admin' ? ['Clientes', 'Usuários'] : ['Clientes'])
+    // Setores obrigatórios para gestores
+    const mandatorySectorsForGestor = ['Soluções', 'Disparo SMS', 'Higienizar Dados']
+    
+    let sectorsArr
+    if (Array.isArray(sectors)) {
+      // Se setores foram fornecidos
+      sectorsArr = roleCaller === 'admin' ? sectors : sectors.filter(s => (sectorsCaller || []).includes(s))
+    } else {
+      // Setores padrão baseado no role
+      if (role === 'admin') {
+        sectorsArr = ['Clientes', 'Usuários']
+      } else {
+        sectorsArr = ['Clientes']
+      }
+    }
+    
+    // Adiciona setores obrigatórios para gestores
+    if (role === 'gestor') {
+      mandatorySectorsForGestor.forEach(sector => {
+        if (!sectorsArr.includes(sector)) {
+          sectorsArr.push(sector)
+        }
+      })
+    }
 
     // Enforce empresa user_limit if empresaId provided
     if (empresaId) {
@@ -282,6 +305,24 @@ export async function PUT(request) {
       }
     }
 
+    // Setores obrigatórios para gestores
+    const mandatorySectorsForGestor = ['Soluções', 'Disparo SMS', 'Higienizar Dados']
+    
+    let updatedSectors
+    if (Array.isArray(sectors)) {
+      updatedSectors = roleCaller === 'admin' ? sectors : sectors.filter(s => (sectorsCaller || []).includes(s))
+    }
+    
+    // Adiciona setores obrigatórios se o role é gestor (ou está sendo promovido a gestor)
+    const finalRole = role || currentMeta?.role
+    if (finalRole === 'gestor' && updatedSectors) {
+      mandatorySectorsForGestor.forEach(sector => {
+        if (!updatedSectors.includes(sector)) {
+          updatedSectors.push(sector)
+        }
+      })
+    }
+
     const newMeta = {
       ...currentMeta,
       ...(role ? { role } : {}),
@@ -293,7 +334,7 @@ export async function PUT(request) {
         filter: filter ?? (currentMeta?.permissions?.filter ?? null),
         filtersByTable: normalizedFiltersByTable,
       },
-      ...(Array.isArray(sectors) ? { sectors: (roleCaller === 'admin' ? sectors : sectors.filter(s => (sectorsCaller || []).includes(s))) } : {}),
+      ...(updatedSectors ? { sectors: updatedSectors } : {}),
     }
 
     const updatePayload = { user_metadata: newMeta }
