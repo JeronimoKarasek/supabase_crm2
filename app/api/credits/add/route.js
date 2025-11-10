@@ -32,10 +32,12 @@ export async function POST(request){
         return NextResponse.json({ error: 'Unauthorized (invalid x-api-key)' }, { status: 401 })
       }
       if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
-      const valueCents = typeof cents === 'number' ? Math.round(cents) : credits.toCents(amount)
+  const valueCents = typeof cents === 'number' ? Math.round(cents) : credits.toCents(amount)
       if (!Number.isFinite(valueCents) || valueCents <= 0) return NextResponse.json({ error: 'amount invalid' }, { status: 400 })
-      const newVal = await credits.addCents(userId, valueCents)
-      return NextResponse.json({ ok: true, userId, balanceCents: newVal, balanceBRL: credits.formatBRL(newVal) })
+  const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', userId).single()
+  const empresaId = link?.empresa_id || null
+  const newVal = await credits.addCents(userId, valueCents, empresaId)
+  return NextResponse.json({ ok: true, userId, empresaId, balanceCents: newVal, balanceBRL: credits.formatBRL(newVal) })
     }
 
     // Authenticated path: add to own balance or explicit same user
@@ -43,11 +45,13 @@ export async function POST(request){
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     if (!userId) userId = user.id
     if (userId !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    const valueCents = typeof cents === 'number' ? Math.round(cents) : credits.toCents(amount)
+  const valueCents = typeof cents === 'number' ? Math.round(cents) : credits.toCents(amount)
     if (!Number.isFinite(valueCents) || valueCents <= 0) return NextResponse.json({ error: 'amount invalid' }, { status: 400 })
 
-    const newVal = await credits.addCents(userId, valueCents)
-    return NextResponse.json({ ok: true, userId, balanceCents: newVal, balanceBRL: credits.formatBRL(newVal) })
+  const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', userId).single()
+  const empresaId = link?.empresa_id || null
+  const newVal = await credits.addCents(userId, valueCents, empresaId)
+  return NextResponse.json({ ok: true, userId, empresaId, balanceCents: newVal, balanceBRL: credits.formatBRL(newVal) })
   }catch(e){
     return NextResponse.json({ error: 'Failed to add credits', details: e.message }, { status: 500 })
   }

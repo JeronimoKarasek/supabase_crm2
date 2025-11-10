@@ -98,9 +98,12 @@ export async function POST(request) {
     const priceCents = credits.toCents(pricePerMsg)
     if (priceCents > 0) {
       const required = priceCents * rows.length
-      const okBalance = await credits.hasSufficientBalance(user.id, required)
+      // Buscar empresa do usuário
+      const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', user.id).single()
+      const empresaId = link?.empresa_id || null
+      const okBalance = await credits.hasSufficientBalance(user.id, required, empresaId)
       if (!okBalance) {
-        const bal = await credits.getBalanceCents(user.id)
+        const bal = await credits.getBalanceCents(user.id, empresaId)
         return NextResponse.json({ 
           error: 'Saldo insuficiente para enviar esta campanha', 
           balanceBRL: credits.formatBRL(bal)
@@ -219,7 +222,9 @@ export async function POST(request) {
       let chargeError = null
       if (priceCents > 0 && valids.length > 0) {
         const total = priceCents * valids.length
-        const res = await credits.chargeWithValidation(user.id, total)
+        const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', user.id).single()
+        const empresaId = link?.empresa_id || null
+        const res = await credits.chargeWithValidation(user.id, total, empresaId)
         charged = !!res?.success
         if (!charged) chargeError = res?.error || 'Falha ao cobrar créditos'
       }

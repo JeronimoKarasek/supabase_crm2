@@ -32,11 +32,13 @@ export async function POST(request){
         return NextResponse.json({ error: 'Unauthorized (invalid x-api-key)' }, { status: 401 })
       }
       if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
-      const valueCents = typeof cents === 'number' ? Math.round(cents) : credits.toCents(amount)
+  const valueCents = typeof cents === 'number' ? Math.round(cents) : credits.toCents(amount)
       if (!Number.isFinite(valueCents) || valueCents <= 0) return NextResponse.json({ error: 'amount invalid' }, { status: 400 })
-      
-      // Validate balance before charging
-      const result = await credits.chargeWithValidation(userId, valueCents)
+  // Buscar empresa do usuário alvo
+  const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', userId).single()
+  const empresaId = link?.empresa_id || null
+  // Validate balance before charging (empresa)
+  const result = await credits.chargeWithValidation(userId, valueCents, empresaId)
       if (!result.success) {
         return NextResponse.json({ 
           error: result.error, 
@@ -57,11 +59,15 @@ export async function POST(request){
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     if (!userId) userId = user.id
     if (userId !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    const valueCents = typeof cents === 'number' ? Math.round(cents) : credits.toCents(amount)
+  const valueCents = typeof cents === 'number' ? Math.round(cents) : credits.toCents(amount)
     if (!Number.isFinite(valueCents) || valueCents <= 0) return NextResponse.json({ error: 'amount invalid' }, { status: 400 })
 
-    // Validate balance before charging
-    const result = await credits.chargeWithValidation(userId, valueCents)
+  // Buscar empresa do usuário autenticado
+  const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', userId).single()
+  const empresaId = link?.empresa_id || null
+
+  // Validate balance before charging (empresa)
+  const result = await credits.chargeWithValidation(userId, valueCents, empresaId)
     if (!result.success) {
       return NextResponse.json({ 
         error: result.error, 

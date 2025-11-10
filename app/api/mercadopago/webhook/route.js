@@ -4,7 +4,9 @@ const credits = require('@/lib/credits')
 import { setNX } from '@/lib/redis'
 import { getMercadoPagoAccessToken, mpFetch } from '@/lib/mercadopago'
 
+// CRÍTICO: Força modo dinâmico e runtime nodejs (não usar edge)
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 /**
  * Mercado Pago Webhook
@@ -401,6 +403,25 @@ export async function POST(request) {
 }
 
 export async function GET(request) {
-  // Mercado Pago pode fazer GET para validar a URL do webhook
-  return NextResponse.json({ ok: true })
+  const timestamp = new Date().toISOString()
+  const allHeaders = Object.fromEntries(request.headers.entries())
+  
+  console.log('[MP Webhook] ========== GET VALIDATION REQUEST ==========')
+  console.log('[MP Webhook] Timestamp:', timestamp)
+  console.log('[MP Webhook] URL:', request.url)
+  console.log('[MP Webhook] Headers:', JSON.stringify(allHeaders, null, 2))
+  console.log('[MP Webhook] =====================================================')
+  
+  // Mercado Pago faz GET para validar a URL do webhook
+  return NextResponse.json({ 
+    ok: true,
+    message: 'Webhook endpoint is active',
+    timestamp 
+  }, {
+    status: 200,
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Access-Control-Allow-Origin': '*'
+    }
+  })
 }

@@ -61,7 +61,10 @@ export async function POST(request){
         console.log(`[Subscriptions] Processando assinatura ${id} - Usuário ${user_id}`)
 
         // Tenta cobrar créditos
-        const chargeResult = await credits.chargeWithValidation(user_id, credit_price_cents)
+  // Buscar empresa do usuário para cobrar do saldo compartilhado
+  const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', user_id).single()
+  const empresaId = link?.empresa_id || null
+  const chargeResult = await credits.chargeWithValidation(user_id, credit_price_cents, empresaId)
 
         if (chargeResult.success) {
           // Cobrança bem-sucedida
@@ -101,6 +104,7 @@ export async function POST(request){
                 chargedCents: credit_price_cents,
                 chargedBRL: credits.formatBRL(credit_price_cents),
                 newBalance: chargeResult.newBalance,
+                empresaId,
                 nextChargeDate: nextChargeDate,
                 timestamp: new Date().toISOString()
               }

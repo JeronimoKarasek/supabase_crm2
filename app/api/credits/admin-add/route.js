@@ -42,11 +42,12 @@ export async function POST(request){
     const targetId = inputUserId || await resolveUserId(email)
     if (!targetId) return NextResponse.json({ error: 'userId or email required' }, { status: 400 })
 
-    const valueCents = typeof cents === 'number' ? Math.round(cents) : credits.toCents(amount)
+  const valueCents = typeof cents === 'number' ? Math.round(cents) : credits.toCents(amount)
     if (!Number.isFinite(valueCents) || valueCents <= 0) return NextResponse.json({ error: 'amount invalid' }, { status: 400 })
-
-    const newVal = await credits.addCents(targetId, valueCents)
-    return NextResponse.json({ ok: true, userId: targetId, balanceCents: newVal, balanceBRL: credits.formatBRL(newVal) })
+  const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', targetId).single()
+  const empresaId = link?.empresa_id || null
+  const newVal = await credits.addCents(targetId, valueCents, empresaId)
+  return NextResponse.json({ ok: true, userId: targetId, empresaId, balanceCents: newVal, balanceBRL: credits.formatBRL(newVal) })
   }catch(e){
     return NextResponse.json({ error: 'Failed to admin add credits', details: e.message }, { status: 500 })
   }
