@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Key, CheckCircle2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 export default function AcessoBancoPage() {
@@ -60,10 +62,25 @@ export default function AcessoBancoPage() {
   return (
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
       <div className="max-w-full mx-auto py-6 px-6 space-y-6">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold text-foreground tracking-wide">Senha de banco</h1>
-          <p className="text-sm text-muted-foreground">Informe suas credenciais para cada banco configurado</p>
+        {/* Header com gradiente */}
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-yellow-500 to-amber-500 shadow-lg">
+            <Key className="h-8 w-8 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-yellow-600 to-amber-600 bg-clip-text text-transparent">
+              Senha de Banco
+            </h1>
+            <p className="text-muted-foreground mt-1">Informe suas credenciais para cada banco configurado</p>
+          </div>
         </div>
+
+        {message && (
+          <Alert className="border-l-4 border-l-green-500 bg-green-50 dark:bg-green-950/20">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-800 dark:text-green-200">{message}</AlertDescription>
+          </Alert>
+        )}
         <div className="space-y-5">
           {banks.length === 0 ? (
             <div className="text-sm text-muted-foreground">Nenhum banco configurado. Cadastre em Configuração.</div>

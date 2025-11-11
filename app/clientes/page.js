@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Database, Filter, Search, X, Download, ChevronLeft, ChevronRight, Send, Upload, Plus } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Database, Filter, Search, X, Download, ChevronLeft, ChevronRight, Send, Upload, Plus, AlertCircle, RefreshCw } from 'lucide-react'
 import { exportToExcel } from '@/lib/export'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 
@@ -668,45 +669,59 @@ export default function App() {
   return (
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
       <div className="container mx-auto py-6 px-6">
-        {/* Header */}
+        {/* Header Modernizado */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Database className="h-8 w-8 text-primary" />
-            <h1 className="text-4xl font-bold text-foreground">Clientes</h1>
-          </div>
-          <div className="flex items-center justify-between">
-            <p className="text-muted-foreground">Visualize e filtre os dados dos clientes</p>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-lg">
+                <Database className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-foreground">Clientes</h1>
+                <p className="text-sm text-muted-foreground">Visualize, filtre e gerencie sua base de clientes</p>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
-              <button
-                className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded border hover:bg-muted"
+              <Button
+                variant="outline"
+                size="sm"
                 disabled={!selectedTable}
                 onClick={() => { setAddForm({}); setAddOpen(true) }}
               >
-                <Plus className="h-4 w-4" /> Adicionar cliente
-              </button>
-              <button
-                className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded border hover:bg-muted"
+                <Plus className="h-4 w-4 mr-2" /> Adicionar
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 disabled={!selectedTable || loading || exportingAll}
                 onClick={() => exportAll()}
               >
-                <Download className="h-4 w-4" /> Exportar Excel (tudo)
-              </button>
-              <button
-                className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded border hover:bg-muted"
+                {exportingAll ? (
+                  <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Exportando...</>
+                ) : (
+                  <><Download className="h-4 w-4 mr-2" /> Exportar</>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => { setImportTable(selectedTable || ''); setImportOpen(true) }}
               >
-                <Upload className="h-4 w-4" /> Importar
-              </button>
+                <Upload className="h-4 w-4 mr-2" /> Importar
+              </Button>
             </div>
           </div>
         </div>
 
         {/* Main Card */}
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle>Select a Table</CardTitle>
+        <Card className="shadow-lg border-l-4 border-l-violet-500">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Database className="h-5 w-5 text-violet-500" />
+              Selecionar Tabela
+            </CardTitle>
             <CardDescription>
-              Choose a table from your Supabase database to view its data
+              Escolha uma tabela do seu banco de dados para visualizar e gerenciar os registros
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -1030,16 +1045,17 @@ export default function App() {
 
             {/* Error Message */}
             {error && (
-              <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg border border-destructive/20">
-                {error}
-              </div>
+              <Alert className="mb-4" variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
 
             {/* Loading State */}
             {loading && (
               <div className="text-center py-8">
-                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
-                <p className="mt-2 text-muted-foreground">Loading...</p>
+                <RefreshCw className="h-8 w-8 mx-auto animate-spin text-primary" />
+                <p className="mt-2 text-muted-foreground">Carregando dados...</p>
               </div>
             )}
 

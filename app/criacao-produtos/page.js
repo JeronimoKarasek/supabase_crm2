@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Package, CheckCircle2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { sectors as allSectors } from '@/lib/sectors'
 
@@ -94,16 +96,28 @@ export default function CriacaoProdutosPage(){
 
   return (
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
-      <div className="space-y-4 py-6 px-6">
-      <div className="flex items-center justify-between">
+      <div className="space-y-6 py-6 px-6">
+      {/* Header com gradiente */}
+      <div className="flex items-start gap-4">
+        <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-fuchsia-500 shadow-lg">
+          <Package className="h-8 w-8 text-white" />
+        </div>
         <div>
-            <h1 className="text-2xl font-semibold text-foreground">Criação de produtos</h1>
-            <p className="text-sm text-muted-foreground">Cadastre e gerencie produtos; ao comprar, o usuário recebe acesso às seções selecionadas e disparamos o webhook.</p>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-fuchsia-600 bg-clip-text text-transparent">
+            Criação de Produtos
+          </h1>
+          <p className="text-muted-foreground mt-1">Cadastre e gerencie produtos; ao comprar, o usuário recebe acesso às seções selecionadas</p>
         </div>
       </div>
-      {message && <div className="text-sm text-amber-600">{message}</div>}
 
-  <Card className="bg-muted/30">
+      {message && (
+        <Alert className="border-l-4 border-l-green-500 bg-green-50 dark:bg-green-950/20">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <AlertDescription className="text-green-800 dark:text-green-200">{message}</AlertDescription>
+        </Alert>
+      )}
+
+      <Card className="bg-muted/30 border-l-4 border-l-purple-500">
         <CardHeader className="bg-muted/50 rounded-t-xl">
           <CardTitle>{editingId ? 'Editar produto' : 'Criar novo produto'}</CardTitle>
           <CardDescription>Defina nome, preços e seções liberadas após compra.</CardDescription>

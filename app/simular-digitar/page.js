@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Calculator, AlertCircle, RefreshCw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 export default function SimularDigitarPage() {
@@ -240,10 +242,23 @@ export default function SimularDigitarPage() {
 
   return (
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
-      <div className="container mx-auto py-6 px-6 space-y-4">
-        <Card className="bg-muted/30">
-          <CardHeader className="bg-muted/50 rounded-t-xl">
-            <CardTitle className="text-foreground">Simular/Digitar</CardTitle>
+      <div className="container mx-auto py-6 px-6 space-y-6">
+        {/* Header com gradiente */}
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 shadow-lg">
+            <Calculator className="h-8 w-8 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">
+              Simular/Digitar
+            </h1>
+            <p className="text-muted-foreground mt-1">Consulte propostas em todos os bancos habilitados</p>
+          </div>
+        </div>
+
+        <Card className="border-l-4 border-l-indigo-500 bg-muted/30">
+          <CardHeader className="bg-gradient-to-r from-indigo-500/10 to-blue-500/10 rounded-t-xl">
+            <CardTitle className="text-foreground">Consultar CPF</CardTitle>
             <CardDescription className="text-muted-foreground">Informe o CPF e consulte em todos os bancos habilitados</CardDescription>
           </CardHeader>
           <CardContent className="bg-muted/20 rounded-b-xl">
@@ -251,9 +266,23 @@ export default function SimularDigitarPage() {
               <div className="flex-1">
                 <Input placeholder="CPF" value={cpf} onChange={(e)=> setCpf(e.target.value)} onKeyDown={(e)=> { if (e.key==='Enter') callAllStreaming() }} />
               </div>
-              <Button onClick={callAllStreaming} disabled={loading}>{loading ? `Consultando (${pendingCount})...` : 'Consultar'}</Button>
+              <Button onClick={callAllStreaming} disabled={loading} className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700">
+                {loading ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Consultando ({pendingCount})...
+                  </>
+                ) : (
+                  'Consultar'
+                )}
+              </Button>
             </div>
-            {message && <div className="mt-2 text-amber-600 text-sm">{message}</div>}
+            {message && (
+              <Alert className="mt-4 border-l-4 border-l-amber-500 bg-amber-50 dark:bg-amber-950/20">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-amber-800 dark:text-amber-200">{message}</AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
 

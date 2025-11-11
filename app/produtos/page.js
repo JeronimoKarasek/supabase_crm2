@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Sparkles } from 'lucide-react'
 
 export default function ProdutosPage() {
   const [products, setProducts] = useState([])
@@ -19,9 +20,22 @@ export default function ProdutosPage() {
 
   return (
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
-      <div className="container mx-auto py-6 px-6 space-y-4">
+      <div className="container mx-auto py-6 px-6 space-y-6">
+        {/* Header com gradiente */}
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 shadow-lg">
+            <Sparkles className="h-8 w-8 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+              NOVIDADES
+            </h1>
+            <p className="text-muted-foreground mt-1">Conheça nossas soluções e produtos exclusivos</p>
+          </div>
+        </div>
+
         {products.map((p) => (
-          <Card key={p.id} className="shadow-sm bg-muted/30">
+          <Card key={p.id} className="shadow-lg border-l-4 border-l-orange-500 bg-muted/30 hover:shadow-xl transition-shadow">
             <CardHeader className="bg-muted/50 rounded-t-xl">
               <div className="flex items-center justify-between gap-4">
                 <div>

@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Layers, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { exportToCsv } from '@/lib/export'
 
 export default function ConsultaLotePage() {
@@ -254,20 +256,41 @@ export default function ConsultaLotePage() {
 
   return (
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
-      <div className="py-6 px-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Consulta em lote</h1>
-          <p className="text-sm text-muted-foreground">Acompanhe os lotes enviados e seu progresso. ({totalItems} lotes no total)</p>
+      <div className="py-6 px-6 space-y-6">
+      {/* Header com gradiente */}
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg">
+            <Layers className="h-8 w-8 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
+              Consulta em Lote
+            </h1>
+            <p className="text-muted-foreground mt-1">Acompanhe os lotes enviados e seu progresso ({totalItems} lotes no total)</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={loadItems} disabled={loading}>Atualizar</Button>
+          <Button variant="outline" onClick={loadItems} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar
+          </Button>
           <Button asChild variant="secondary"><a href="/clientes">Enviar via Clientes</a></Button>
         </div>
       </div>
 
-      {message ? <div className="text-green-600 text-sm">{message}</div> : null}
-      {error ? <div className="text-red-600 text-sm">{error}</div> : null}
+      {message && (
+        <Alert className="border-l-4 border-l-green-500 bg-green-50 dark:bg-green-950/20">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <AlertDescription className="text-green-800 dark:text-green-200">{message}</AlertDescription>
+        </Alert>
+      )}
+      {error && (
+        <Alert className="border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950/20">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-800 dark:text-red-200">{error}</AlertDescription>
+        </Alert>
+      )}
 
       {canSendBatch && (
         <Card className="bg-muted/30">

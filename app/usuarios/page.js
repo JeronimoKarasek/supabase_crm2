@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Users } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Users, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { supabase } from '@/lib/supabase'
 import { sectors } from '@/lib/sectors'
@@ -352,11 +353,30 @@ export default function UsuariosPage() {
 
   return (
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
-      <div className="container mx-auto py-6 px-6">
+      <div className="container mx-auto py-6 px-6 space-y-6">
+        {/* Header com gradiente */}
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 shadow-lg">
+            <Users className="h-8 w-8 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
+              Usuários
+            </h1>
+            <p className="text-muted-foreground mt-1">Gerencie usuários e empresas do sistema</p>
+          </div>
+        </div>
+
         <Tabs defaultValue="usuarios" className="space-y-6">
-          <TabsList className={`grid w-full md:max-w-md mb-6 ${currentUserRole === 'admin' ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            <TabsTrigger value="usuarios">Usuários</TabsTrigger>
-            {currentUserRole === 'admin' && <TabsTrigger value="empresas">Empresas</TabsTrigger>}
+          <TabsList className={`grid w-full md:max-w-md bg-gradient-to-r from-pink-500/10 to-rose-500/10 ${currentUserRole === 'admin' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            <TabsTrigger value="usuarios" className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-pink-500 data-[state=active]:to-rose-500 data-[state=active]:text-white">
+              Usuários
+            </TabsTrigger>
+            {currentUserRole === 'admin' && (
+              <TabsTrigger value="empresas" className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-pink-500 data-[state=active]:to-rose-500 data-[state=active]:text-white">
+                Empresas
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Tab Usuários */}

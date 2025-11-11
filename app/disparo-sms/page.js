@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { supabase } from '@/lib/supabase'
-import { Send, Upload } from 'lucide-react'
+import { Send, Upload, MessageSquare, AlertCircle, RefreshCw } from 'lucide-react'
 
 export default function DisparoSmsPage() {
   const [loading, setLoading] = useState(false)
@@ -333,34 +333,49 @@ export default function DisparoSmsPage() {
   })()
 
   return (
-    <div className="p-6">
-      <Tabs defaultValue="nova" className="space-y-6">
-        <TabsList className="grid grid-cols-3 md:max-w-lg">
-          <TabsTrigger value="nova">Nova Campanha</TabsTrigger>
-          <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
-          <TabsTrigger value="detalhados">Detalhados</TabsTrigger>
-        </TabsList>
-        <TabsContent value="nova" className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold">Disparo SMS</h1>
-              <p className="text-sm text-muted-foreground">Envie SMS em massa para sua base de contatos.</p>
-              {smsMessageValue && (
-                <p className="text-xs text-muted-foreground mt-1">Cada SMS consome R$ {Number(smsMessageValue).toFixed(2)} em créditos.</p>
-              )}
-            </div>
-          </div>
+    <div className="p-6 space-y-6">
+      {/* Header com gradiente */}
+      <div className="flex items-start gap-4">
+        <div className="p-3 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-500 shadow-lg">
+          <MessageSquare className="h-8 w-8 text-white" />
+        </div>
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+            Disparo SMS
+          </h1>
+          <p className="text-muted-foreground mt-1">Envie SMS em massa para sua base de contatos</p>
+          {smsMessageValue && (
+            <p className="text-xs text-muted-foreground mt-1">Cada SMS consome R$ {Number(smsMessageValue).toFixed(2)} em créditos.</p>
+          )}
+        </div>
+      </div>
 
       {message && (
-        <Alert className="bg-success/10 border-success">
-          <AlertDescription>{message}</AlertDescription>
+        <Alert className="border-l-4 border-l-green-500 bg-green-50 dark:bg-green-950/20">
+          <AlertCircle className="h-4 w-4 text-green-600" />
+          <AlertDescription className="text-green-800 dark:text-green-200">{message}</AlertDescription>
         </Alert>
       )}
       {error && (
-        <Alert className="bg-destructive/10 border-destructive">
-          <AlertDescription>{error}</AlertDescription>
+        <Alert className="border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950/20">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-800 dark:text-red-200">{error}</AlertDescription>
         </Alert>
       )}
+
+      <Tabs defaultValue="nova" className="space-y-6">
+        <TabsList className="grid grid-cols-3 md:max-w-lg bg-gradient-to-r from-teal-500/10 to-cyan-500/10">
+          <TabsTrigger value="nova" className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white">
+            Nova Campanha
+          </TabsTrigger>
+          <TabsTrigger value="relatorios" className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white">
+            Relatórios
+          </TabsTrigger>
+          <TabsTrigger value="detalhados" className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white">
+            Detalhados
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="nova" className="space-y-6">
 
       {!hasToken && (
         <Alert>

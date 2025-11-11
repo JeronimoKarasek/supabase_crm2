@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { supabase } from '@/lib/supabase'
-import { Plus, Edit, Trash2 } from 'lucide-react'
+import { Settings, Plus, Edit, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 export default function ConfiguracaoPage() {
   const [tables, setTables] = useState([])
@@ -259,14 +260,37 @@ export default function ConfiguracaoPage() {
 
   return (
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-background">
-      <div className="container mx-auto py-6 px-6">
+      <div className="container mx-auto py-6 px-6 space-y-6">
+        {/* Header com gradiente */}
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-slate-500 to-gray-500 shadow-lg">
+            <Settings className="h-8 w-8 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-600 to-gray-600 bg-clip-text text-transparent">
+              Configuração
+            </h1>
+            <p className="text-muted-foreground mt-1">Gerencie todas as configurações do sistema</p>
+          </div>
+        </div>
+
         <Tabs defaultValue="geral" className="space-y-6">
-          <TabsList className="grid grid-cols-5 w-full md:max-w-4xl">
-            <TabsTrigger value="geral">Geral</TabsTrigger>
-            <TabsTrigger value="credenciais">Credenciais</TabsTrigger>
-            <TabsTrigger value="higienizacao">Higienização</TabsTrigger>
-            <TabsTrigger value="apis">APIs Externas</TabsTrigger>
-            <TabsTrigger value="bancos">Bancos & Produtos</TabsTrigger>
+          <TabsList className="grid grid-cols-5 w-full md:max-w-4xl bg-gradient-to-r from-slate-500/10 to-gray-500/10">
+            <TabsTrigger value="geral" className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-slate-500 data-[state=active]:to-gray-500 data-[state=active]:text-white">
+              Geral
+            </TabsTrigger>
+            <TabsTrigger value="credenciais" className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-slate-500 data-[state=active]:to-gray-500 data-[state=active]:text-white">
+              Credenciais
+            </TabsTrigger>
+            <TabsTrigger value="higienizacao" className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-slate-500 data-[state=active]:to-gray-500 data-[state=active]:text-white">
+              Higienização
+            </TabsTrigger>
+            <TabsTrigger value="apis" className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-slate-500 data-[state=active]:to-gray-500 data-[state=active]:text-white">
+              APIs Externas
+            </TabsTrigger>
+            <TabsTrigger value="bancos" className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-slate-500 data-[state=active]:to-gray-500 data-[state=active]:text-white">
+              Bancos & Produtos
+            </TabsTrigger>
           </TabsList>
 
           {/* Aba Geral */}
