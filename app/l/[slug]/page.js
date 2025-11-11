@@ -12,6 +12,8 @@ export default function ShortLinkRedirect() {
   useEffect(() => {
     const redirect = async () => {
       const slug = params?.slug
+      console.log('[Redirect] Iniciando redirecionamento para slug:', slug)
+      
       if (!slug) {
         setError('Link inválido')
         return
@@ -19,29 +21,42 @@ export default function ShortLinkRedirect() {
 
       try {
         // Buscar link curto (público, sem autenticação)
+        console.log('[Redirect] Buscando link no banco...')
         const { data, error } = await supabase
           .from('short_links')
-          .select('real_url, id')
+          .select('real_url, id, clicks')
           .eq('slug', slug)
           .single()
 
+        console.log('[Redirect] Resultado da busca:', { data, error })
+
         if (error || !data) {
+          console.error('[Redirect] Link não encontrado:', error)
           setError('Link não encontrado')
           setTimeout(() => router.push('/'), 3000)
           return
         }
 
-        // Incrementar contador de cliques (best effort, não bloqueia)
-        supabase
-          .from('short_links')
-          .update({ clicks: data.clicks + 1 })
-          .eq('id', data.id)
-          .then(() => {})
-          .catch(() => {})
+        console.log('[Redirect] Link encontrado:', { slug, realUrl: data.real_url, clicks: data.clicks })
 
-        // Redirecionar para URL real
+        // Incrementar contador de cliques
+        const newClickCount = (data.clicks || 0) + 1
+        const { error: updateError } = await supabase
+          .from('short_links')
+          .update({ clicks: newClickCount })
+          .eq('id', data.id)
+
+        if (updateError) {
+          console.error('[Redirect] Erro ao incrementar clicks:', updateError)
+        } else {
+          console.log('[Redirect] Clicks incrementado:', newClickCount)
+        }
+
+        // Redirecionar para URL real (WhatsApp)
+        console.log('[Redirect] Redirecionando para:', data.real_url)
         window.location.href = data.real_url
       } catch (e) {
+        console.error('[Redirect] Exception:', e)
         setError('Erro ao processar link')
         setTimeout(() => router.push('/'), 3000)
       }

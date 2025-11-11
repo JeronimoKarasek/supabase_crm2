@@ -17,11 +17,11 @@ async function getUserFromRequest(request) {
   return data?.user || null
 }
 
-// Gerar slug único de 8 caracteres
+// Gerar slug único de 5 caracteres (mais curto para economizar SMS)
 function generateSlug() {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   let slug = ''
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 5; i++) {
     slug += chars.charAt(Math.floor(Math.random() * chars.length))
   }
   return slug
@@ -78,8 +78,8 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Falha ao criar link curto', details: error.message }, { status: 500 })
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://crm.farolbase.com'
-    const shortUrl = `${baseUrl}/l/${slug}`
+    // Gerar URL do domínio atual (sem https:// para economizar caracteres)
+    const shortUrl = `crm.farolbase.com/l/${slug}`
 
     return NextResponse.json({ 
       ok: true,
@@ -111,10 +111,9 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Falha ao buscar links', details: error.message }, { status: 500 })
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://crm.farolbase.com'
     const links = (data || []).map(item => ({
       ...item,
-      shortUrl: `${baseUrl}/l/${item.slug}`
+      shortUrl: `crm.farolbase.com/l/${item.slug}`
     }))
 
     return NextResponse.json({ ok: true, links })
