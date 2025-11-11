@@ -64,11 +64,11 @@ export default function AcessoBancoPage() {
       <div className="max-w-full mx-auto py-6 px-6 space-y-6">
         {/* Header com gradiente */}
         <div className="flex items-start gap-4">
-          <div className="p-3 rounded-xl bg-gradient-to-br from-yellow-500 to-amber-500 shadow-lg">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg">
             <Key className="h-8 w-8 text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-yellow-600 to-amber-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
               Senha de Banco
             </h1>
             <p className="text-muted-foreground mt-1">Informe suas credenciais para cada banco configurado</p>

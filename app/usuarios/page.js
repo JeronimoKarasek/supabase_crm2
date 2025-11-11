@@ -356,11 +356,11 @@ export default function UsuariosPage() {
       <div className="container mx-auto py-6 px-6 space-y-6">
         {/* Header com gradiente */}
         <div className="flex items-start gap-4">
-          <div className="p-3 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 shadow-lg">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 shadow-lg">
             <Users className="h-8 w-8 text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
               Usuários
             </h1>
             <p className="text-muted-foreground mt-1">Gerencie usuários e empresas do sistema</p>

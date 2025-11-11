@@ -532,11 +532,11 @@ export default function HigienizarDadosPage() {
       <div className="container mx-auto py-6 px-6">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center shadow-lg">
               <Sparkles className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Higienizar Dados</h1>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-fuchsia-600 bg-clip-text text-transparent">Higienizar Dados</h1>
               <p className="text-sm text-muted-foreground">Enriqueça sua base com dados atualizados</p>
             </div>
           </div>

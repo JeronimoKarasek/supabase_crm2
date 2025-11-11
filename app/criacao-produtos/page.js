@@ -99,11 +99,11 @@ export default function CriacaoProdutosPage(){
       <div className="space-y-6 py-6 px-6">
       {/* Header com gradiente */}
       <div className="flex items-start gap-4">
-        <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-fuchsia-500 shadow-lg">
+        <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 shadow-lg">
           <Package className="h-8 w-8 text-white" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-fuchsia-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
             Criação de Produtos
           </h1>
           <p className="text-muted-foreground mt-1">Cadastre e gerencie produtos; ao comprar, o usuário recebe acesso às seções selecionadas</p>

@@ -260,11 +260,11 @@ export default function ConsultaLotePage() {
       {/* Header com gradiente */}
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-4">
-          <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500 to-green-500 shadow-lg">
             <Layers className="h-8 w-8 text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
               Consulta em Lote
             </h1>
             <p className="text-muted-foreground mt-1">Acompanhe os lotes enviados e seu progresso ({totalItems} lotes no total)</p>
