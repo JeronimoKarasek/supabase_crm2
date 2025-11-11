@@ -60,12 +60,15 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- 3. Atualizar view para usar 'credits' ao invés de 'credits_balance_cents'
-create or replace view vw_user_empresa as
+-- 3. Dropar e recriar view para usar 'credits' (mantendo credits_balance_cents para compatibilidade)
+drop view if exists vw_user_empresa cascade;
+
+create view vw_user_empresa as
 select au.id as user_id,
        eu.empresa_id,
        coalesce(eu.role, 'user') as role,
        e.credits,
+       e.credits_balance_cents,
        e.user_limit,
        e.nome as empresa_nome
 from auth.users au

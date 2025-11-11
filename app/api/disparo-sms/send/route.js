@@ -217,17 +217,79 @@ export async function POST(request) {
         }
       }
 
-      // Cobrar apenas mensagens válidas
+      // Cobrar apenas mensagens válidas - MÉTODO DIRETO (igual Higienizar Dados)
       let charged = false
       let chargeError = null
+      let empresaId = null
       if (priceCents > 0 && valids.length > 0) {
-        const total = priceCents * valids.length
+        const totalCents = priceCents * valids.length
+        const totalBRL = totalCents / 100.0
+        
         const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', user.id).single()
-        const empresaId = link?.empresa_id || null
-        const res = await credits.chargeWithValidation(user.id, total, empresaId)
-        charged = !!res?.success
-        if (!charged) chargeError = res?.error || 'Falha ao cobrar créditos'
+        empresaId = link?.empresa_id || null
+        
+        if (!empresaId) {
+          chargeError = 'Usuário não vinculado a empresa'
+        } else {
+          console.log('💰 [SMS Send] Tentando cobrar:', {
+            userId: user.id,
+            empresaId,
+            priceCents,
+            validsCount: valids.length,
+            totalCents,
+            totalBRL
+          })
+          
+          // Buscar saldo atual
+          const { data: empresaData } = await supabaseAdmin
+            .from('empresa')
+            .select('credits')
+            .eq('id', empresaId)
+            .single()
+          
+          const currentCredits = parseFloat(empresaData?.credits) || 0
+          
+          if (currentCredits < totalBRL) {
+            charged = false
+            chargeError = `Saldo insuficiente. Necessário: R$ ${totalBRL.toFixed(2)} | Disponível: R$ ${currentCredits.toFixed(2)}`
+          } else {
+            // Descontar diretamente (igual Higienizar Dados)
+            const newCredits = Math.max(0, currentCredits - totalBRL)
+            
+            const { error: updateError } = await supabaseAdmin
+              .from('empresa')
+              .update({ credits: newCredits })
+              .eq('id', empresaId)
+            
+            if (updateError) {
+              console.error('❌ [SMS Send] Erro ao descontar créditos:', updateError)
+              charged = false
+              chargeError = 'Erro ao atualizar créditos'
+            } else {
+              console.log('✅ [SMS Send] Créditos descontados!', {
+                antes: currentCredits,
+                depois: newCredits,
+                diferenca: totalBRL
+              })
+              charged = true
+              chargeError = null
+            }
+          }
+        }
       }
+
+      // 🔍 Log detalhado de créditos
+      console.log('💰 [SMS Send] Débito de créditos:', {
+        charged,
+        chargeError,
+        pricePerMsg,
+        priceCents,
+        totalUnits: valids.length,
+        totalCostCents: priceCents * valids.length,
+        totalCostBRL: pricePerMsg * valids.length,
+        empresaId,
+        userId: user.id
+      })
 
       return NextResponse.json({ 
         ok: true, 

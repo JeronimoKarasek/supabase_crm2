@@ -11,8 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { supabase } from '@/lib/supabase'
-import { Send, Upload, MessageSquare, AlertCircle, RefreshCw } from 'lucide-react'
+import { Send, Upload, MessageSquare, AlertCircle, RefreshCw, X, Link as LinkIcon } from 'lucide-react'
 
 export default function DisparoSmsPage() {
   const [loading, setLoading] = useState(false)
@@ -35,10 +36,13 @@ export default function DisparoSmsPage() {
   const [campaignsRefreshKey, setCampaignsRefreshKey] = useState(0)
   // Retorno WhatsApp e agendamento
   const [returnNumber, setReturnNumber] = useState('')
+  const [whatsappMessage, setWhatsappMessage] = useState('') // Nova mensagem personalizada do WhatsApp
   const [scheduleAt, setScheduleAt] = useState('') // datetime-local
   const [chunkSize, setChunkSize] = useState('') // tamanho por lote (cliente)
   const [chunkIntervalSec, setChunkIntervalSec] = useState('') // minutos entre lotes (cliente)
   const [sendingScheduler, setSendingScheduler] = useState({ active: false, nextAt: null, intervalId: null })
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [confirmData, setConfirmData] = useState(null)
 
   // Parse CSV
   const parseCsv = (text) => {
@@ -220,9 +224,53 @@ export default function DisparoSmsPage() {
     }
   }
 
-  const enviar = async (idOptional, includeFailed = false) => {
+  const prepareEnviar = async (idOptional, includeFailed = false) => {
     const bid = idOptional || batchId
     if (!bid) { setError('Nenhum batch selecionado ou importado.'); return }
+    
+    // Buscar quantos números válidos serão enviados
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      
+      // Consultar quantos registros válidos existem no batch
+      const statusFilter = includeFailed ? 'failed' : 'queued'
+      
+      const { count, error: countError } = await supabase
+        .from('sms_disparo')
+        .select('*', { count: 'exact', head: true })
+        .eq('batch_id', bid)
+        .eq('status', statusFilter)
+      
+      if (countError) {
+        console.error('[SMS] Erro ao contar:', countError)
+        setError('Erro ao calcular quantidade de SMS')
+        return
+      }
+      
+      const validCount = count || 0
+      const costPerSms = Number(smsMessageValue) || 0
+      const totalCost = validCount * costPerSms
+      
+      setConfirmData({
+        bid,
+        includeFailed,
+        validCount,
+        costPerSms,
+        totalCost
+      })
+      setShowConfirmDialog(true)
+    } catch (e) {
+      console.error('[SMS] Exception ao preparar envio:', e)
+      setError('Erro ao calcular custos: ' + e.message)
+    }
+  }
+
+  const confirmarEnvio = async () => {
+    if (!confirmData) return
+    setShowConfirmDialog(false)
+    
+    const { bid, includeFailed } = confirmData
     try {
       setLoading(true)
       setError('')
@@ -239,7 +287,7 @@ export default function DisparoSmsPage() {
       })
       const data = await res.json()
       if (res.ok) {
-        const msg = `Envio iniciado. Válidos: ${data.valid || 0}, Inválidos: ${data.invalid || 0}, Blacklist: ${data.blacklist || 0}, Não Perturbe: ${data.not_disturb || 0}`
+        const msg = `✅ Envio concluído! Válidos: ${data.valid || 0}, Inválidos: ${data.invalid || 0}, Blacklist: ${data.blacklist || 0}, Não Perturbe: ${data.not_disturb || 0}. Créditos debitados: R$ ${(data.credits?.totalUnits * data.credits?.unitBRL || 0).toFixed(2)}`
         setMessage(msg)
         setCampaignsRefreshKey(k => k + 1)
         loadBalance()
@@ -250,6 +298,9 @@ export default function DisparoSmsPage() {
       setError('Erro inesperado no envio')
     } finally {
       setLoading(false)
+      setConfirmData(null)
+      // Limpar estado de envio após completar
+      window.clearSendingBatch?.()
     }
   }
 
@@ -410,32 +461,71 @@ export default function DisparoSmsPage() {
 
               <div className="space-y-2">
                 <Label>Mensagem SMS</Label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
-                  <div className="md:col-span-2 space-y-2">
-                    <Label className="text-xs">Número para retorno (WhatsApp)</Label>
-                    <Input placeholder="Ex: 5599999999999" value={returnNumber} onChange={(e)=> setReturnNumber(e.target.value)} />
+                <div className="grid grid-cols-1 gap-3">
+                  {/* Campos para criar link curto personalizado */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Número WhatsApp (retorno)</Label>
+                      <Input placeholder="Ex: 11999887766" value={returnNumber} onChange={(e)=> setReturnNumber(e.target.value)} />
+                      <p className="text-xs text-muted-foreground">DDI 55 será adicionado automaticamente</p>
+                    </div>
+                    <div className="md:col-span-2 space-y-1">
+                      <Label className="text-xs">Mensagem do link WhatsApp</Label>
+                      <Input placeholder="Ex: Quero saber mais sobre essa oferta" value={whatsappMessage} onChange={(e)=> setWhatsappMessage(e.target.value)} />
+                      <p className="text-xs text-muted-foreground">Texto que será pré-preenchido no WhatsApp</p>
+                    </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button type="button" variant="outline" onClick={() => {
+                    <Button type="button" variant="outline" size="sm" onClick={async () => {
                       let num = returnNumber.trim()
                       if (!num) { alert('Informe o número para retorno'); return }
                       // Garantir DDI 55 se não houver
-                      if (!num.startsWith('55') && num.length <= 11) num = '55' + num
-                      // Gera link com a primeira linha como exemplo de variáveis ou padrão
-                      let text = messageTemplate || ''
-                      if (csvRows.length) {
-                        const sample = csvRows[0]
-                        Object.keys(sample).forEach(k => {
-                          const regex = new RegExp(`\\{\\{${k}\\}\\}`, 'gi')
-                          text = text.replace(regex, sample[k] ?? '')
-                        })
+                      if (!num.startsWith('55')) {
+                        // Remove caracteres não numéricos
+                        num = num.replace(/\D/g, '')
+                        if (num.length <= 11) num = '55' + num
                       }
-                      const finalText = text.trim() || 'Saber mais'
-                      const encoded = encodeURIComponent(finalText).replace(/%20/g, '%20')
-                      const url = `https://wa.me/${num}?text=${encoded}`
-                      // Insere no final da mensagem
-                      setMessageTemplate(prev => (prev ? prev + "\n" + url : url))
-                    }}>Inserir link WhatsApp</Button>
+                      
+                      const message = whatsappMessage.trim() || 'Saber mais'
+                      const encoded = encodeURIComponent(message)
+                      const realUrl = `https://wa.me/${num}?text=${encoded}`
+                      
+                      // Criar link curto personalizado via API
+                      try {
+                        const { data: sessionData } = await supabase.auth.getSession()
+                        const token = sessionData?.session?.access_token
+                        const res = await fetch('/api/short-link', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            ...(token ? { Authorization: `Bearer ${token}` } : {})
+                          },
+                          body: JSON.stringify({ 
+                            realUrl,
+                            phone: num,
+                            message
+                          })
+                        })
+                        const data = await res.json()
+                        if (res.ok && data.shortUrl) {
+                          // Insere link curto personalizado no final da mensagem
+                          setMessageTemplate(prev => (prev ? prev + "\n" + data.shortUrl : data.shortUrl))
+                          setMessage(`✅ Link criado: ${data.shortUrl}`)
+                          setTimeout(() => setMessage(''), 3000)
+                        } else {
+                          // Fallback: usa link direto do WhatsApp
+                          setMessageTemplate(prev => (prev ? prev + "\n" + realUrl : realUrl))
+                          setError('Não foi possível criar link curto, usando link direto')
+                          setTimeout(() => setError(''), 3000)
+                        }
+                      } catch (e) {
+                        // Fallback: insere link direto
+                        setMessageTemplate(prev => (prev ? prev + "\n" + realUrl : realUrl))
+                      }
+                    }}>
+                      <LinkIcon className="h-4 w-4 mr-2" />
+                      Inserir link WhatsApp
+                    </Button>
                   </div>
                 </div>
                 <Textarea 
@@ -565,7 +655,7 @@ export default function DisparoSmsPage() {
               <CampaignsList
                 refreshKey={campaignsRefreshKey}
                 selectedBatchId={batchId}
-                onSend={(id, includeFailed) => { setBatchId(id); enviar(id, includeFailed) }}
+                onSend={(id, includeFailed) => { setBatchId(id); prepareEnviar(id, includeFailed) }}
               />
             </CardContent>
           </Card>
@@ -578,6 +668,50 @@ export default function DisparoSmsPage() {
           <RelatoriosDetalhados />
         </TabsContent>
       </Tabs>
+
+      {/* Dialog de Confirmação de Envio */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Envio de SMS</DialogTitle>
+            <DialogDescription>
+              Revise os detalhes antes de confirmar o envio da campanha
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Números válidos:</span>
+                <span className="text-lg font-bold text-green-600">{confirmData?.validCount || 0}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Custo por SMS:</span>
+                <span className="text-sm">R$ {(confirmData?.costPerSms || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t">
+                <span className="text-sm font-bold">Total a ser debitado:</span>
+                <span className="text-xl font-bold text-red-600">R$ {(confirmData?.totalCost || 0).toFixed(2)}</span>
+              </div>
+            </div>
+            <Alert className="border-l-4 border-l-amber-500 bg-amber-50 dark:bg-amber-950/20">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-800 dark:text-amber-200">
+                <strong>Atenção:</strong> Os créditos serão debitados automaticamente. Esta ação não pode ser desfeita.
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowConfirmDialog(false); setConfirmData(null) }}>
+              <X className="h-4 w-4 mr-2" />
+              Cancelar
+            </Button>
+            <Button onClick={confirmarEnvio} className="bg-green-600 hover:bg-green-700">
+              <Send className="h-4 w-4 mr-2" />
+              Confirmar e Enviar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
   )
 }
@@ -585,6 +719,14 @@ export default function DisparoSmsPage() {
 function CampaignsList({ selectedBatchId, onSend, refreshKey }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
+  const [sendingBatch, setSendingBatch] = useState(null) // Track which batch is being sent
+  const [cancelMessage, setCancelMessage] = useState('')
+
+  // Expor função para limpar estado de envio
+  useEffect(() => {
+    window.clearSendingBatch = () => setSendingBatch(null)
+    return () => { window.clearSendingBatch = null }
+  }, [])
 
   const load = async () => {
     try {
@@ -604,6 +746,12 @@ function CampaignsList({ selectedBatchId, onSend, refreshKey }) {
 
   return (
     <div className="border rounded">
+      {cancelMessage && (
+        <Alert className="m-2">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{cancelMessage}</AlertDescription>
+        </Alert>
+      )}
       <Table>
         <TableHeader>
           <TableRow>
@@ -624,18 +772,74 @@ function CampaignsList({ selectedBatchId, onSend, refreshKey }) {
                 </span>
               </TableCell>
               <TableCell>
-                {(() => {
-                  const hasQueued = (b.counts?.queued || 0) > 0
-                  const hasFailed = (b.counts?.failed || 0) > 0
-                  const label = hasQueued ? 'Enviar' : (hasFailed ? 'Reenviar falhas' : 'Enviar')
-                  const disabled = !hasQueued && !hasFailed
-                  const includeFailed = !hasQueued && hasFailed
-                  return (
-                    <Button size="sm" onClick={() => onSend(b.batch_id, includeFailed)} disabled={disabled}>
-                      <Send className="h-3 w-3 mr-1" />{label}
-                    </Button>
-                  )
-                })()}
+                <div className="flex gap-2">
+                  {(() => {
+                    const hasQueued = (b.counts?.queued || 0) > 0
+                    const hasFailed = (b.counts?.failed || 0) > 0
+                    const label = hasQueued ? 'Enviar' : (hasFailed ? 'Reenviar falhas' : 'Enviar')
+                    const disabled = !hasQueued && !hasFailed
+                    const includeFailed = !hasQueued && hasFailed
+                    const isSending = sendingBatch === b.batch_id
+                    
+                    return (
+                      <>
+                        {isSending ? (
+                          <Button size="sm" disabled className="opacity-50">
+                            <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                            Enviando...
+                          </Button>
+                        ) : (
+                          <>
+                            <Button 
+                              size="sm" 
+                              onClick={() => {
+                                setSendingBatch(b.batch_id)
+                                setCancelMessage('')
+                                onSend(b.batch_id, includeFailed)
+                              }} 
+                              disabled={disabled}
+                            >
+                              <Send className="h-3 w-3 mr-1" />{label}
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={async () => {
+                                if (!confirm(`Deseja realmente cancelar/excluir a campanha ${b.batch_id.slice(0, 8)}?`)) return
+                                
+                                try {
+                                  const { error } = await supabase
+                                    .from('sms_disparo')
+                                    .delete()
+                                    .eq('batch_id', b.batch_id)
+                                  
+                                  if (error) {
+                                    console.error('Erro ao excluir:', error)
+                                    setCancelMessage('❌ Erro ao cancelar campanha')
+                                  } else {
+                                    setCancelMessage('✅ Campanha cancelada com sucesso')
+                                    // Recarregar lista após 1 segundo
+                                    setTimeout(() => {
+                                      load()
+                                      setCancelMessage('')
+                                    }, 1500)
+                                  }
+                                } catch (e) {
+                                  console.error('Erro ao cancelar:', e)
+                                  setCancelMessage('❌ Erro inesperado ao cancelar')
+                                }
+                              }}
+                              disabled={disabled}
+                            >
+                              <X className="h-3 w-3 mr-1" />
+                              Cancelar
+                            </Button>
+                          </>
+                        )}
+                      </>
+                    )
+                  })()}
+                </div>
               </TableCell>
             </TableRow>
           ))}

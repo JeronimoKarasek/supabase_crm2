@@ -60,11 +60,30 @@ export async function POST(request){
         
         console.log(`[Subscriptions] Processando assinatura ${id} - Usuário ${user_id}`)
 
-        // Tenta cobrar créditos
-  // Buscar empresa do usuário para cobrar do saldo compartilhado
-  const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', user_id).single()
-  const empresaId = link?.empresa_id || null
-  const chargeResult = await credits.chargeWithValidation(user_id, credit_price_cents, empresaId)
+        // Tenta cobrar créditos - MÉTODO DIRETO
+        const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', user_id).single()
+        const empresaId = link?.empresa_id || null
+        
+        let chargeResult = { success: false, error: 'Usuário não vinculado a empresa' }
+        
+        if (empresaId) {
+          const valueBRL = credit_price_cents / 100.0
+          const { data: empresaData } = await supabaseAdmin.from('empresa').select('credits').eq('id', empresaId).single()
+          const currentCredits = parseFloat(empresaData?.credits) || 0
+          
+          if (currentCredits < valueBRL) {
+            chargeResult = { success: false, error: 'Saldo insuficiente', newBalance: Math.round(currentCredits * 100) }
+          } else {
+            const newCredits = Math.max(0, currentCredits - valueBRL)
+            const { error: updateError } = await supabaseAdmin.from('empresa').update({ credits: newCredits }).eq('id', empresaId)
+            
+            if (updateError) {
+              chargeResult = { success: false, error: 'Erro ao atualizar créditos' }
+            } else {
+              chargeResult = { success: true, newBalance: Math.round(newCredits * 100) }
+            }
+          }
+        }
 
         if (chargeResult.success) {
           // Cobrança bem-sucedida

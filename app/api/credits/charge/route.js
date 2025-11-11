@@ -37,22 +37,37 @@ export async function POST(request){
   // Buscar empresa do usuário alvo
   const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', userId).single()
   const empresaId = link?.empresa_id || null
-  // Validate balance before charging (empresa)
-  const result = await credits.chargeWithValidation(userId, valueCents, empresaId)
-      if (!result.success) {
-        return NextResponse.json({ 
-          error: result.error, 
-          balanceCents: result.newBalance,
-          balanceBRL: credits.formatBRL(result.newBalance)
-        }, { status: 402 }) // 402 Payment Required
-      }
-      
-      return NextResponse.json({ 
-        ok: true, 
-        userId, 
-        balanceCents: result.newBalance, 
-        balanceBRL: credits.formatBRL(result.newBalance) 
-      })
+  
+  if (!empresaId) {
+    return NextResponse.json({ error: 'Usuário não vinculado a empresa' }, { status: 404 })
+  }
+  
+  // MÉTODO DIRETO: Buscar saldo e cobrar (igual Higienizar Dados)
+  const valueBRL = valueCents / 100.0
+  const { data: empresaData } = await supabaseAdmin.from('empresa').select('credits').eq('id', empresaId).single()
+  const currentCredits = parseFloat(empresaData?.credits) || 0
+  
+  if (currentCredits < valueBRL) {
+    return NextResponse.json({ 
+      error: 'Saldo insuficiente', 
+      balanceCents: Math.round(currentCredits * 100),
+      balanceBRL: credits.formatBRL(Math.round(currentCredits * 100))
+    }, { status: 402 })
+  }
+  
+  const newCredits = Math.max(0, currentCredits - valueBRL)
+  const { error: updateError } = await supabaseAdmin.from('empresa').update({ credits: newCredits }).eq('id', empresaId)
+  
+  if (updateError) {
+    return NextResponse.json({ error: 'Erro ao atualizar créditos' }, { status: 500 })
+  }
+  
+  return NextResponse.json({ 
+    ok: true, 
+    userId, 
+    balanceCents: Math.round(newCredits * 100), 
+    balanceBRL: credits.formatBRL(Math.round(newCredits * 100))
+  })
     }
 
     const user = await getUserFromAuth(request)
@@ -66,22 +81,36 @@ export async function POST(request){
   const { data: link } = await supabaseAdmin.from('empresa_users').select('empresa_id').eq('user_id', userId).single()
   const empresaId = link?.empresa_id || null
 
-  // Validate balance before charging (empresa)
-  const result = await credits.chargeWithValidation(userId, valueCents, empresaId)
-    if (!result.success) {
-      return NextResponse.json({ 
-        error: result.error, 
-        balanceCents: result.newBalance,
-        balanceBRL: credits.formatBRL(result.newBalance)
-      }, { status: 402 }) // 402 Payment Required
-    }
-    
+  if (!empresaId) {
+    return NextResponse.json({ error: 'Usuário não vinculado a empresa' }, { status: 404 })
+  }
+
+  // MÉTODO DIRETO: Buscar saldo e cobrar (igual Higienizar Dados)
+  const valueBRL = valueCents / 100.0
+  const { data: empresaData } = await supabaseAdmin.from('empresa').select('credits').eq('id', empresaId).single()
+  const currentCredits = parseFloat(empresaData?.credits) || 0
+  
+  if (currentCredits < valueBRL) {
     return NextResponse.json({ 
-      ok: true, 
-      userId, 
-      balanceCents: result.newBalance, 
-      balanceBRL: credits.formatBRL(result.newBalance) 
-    })
+      error: 'Saldo insuficiente', 
+      balanceCents: Math.round(currentCredits * 100),
+      balanceBRL: credits.formatBRL(Math.round(currentCredits * 100))
+    }, { status: 402 })
+  }
+  
+  const newCredits = Math.max(0, currentCredits - valueBRL)
+  const { error: updateError } = await supabaseAdmin.from('empresa').update({ credits: newCredits }).eq('id', empresaId)
+  
+  if (updateError) {
+    return NextResponse.json({ error: 'Erro ao atualizar créditos' }, { status: 500 })
+  }
+  
+  return NextResponse.json({ 
+    ok: true, 
+    userId, 
+    balanceCents: Math.round(newCredits * 100), 
+    balanceBRL: credits.formatBRL(Math.round(newCredits * 100))
+  })
   }catch(e){
     return NextResponse.json({ error: 'Failed to charge credits', details: e.message }, { status: 500 })
   }
