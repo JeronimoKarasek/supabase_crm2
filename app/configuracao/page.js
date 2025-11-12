@@ -655,9 +655,10 @@ export default function ConfiguracaoPage() {
                             <div className="grid grid-cols-3 gap-2 items-center">
                               <Input placeholder="Label" value={f.label || ''} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, label: e.target.value } : ff) } : x))} />
                               <Input placeholder="Chave (ex.: client_id)" value={f.key || ''} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, key: e.target.value } : ff) } : x))} />
-                              <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-2">
                                 <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!f.required} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, required: e.target.checked } : ff) } : x))} /> Obrigatorio</label>
                                 <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={f.type === 'select'} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, fields: x.fields.map((ff,j)=> j===fi ? { ...ff, type: e.target.checked ? 'select' : 'text' } : ff) } : x))} /> Lista</label>
+                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={()=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, fields: x.fields.filter((_,j)=> j!==fi) } : x))}><Trash2 className="h-4 w-4" /></Button>
                               </div>
                             </div>
                             {f.type === 'select' && (
@@ -677,9 +678,10 @@ export default function ConfiguracaoPage() {
                             <div className="grid grid-cols-3 gap-2 items-center">
                               <Input placeholder="Label" value={f.label || ''} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, label: e.target.value } : ff) } : x))} />
                               <Input placeholder="Chave (ex.: conta, agencia)" value={f.key || ''} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, key: e.target.value } : ff) } : x))} />
-                              <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-2">
                                 <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!f.required} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, required: e.target.checked } : ff) } : x))} /> Obrigatorio</label>
                                 <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={f.type === 'select'} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, digitarFields: x.digitarFields.map((ff,j)=> j===fi ? { ...ff, type: e.target.checked ? 'select' : 'text' } : ff) } : x))} /> Lista</label>
+                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={()=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, digitarFields: x.digitarFields.filter((_,j)=> j!==fi) } : x))}><Trash2 className="h-4 w-4" /></Button>
                               </div>
                             </div>
                             {f.type === 'select' && (

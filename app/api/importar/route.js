@@ -8,8 +8,45 @@ export const dynamic = 'force-dynamic'
 
 const storePath = path.join(process.cwd(), '.emergent', 'importar.json')
 function ensureDir() { const dir = path.dirname(storePath); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }) }
-function readStore() { try { ensureDir(); if (!fs.existsSync(storePath)) return { items: [] }; return JSON.parse(fs.readFileSync(storePath,'utf8')) } catch { return { items: [] } } }
+function readStore() {
+  try {
+    ensureDir()
+    if (!fs.existsSync(storePath)) return { items: [] }
+    return JSON.parse(fs.readFileSync(storePath, 'utf8'))
+  } catch {
+    return { items: [] }
+  }
+}
 function writeStore(obj) { ensureDir(); fs.writeFileSync(storePath, JSON.stringify(obj, null, 2), 'utf8') }
+function upsertBaseFile(loteId, fileName) {
+  if (!loteId) return
+  const store = readStore()
+  const idx = store.items.findIndex(it => it.id === loteId)
+  if (idx >= 0) {
+    store.items[idx].fileName = fileName
+    if (!store.items[idx].createdAt) store.items[idx].createdAt = new Date().toISOString()
+  } else {
+    store.items.push({ id: loteId, fileName, createdAt: new Date().toISOString() })
+  }
+  writeStore(store)
+}
+function getBaseFile(loteId) {
+  if (!loteId) return null
+  const store = readStore()
+  const found = store.items.find(it => it.id === loteId)
+  return found?.fileName || null
+}
+function pruneStoreOlderThan(cutoffIso) {
+  try {
+    const store = readStore()
+    const cutoff = new Date(cutoffIso).getTime()
+    const items = (store.items || []).filter(it => {
+      const t = it?.createdAt ? new Date(it.createdAt).getTime() : 0
+      return t >= cutoff
+    })
+    writeStore({ items })
+  } catch {}
+}
 
 async function getUserFromRequest(request) {
   const auth = request.headers.get('authorization') || request.headers.get('Authorization')
@@ -81,9 +118,12 @@ export async function GET(request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const url = new URL(request.url)
   const downloadId = url.searchParams.get('downloadId')
+  const pageParam = url.searchParams.get('page')
+  const limitParam = url.searchParams.get('limit')
+  const page = Math.max(1, parseInt(pageParam || '1', 10) || 1)
+  const limit = Math.min(50, Math.max(1, parseInt(limitParam || '10', 10) || 10))
   if (downloadId) {
     console.log(`📥 Download - Lote: ${downloadId}, User: ${user.email}`)
-    
     // Busca o schema completo da tabela importar
     const { data: schemaData, error: schemaError } = await supabaseAdmin
       .from('information_schema.columns')
@@ -91,7 +131,7 @@ export async function GET(request) {
       .eq('table_schema', 'public')
       .eq('table_name', 'importar')
       .order('ordinal_position', { ascending: true })
-    
+
     let allSchemaColumns = []
     if (!schemaError && Array.isArray(schemaData)) {
       allSchemaColumns = schemaData.map(c => c.column_name)
@@ -102,32 +142,31 @@ export async function GET(request) {
       allSchemaColumns = ['id', 'created_at', 'lote_id', 'cliente', 'produto', 'banco_simulado', 
                           'nome', 'telefone', 'cpf', 'nb', 'status', 'consultado']
     }
-    
-    // Busca TODOS os registros deste lote
+
+    // Busca TODOS os registros deste lote (sem filtro por cliente, sem limite)
     const { data, error } = await supabaseAdmin
       .from('importar')
       .select('*')
       .eq('lote_id', downloadId)
-      .eq('cliente', user.email)
-    
+
     if (error) {
       console.error('❌ Erro ao buscar dados:', error)
       return NextResponse.json({ error: 'Export failed', details: error.message }, { status: 500 })
     }
-    
+
     const rows = Array.isArray(data) ? data : []
     console.log(`📊 Total de registros encontrados: ${rows.length}`)
-    
+
     if (rows.length === 0) {
       return NextResponse.json({ error: 'Nenhum dado encontrado para este lote' }, { status: 404 })
     }
-    
+
     // Coleta colunas extras que não estão no schema (caso existam)
     const allColumnsSet = new Set(allSchemaColumns)
     for (const row of rows) {
       if (row) Object.keys(row).forEach(k => allColumnsSet.add(k))
     }
-    
+
     // Converte para array mantendo ordem: colunas base primeiro, depois outras do schema, depois extras
     const baseColumns = ['id', 'created_at', 'lote_id', 'cliente', 'produto', 'banco_simulado', 
                          'nome', 'telefone', 'cpf', 'nb', 'status', 'consultado']
@@ -138,162 +177,123 @@ export async function GET(request) {
       ...schemaColumns,
       ...extraColumns
     ]
-    
+
     console.log(`📊 Total de colunas no CSV: ${headers.length}`)
     console.log(`📋 Colunas: ${headers.join(', ')}`)
-    
-    // Função para escapar valores CSV
+
+    // Função para escapar valores CSV (padrão pt-BR usando ';')
     const esc = (val) => {
       if (val === null || typeof val === 'undefined') return ''
       const s = String(val)
-      if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"'
+      // Se contém delimitador, aspas ou quebras, envolve em aspas e duplica aspas internas
+      if (/[";\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"'
       return s
     }
-    
-    // Monta CSV com TODAS as colunas
+
+    const DELIM = ';'
+    // Monta CSV com TODAS as colunas (semicolon) + linha sep=; para Excel
     const lines = []
     if (headers.length) {
-      lines.push(headers.map(esc).join(','))
+      lines.push(headers.map(esc).join(DELIM))
     }
-    
     for (const row of rows) {
       const line = headers.map((h) => esc(row[h]))
-      lines.push(line.join(','))
+      lines.push(line.join(DELIM))
     }
-    
-    const csv = lines.join('\n')
-    
-    console.log(`✅ CSV gerado com sucesso: ${lines.length} linhas (incluindo cabeçalho)`)
-    
-    return new NextResponse(csv, { 
-      status: 200, 
-      headers: { 
+    const csvCore = lines.join('\r\n')
+    const BOM = '\uFEFF'
+    const finalCsv = BOM + 'sep=;' + '\r\n' + csvCore
+
+    console.log(`✅ CSV gerado com sucesso: ${lines.length} linhas (incluindo cabeçalho) | Delimitador: ${DELIM} | Com BOM e sep=;`)
+
+    return new NextResponse(finalCsv, {
+      status: 200,
+      headers: {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="lote_${downloadId}.csv"`
-      } 
+      }
     })
   }
   
-  // List lots (agregação da tabela importar - SEM LIMIT para não desaparecer)
-  // List lots - sem limite: pagina registros do usuário e agrega por lote_id (ou cria ID temporário)
+  // Cleanup diário: remove dados com mais de 7 dias (uma vez a cada 24h)
+  try {
+    const fired = await redis.setNX('importar:cleanup:daily', 24 * 60 * 60)
+    if (fired) {
+      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      console.log(`[Cleanup] Removendo registros de importar antes de ${cutoff}`)
+      try { await supabaseAdmin.from('importar').delete().lt('created_at', cutoff) } catch (e) { console.warn('[Cleanup] Erro ao remover registros antigos:', e?.message) }
+      try { pruneStoreOlderThan(cutoff) } catch {}
+    }
+  } catch {}
+
+  // List lots paginados no servidor: agrega por lote_id/minuto sem varrer tudo
   const isAdmin = user.email === 'junior.karaseks@gmail.com'
   console.log(`🔍 Buscando lotes para usuário: ${user.email}${isAdmin ? ' (ADMIN - vendo todos)' : ''}`)
 
-  const pageSize = 1000 // evita limite padrão do PostgREST
-  let from = 0
-  let to = pageSize - 1
-  let page = 0
-  let fetched = 0
+  const rawPageSize = 1000 // quantidade de linhas por busca no banco
+  const targetStart = (page - 1) * limit
+  const targetEnd = targetStart + limit
 
-  const rows = []
-  while (true) {
+  let from = 0
+  let to = rawPageSize - 1
+  let fetched = 0
+  let loops = 0
+  const seen = new Set()
+  const groups = []
+
+  while (groups.length < targetEnd) {
     let query = supabaseAdmin
       .from('importar')
       .select('id, lote_id, produto, banco_simulado, status, created_at, consultado, cliente')
-      
-    // Se NÃO é admin, filtra por cliente
-    if (!isAdmin) {
-      query = query.eq('cliente', user.email)
-    }
-    
+    if (!isAdmin) query = query.eq('cliente', user.email)
     const { data: chunk, error } = await query
       .order('created_at', { ascending: false })
       .range(from, to)
-
     if (error) {
       console.error('❌ Erro ao listar lotes (paginado):', error)
       return NextResponse.json({ error: 'List failed', details: error.message }, { status: 500 })
     }
-
     const chunkLen = chunk?.length || 0
-    rows.push(...(chunk || []))
+    if (!chunkLen) break
     fetched += chunkLen
-    page += 1
-    console.log(`� Página ${page}: ${chunkLen} registros (acumulado: ${fetched})`)
+    loops += 1
 
-    if (chunkLen < pageSize) break // última página
-    from += pageSize
-    to += pageSize
-    if (page >= 50) { // guarda-chuva: evita loops infinitos (50k registros por usuário)
-      console.warn('⚠️ Limite de paginação atingido (50 páginas). Parando para evitar sobrecarga.')
-      break
-    }
-  }
-
-  console.log(`📊 Total de registros agregados: ${rows.length}`)
-
-  // Agrega por lote_id OU por minuto de criação (para registros sem lote_id)
-  const lotesMap = new Map()
-  const progByReal = new Map() // progresso por lote_id real
-
-  for (const r of rows) {
-    let loteKey = r.lote_id
-    const hasReal = !!(loteKey && String(loteKey).trim() !== '')
-
-    // Se não tem lote_id, cria um ID temporário baseado em produto+banco+minuto
-    if (!hasReal) {
-      const dateObj = new Date(r.created_at)
-      const minuto = Math.floor(dateObj.getTime() / 60000) // Agrupa por minuto
-      loteKey = `temp_${minuto}_${r.produto || '-'}_${r.banco_simulado || '-'}`.replace(/\s+/g, '_')
-    }
-
-    // Atualiza agregador principal
-    if (!lotesMap.has(loteKey)) {
-      lotesMap.set(loteKey, {
-        id: loteKey,
-        originalLoteId: hasReal ? r.lote_id : null,
-        produto: r.produto || '-',
-        bancoName: r.banco_simulado || '-',
-        status: r.status || 'pendente',
-        createdAt: r.created_at,
-        userEmail: r.cliente || '-', // Email do usuário que enviou o lote
-        count: 0
-      })
-    }
-    const agg = lotesMap.get(loteKey)
-    agg.count += 1
-    // mantém a data mais antiga como createdAt (envio do lote)
-    if (r.created_at && agg.createdAt && new Date(r.created_at) < new Date(agg.createdAt)) {
-      agg.createdAt = r.created_at
-    }
-
-    // Atualiza progresso se tiver lote_id real
-    if (hasReal) {
-      if (!progByReal.has(r.lote_id)) progByReal.set(r.lote_id, { total: 0, done: 0 })
-      const pr = progByReal.get(r.lote_id)
-      pr.total += 1
-      if (r.consultado === true) pr.done += 1
-    }
-  }
-
-  // Constrói items com progresso
-  let items = Array.from(lotesMap.values()).map(it => {
-    if (it.originalLoteId && progByReal.has(it.originalLoteId)) {
-      const pr = progByReal.get(it.originalLoteId)
-      const percent = pr.total ? Math.round((pr.done / pr.total) * 100) : 0
-      return {
-        ...it,
-        progress: { done: pr.done, total: pr.total, percent },
-        status: percent === 100 ? 'concluido' : it.status
+    for (const r of chunk) {
+      let loteKey = r.lote_id
+      const hasReal = !!(loteKey && String(loteKey).trim() !== '')
+      if (!hasReal) {
+        const dateObj = new Date(r.created_at)
+        const minuto = Math.floor(dateObj.getTime() / 60000)
+        loteKey = `temp_${minuto}_${r.produto || '-'}_${r.banco_simulado || '-'}`.replace(/\s+/g, '_')
+      }
+      if (!seen.has(loteKey)) {
+        seen.add(loteKey)
+        groups.push({
+          id: loteKey,
+          originalLoteId: hasReal ? r.lote_id : null,
+          produto: r.produto || '-',
+          bancoName: r.banco_simulado || '-',
+          status: r.status || 'pendente',
+          createdAt: r.created_at,
+          userEmail: r.cliente || '-',
+          count: 1,
+        })
       }
     }
-    // Lotes temporários (sem lote_id): mostra total e 0% de progresso
-    return { ...it, progress: { done: 0, total: it.count, percent: 0 } }
-  })
 
-  // Ordena por data de envio (mais recente primeiro)
-  items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    if (chunkLen < rawPageSize) break // chegou ao fim
+    from += rawPageSize
+    to += rawPageSize
+    if (loops >= 50) break // guarda-chuva de segurança
+  }
 
-  console.log(`📦 Total de lotes únicos retornados: ${items.length}`)
-  
-  // Compute progress (consultado true/total) per lote_id
-  for (const it of items) {
+  const pageItems = groups.slice(targetStart, targetEnd)
+
+  // Enriquecer progresso apenas para os itens desta página
+  for (const it of pageItems) {
     try {
-      // Se tem lote_id original, usa ele. Senão, usa o count do Map
       if (it.originalLoteId) {
-        // Usa o email do dono do lote (it.userEmail) e não o usuário logado
         const loteOwnerEmail = it.userEmail || user.email
-        
         const { count: total } = await supabaseAdmin
           .from('importar')
           .select('*', { count: 'exact', head: true })
@@ -309,13 +309,14 @@ export async function GET(request) {
         it.progress = { done: done || 0, total: total || 0, percent }
         if (percent === 100 && it.status !== 'concluido') it.status = 'concluido'
       } else {
-        // Para lotes temporários (sem lote_id), usa o count já calculado
         it.progress = { done: 0, total: it.count || 0, percent: 0 }
       }
     } catch {}
   }
-  
-  return NextResponse.json({ items })
+
+  const hasMore = groups.length > targetEnd
+  console.log(`📦 Página ${page} | Lotes retornados: ${pageItems.length} | hasMore=${hasMore}`)
+  return NextResponse.json({ items: pageItems, page, limit, hasMore })
 }
 
 export async function POST(request) {
@@ -328,6 +329,7 @@ export async function POST(request) {
     const bancoKey = body.banco || ''
 
     const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`
+  const fileName = (body.fileName || '').toString().trim() || null
 
     // Map bank key -> bank name from global settings
     let bancoName = bancoKey
@@ -356,12 +358,15 @@ export async function POST(request) {
       status: 'pendente',
       lote_id: id,
     }))
-    if (payload.length > 0) {
+  if (payload.length > 0) {
       const { error: insErr } = await supabaseAdmin.from('importar').insert(payload)
       if (insErr) {
         return NextResponse.json({ error: 'Insert failed', details: insErr.message }, { status: 500 })
       }
     }
+
+    // Persist file name in local meta-store
+    if (fileName) upsertBaseFile(id, fileName)
 
     // Trigger webhook if configured
     if (webhookUrl) {
@@ -419,7 +424,8 @@ export async function POST(request) {
           bancoName: r.banco_simulado, 
           status: r.status || 'pendente', 
           createdAt: r.created_at,
-          userEmail: r.cliente // Email do usuário que criou o lote
+          userEmail: r.cliente, // Email do usuário que criou o lote
+          base: getBaseFile(r.lote_id)
         })
       }
     }

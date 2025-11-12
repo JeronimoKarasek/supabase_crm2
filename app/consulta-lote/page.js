@@ -27,23 +27,23 @@ export default function ConsultaLotePage() {
   const [canSendBatch, setCanSendBatch] = useState(false)
   const [isAdminUser, setIsAdminUser] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const [totalItems, setTotalItems] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
   const itemsPerPage = 10
   // Lock imediato para evitar duplo clique antes do React re-render
   const reprocessLocks = useRef(new Set())
 
-  const loadItems = async () => {
+  const loadItems = async (pageToLoad = currentPage) => {
     try {
       setLoading(true)
       setError('')
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch('/api/importar', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+      const res = await fetch(`/api/importar?page=${pageToLoad}&limit=${itemsPerPage}` , { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Falha ao listar lotes')
-      const allItems = Array.isArray(json?.items) ? json.items : []
-      setTotalItems(allItems.length)
-      setItems(allItems)
+      const pageItems = Array.isArray(json?.items) ? json.items : []
+      setItems(pageItems)
+      setHasMore(!!json?.hasMore)
     } catch (e) {
       setError(e?.message || 'Falha ao listar lotes')
     } finally {
@@ -51,7 +51,8 @@ export default function ConsultaLotePage() {
     }
   }
 
-  useEffect(() => { loadItems() }, [])
+  useEffect(() => { loadItems(1) }, [])
+  useEffect(() => { loadItems(currentPage) }, [currentPage])
 
   // Carregar bancos e produtos
   useEffect(() => {
@@ -167,12 +168,12 @@ export default function ConsultaLotePage() {
       setMessage('')
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch('/api/importar', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ csv: csvText, produto: sendProduct, banco: sendBank }) })
+  const res = await fetch('/api/importar', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ csv: csvText, produto: sendProduct, banco: sendBank, fileName }) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Falha ao enviar lote')
-      setMessage('Lote enviado para processamento.')
+  setMessage('Lote enviado para processamento.')
       setCsvText(''); setFileName(''); setSendBank(''); setSendProduct('')
-      loadItems()
+  loadItems(1); setCurrentPage(1)
     } catch (e) {
       setError(e?.message || 'Falha ao enviar lote')
     } finally {
@@ -187,18 +188,16 @@ export default function ConsultaLotePage() {
       const res = await fetch(`/api/importar?downloadId=${encodeURIComponent(id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       if (!res.ok) return
       
-      // Baixar o arquivo XLSX do servidor
+      // Download direto do CSV retornado pela API, preservando TODAS as colunas
       const blob = await res.blob()
-      
-      // Converter XLSX para array de objetos
-      const XLSX = await import('xlsx')
-      const arrayBuffer = await blob.arrayBuffer()
-      const workbook = XLSX.read(arrayBuffer, { type: 'array' })
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(firstSheet)
-      
-      // Exportar como CSV com padrão brasileiro
-      exportToCsv(rows, `lote_${String(id).slice(0, 12)}.csv`)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `lote_${String(id)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
     } catch (e) {
       console.error('Erro ao baixar lote:', e)
       setError('Erro ao baixar lote: ' + (e?.message || 'Erro desconhecido'))
@@ -238,8 +237,8 @@ export default function ConsultaLotePage() {
       const res = await fetch('/api/importar', { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id }) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Falha ao cancelar lote')
-      setMessage('Lote cancelado com sucesso.')
-      loadItems()
+  setMessage('Lote cancelado com sucesso.')
+  loadItems(currentPage)
     } catch (e) {
       setError(e?.message || 'Falha ao cancelar lote')
     } finally {
@@ -247,15 +246,16 @@ export default function ConsultaLotePage() {
     }
   }
 
-  // Calcular items da página atual
-  const totalPages = Math.ceil(totalItems / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = startIndex + itemsPerPage
-  const currentItems = items.slice(startIndex, endIndex)
-
-  const handlePageChange = (newPage) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage)
+  const currentItems = items
+  const handlePrev = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+  const handleNext = () => {
+    if (hasMore) {
+      setCurrentPage(currentPage + 1)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
@@ -273,7 +273,7 @@ export default function ConsultaLotePage() {
             <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
               Consulta em Lote
             </h1>
-            <p className="text-muted-foreground mt-1">Acompanhe os lotes enviados e seu progresso ({totalItems} lotes no total)</p>
+            <p className="text-muted-foreground mt-1">Acompanhe os lotes enviados e seu progresso</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -356,6 +356,7 @@ export default function ConsultaLotePage() {
                 <TableRow>
                   {isAdminUser && <TableHead>Email</TableHead>}
                   <TableHead>Lote</TableHead>
+                  <TableHead>Base</TableHead>
                   <TableHead>Data/Hora Envio</TableHead>
                   <TableHead>Produto</TableHead>
                   <TableHead>Banco</TableHead>
@@ -386,6 +387,7 @@ export default function ConsultaLotePage() {
                     <TableRow key={it.id}>
                       {isAdminUser && <TableCell className="text-sm">{it.userEmail || '-'}</TableCell>}
                       <TableCell className="font-mono text-xs">{String(it.id).slice(0, 12)}</TableCell>
+                      <TableCell className="text-sm">{it.base || it.file_name || it.fileName || '-'}</TableCell>
                       <TableCell className="text-sm whitespace-nowrap">{formatDate(it.createdAt)}</TableCell>
                       <TableCell>{it.produto || '-'}</TableCell>
                       <TableCell>{it.bancoName || '-'}</TableCell>
@@ -417,80 +419,36 @@ export default function ConsultaLotePage() {
                   )
                 })}
                 {(!currentItems || currentItems.length === 0) && (
-                  <TableRow><TableCell colSpan={isAdminUser ? 8 : 7} className="text-center text-sm text-muted-foreground">Nenhum lote encontrado.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={isAdminUser ? 9 : 8} className="text-center text-sm text-muted-foreground">Nenhum lote encontrado.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
           
-          {/* Paginação */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-2 py-4">
-              <div className="text-sm text-muted-foreground">
-                Mostrando {startIndex + 1} a {Math.min(endIndex, totalItems)} de {totalItems} lotes
-              </div>
-              <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => handlePageChange(1)}
-                  disabled={currentPage === 1}
-                >
-                  Primeira
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                >
-                  Anterior
-                </Button>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum
-                    if (totalPages <= 5) {
-                      pageNum = i + 1
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i
-                    } else {
-                      pageNum = currentPage - 2 + i
-                    }
-                    
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant={currentPage === pageNum ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => handlePageChange(pageNum)}
-                        className="w-10"
-                      >
-                        {pageNum}
-                      </Button>
-                    )
-                  })}
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                >
-                  Próxima
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => handlePageChange(totalPages)}
-                  disabled={currentPage === totalPages}
-                >
-                  Última
-                </Button>
-              </div>
+          {/* Paginação simples (servidor) */}
+          <div className="flex items-center justify-between px-2 py-4">
+            <div className="text-sm text-muted-foreground">
+              Página {currentPage}
             </div>
-          )}
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handlePrev}
+                disabled={currentPage === 1 || loading}
+              >
+                Anterior
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleNext}
+                disabled={!hasMore || loading}
+              >
+                Próxima
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
       </div>

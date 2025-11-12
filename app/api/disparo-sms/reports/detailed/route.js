@@ -44,6 +44,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'start_at e end_at são obrigatórios (formato: YYYY-MM-DD HH:mm)' }, { status: 400 })
     }
 
+    // Consulta Kolmeya normalmente (sem filtro por empresa)
     const { data: gsData } = await supabaseAdmin
       .from('global_settings')
       .select('data')

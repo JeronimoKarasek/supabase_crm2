@@ -1,24 +1,3 @@
 {
-  "items": [
-    {
-      "id": "1760413504897_rssljso6nom",
-      "cliente": "junior.karaseks@gmail.com",
-      "produto": "CLT (Crédito Trabalhador)",
-      "banco": "bank_1760412643133",
-      "bancoName": "bank_1760412643133",
-      "status": "pendente",
-      "rows": [
-        {
-          "nome": "Joao",
-          "telefone": "11999999999",
-          "cpf": "12345678901"
-        },
-        {
-          "nome": "Maria",
-          "telefone": "11988888888",
-          "cpf": "10987654321"
-        }
-      ]
-    }
-  ]
+  "items": []
 }

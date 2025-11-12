@@ -1346,7 +1346,24 @@ function RelatoriosDetalhados() {
                       <TableCell className="font-mono text-xs">{m.telefone}</TableCell>
                       <TableCell>{m.nome}</TableCell>
                       <TableCell>
-                        <Badge variant={m.status === 'enviado' ? 'default' : 'destructive'}>{m.status}</Badge>
+                        {(() => {
+                          // Normaliza o status para facilitar comparação
+                          const status = String(m.status || '').toLowerCase()
+                          let variant = 'secondary'
+                          let customClass = ''
+                          if (["entregue", "delivered", "success"].includes(status)) {
+                            variant = 'default'; customClass = 'bg-green-600 text-white border-green-700'
+                          } else if (["enviado", "sent", "enviada"].includes(status)) {
+                            variant = 'outline'; customClass = 'bg-blue-500 text-white border-blue-600'
+                          } else if (["pendente", "pending", "aguardando"].includes(status)) {
+                            variant = 'outline'; customClass = 'bg-yellow-400 text-black border-yellow-500'
+                          } else if (["falha", "erro", "failed", "error"].includes(status)) {
+                            variant = 'destructive'; customClass = 'bg-red-600 text-white border-red-700'
+                          } else if (["blacklist", "not_disturb", "nao perturbe"].includes(status)) {
+                            variant = 'secondary'; customClass = 'bg-gray-500 text-white border-gray-600'
+                          }
+                          return <Badge variant={variant} className={customClass}>{m.status}</Badge>
+                        })()}
                       </TableCell>
                       <TableCell className="text-xs">{m.enviada_em}</TableCell>
                       <TableCell>{m.lote}</TableCell>
