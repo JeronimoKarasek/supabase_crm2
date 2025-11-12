@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import redis from '../../../lib/redis.js'
 import fs from 'fs'
 import path from 'path'
 import { supabaseAdmin } from '../../../lib/supabase-admin.js'
@@ -475,6 +476,15 @@ export async function PUT(request) {
     const body = await request.json().catch(() => ({}))
     const id = body?.id
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+
+    // Deduplicação: evita disparar duas vezes para o mesmo clique
+    try {
+      const key = `importar:reprocess:${user.id}:${id}`
+      const first = await redis.setNX(key, 15) // 15s de janela
+      if (!first) {
+        return NextResponse.json({ ok: true, dedup: true })
+      }
+    } catch {}
 
     // Busca informações do lote na tabela importar (primeiro registro do lote_id)
     const { data: loteRows, error: loteErr } = await supabaseAdmin

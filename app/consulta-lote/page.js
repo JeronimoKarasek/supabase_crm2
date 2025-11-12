@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,6 +29,8 @@ export default function ConsultaLotePage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalItems, setTotalItems] = useState(0)
   const itemsPerPage = 10
+  // Lock imediato para evitar duplo clique antes do React re-render
+  const reprocessLocks = useRef(new Set())
 
   const loadItems = async () => {
     try {
@@ -204,6 +206,9 @@ export default function ConsultaLotePage() {
   }
 
   const onReprocess = async (id) => {
+    // Guarda contra duplo clique rápido
+    if (reprocessLocks.current.has(id)) return
+    reprocessLocks.current.add(id)
     try {
       setBusy(prev => ({ ...prev, [id]: true }))
       setError('')
@@ -213,11 +218,12 @@ export default function ConsultaLotePage() {
       const res = await fetch('/api/importar', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id }) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Falha ao reprocessar lote')
-      setMessage('Webhook disparado para o lote.')
+      setMessage(json?.dedup ? 'Reprocessamento já em andamento.' : 'Webhook disparado para o lote.')
     } catch (e) {
       setError(e?.message || 'Falha ao reprocessar lote')
     } finally {
       setBusy(prev => ({ ...prev, [id]: false }))
+      reprocessLocks.current.delete(id)
     }
   }
 
