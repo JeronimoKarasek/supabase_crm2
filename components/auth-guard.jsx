@@ -33,14 +33,14 @@ export default function AuthGuard({ children }) {
         const role = user?.user_metadata?.role || 'viewer'
         const sectors = (Array.isArray(user?.user_metadata?.sectors) && user.user_metadata.sectors.length > 0)
           ? user.user_metadata.sectors
-          : ['Clientes', 'Usuários', 'Dashboard', 'Configuração', 'Acesso Banco', 'Consulta em lote']
+          : ['Clientes', 'Usuários', 'Dashboard', 'Configuração', 'Senha de banco', 'Consulta em lote']
 
         const pickDefaultRoute = () => {
           if (role === 'admin' || hasSector(sectors, 'Dashboard')) return '/dashboard'
           if (hasSector(sectors, 'Clientes')) return '/clientes'
           if (hasSector(sectors, 'Usuários') || hasSector(sectors, 'Usuarios')) return '/usuarios'
           if (hasSector(sectors, 'Configuração') || hasSector(sectors, 'Configuracao')) return '/configuracao'
-          if (hasSector(sectors, 'Acesso Banco')) return '/acesso-banco'
+          if (hasSector(sectors, 'Senha de banco')) return '/acesso-banco'
           if (hasSector(sectors, 'Consulta em lote')) return '/consulta-lote'
           return '/login'
         }
@@ -57,7 +57,7 @@ export default function AuthGuard({ children }) {
         } else if (pathname.startsWith('/configuracao')) {
           if (!(role === 'admin' || hasSector(sectors, 'Configuração') || hasSector(sectors, 'Configuracao'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/acesso-banco')) {
-          if (!(role === 'admin' || hasSector(sectors, 'Acesso Banco'))) router.replace(pickDefaultRoute())
+          if (!(role === 'admin' || hasSector(sectors, 'Senha de banco'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/consulta-lote')) {
           if (!(role === 'admin' || hasSector(sectors, 'Consulta em lote'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/simular-digitar')) {
@@ -86,13 +86,13 @@ export default function AuthGuard({ children }) {
         const role = user?.user_metadata?.role || 'viewer'
         const sectors = (Array.isArray(user?.user_metadata?.sectors) && user.user_metadata.sectors.length > 0)
           ? user.user_metadata.sectors
-          : ['Clientes', 'Usuários', 'Dashboard', 'Configuração', 'Acesso Banco', 'Consulta em lote']
+          : ['Clientes', 'Usuários', 'Dashboard', 'Configuração', 'Senha de banco', 'Consulta em lote']
         const pickDefaultRoute = () => {
           if (role === 'admin' || hasSector(sectors, 'Dashboard')) return '/dashboard'
           if (hasSector(sectors, 'Clientes')) return '/clientes'
           if (hasSector(sectors, 'Usuários') || hasSector(sectors, 'Usuarios')) return '/usuarios'
           if (hasSector(sectors, 'Configuração') || hasSector(sectors, 'Configuracao')) return '/configuracao'
-          if (hasSector(sectors, 'Acesso Banco')) return '/acesso-banco'
+          if (hasSector(sectors, 'Senha de banco')) return '/acesso-banco'
           if (hasSector(sectors, 'Consulta em lote')) return '/consulta-lote'
           return '/login'
         }
@@ -108,7 +108,7 @@ export default function AuthGuard({ children }) {
         } else if (pathname.startsWith('/configuracao')) {
           if (!(role === 'admin' || hasSector(sectors, 'Configuração') || hasSector(sectors, 'Configuracao'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/acesso-banco')) {
-          if (!(role === 'admin' || hasSector(sectors, 'Acesso Banco'))) router.replace(pickDefaultRoute())
+          if (!(role === 'admin' || hasSector(sectors, 'Senha de banco'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/consulta-lote')) {
           if (!(role === 'admin' || hasSector(sectors, 'Consulta em lote'))) router.replace(pickDefaultRoute())
         } else if (pathname.startsWith('/simular-digitar')) {
