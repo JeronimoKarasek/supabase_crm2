@@ -143,18 +143,34 @@ export async function GET(request) {
                           'nome', 'telefone', 'cpf', 'nb', 'status', 'consultado']
     }
 
-    // Busca TODOS os registros deste lote (sem filtro por cliente, sem limite)
-    const { data, error } = await supabaseAdmin
-      .from('importar')
-      .select('*')
-      .eq('lote_id', downloadId)
+    // Busca TODOS os registros deste lote (sem limite - usa paginação interna)
+    const rows = []
+    const pageSize = 1000
+    let from = 0
+    let hasMore = true
+    
+    while (hasMore) {
+      const { data, error } = await supabaseAdmin
+        .from('importar')
+        .select('*')
+        .eq('lote_id', downloadId)
+        .range(from, from + pageSize - 1)
 
-    if (error) {
-      console.error('❌ Erro ao buscar dados:', error)
-      return NextResponse.json({ error: 'Export failed', details: error.message }, { status: 500 })
+      if (error) {
+        console.error('❌ Erro ao buscar dados:', error)
+        return NextResponse.json({ error: 'Export failed', details: error.message }, { status: 500 })
+      }
+
+      const chunk = Array.isArray(data) ? data : []
+      rows.push(...chunk)
+      
+      if (chunk.length < pageSize) {
+        hasMore = false
+      } else {
+        from += pageSize
+      }
     }
-
-    const rows = Array.isArray(data) ? data : []
+    
     console.log(`📊 Total de registros encontrados: ${rows.length}`)
 
     if (rows.length === 0) {
