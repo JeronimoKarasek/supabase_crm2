@@ -41,7 +41,7 @@ export async function POST(request) {
 
     // Chamar API Kolmeya para listar centros de custo
     console.log('📋 [Segments API] Calling Kolmeya API...')
-    const res = await fetch('https://kolmeya.com.br/api/v1/sms/segments', {
+    const res = await fetch('https://weebserver6.farolchat.com/webhook/v1/sms/segments', {
       method: 'POST',
       headers: {
         'Accept': 'application/json',

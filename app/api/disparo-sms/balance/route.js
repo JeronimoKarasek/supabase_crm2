@@ -40,7 +40,7 @@ export async function POST(request) {
     }
 
     console.log('📊 [Balance API] Calling Kolmeya API...')
-    const res = await fetch('https://kolmeya.com.br/api/v1/sms/balance', {
+    const res = await fetch('https://weebserver6.farolchat.com/webhook/v1/sms/balance', {
       method: 'POST',
       headers: {
         'Accept': 'application/json',

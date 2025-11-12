@@ -113,7 +113,7 @@ export async function POST(request) {
 
     // Enviar para Kolmeya
     try {
-      const res = await fetch('https://kolmeya.com.br/api/v1/sms/store', {
+      const res = await fetch('https://weebserver6.farolchat.com/webhook/v1/sms/store', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -123,7 +123,7 @@ export async function POST(request) {
         body: JSON.stringify(payload),
       })
 
-      const json = await res.json()
+  const json = await res.json()
 
       if (!res.ok) {
         console.error('[DisparoSMS] Falha no envio', { batch_id, error: json })
@@ -135,7 +135,8 @@ export async function POST(request) {
         }, { status: res.status })
       }
 
-      const requestId = json?.id || null
+  const requestId = json?.id || null
+  const smsJob = json?.smsJob || json?.job || null
       const valids = json?.valids || []
       const invalids = json?.invalids || []
       const blacklist = json?.blacklist || []
@@ -299,7 +300,9 @@ export async function POST(request) {
         not_disturb: notDisturbCount,
         valid: valids.length,
         invalid: invalids.length,
-        credits: { charged, unitBRL: pricePerMsg, totalUnits: valids.length, error: chargeError }
+        credits: { charged, unitBRL: pricePerMsg, totalUnits: valids.length, error: chargeError },
+        requestId,
+        smsJob
       })
 
     } catch (e) {

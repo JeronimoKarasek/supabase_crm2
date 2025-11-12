@@ -43,6 +43,12 @@ export default function DisparoSmsPage() {
   const [sendingScheduler, setSendingScheduler] = useState({ active: false, nextAt: null, intervalId: null })
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [confirmData, setConfirmData] = useState(null)
+  // Jobs (após envio) e métricas locais por sessão
+  const [jobStates, setJobStates] = useState({}) // { batchId: { smsJob, status: 'running'|'paused', metrics: {...} } }
+  const [showDetails, setShowDetails] = useState(false)
+  const [detailsData, setDetailsData] = useState(null)
+  const [detailsLoading, setDetailsLoading] = useState(false)
+  const [detailsError, setDetailsError] = useState('')
 
   // Parse CSV
   const parseCsv = (text) => {
@@ -291,6 +297,23 @@ export default function DisparoSmsPage() {
         setMessage(msg)
         setCampaignsRefreshKey(k => k + 1)
         loadBalance()
+        // Registrar job se retornado
+        if (data.smsJob) {
+          setJobStates(prev => ({
+            ...prev,
+            [confirmData.bid]: {
+              smsJob: data.smsJob,
+              status: 'running',
+              metrics: {
+                sent: data.sent || 0,
+                delivered: data.sent || 0, // aproximação inicial
+                failed: data.failed || 0,
+                replies: 0,
+                total: (data.sent || 0) + (data.failed || 0)
+              }
+            }
+          }))
+        }
       } else {
         setError(data?.error || 'Falha ao enviar')
       }
@@ -301,6 +324,38 @@ export default function DisparoSmsPage() {
       setConfirmData(null)
       // Limpar estado de envio após completar
       window.clearSendingBatch?.()
+    }
+  }
+
+  // Função auxiliar para envio direto (sem confirmação)
+  const enviarDireto = async (bid, includeFailed = false) => {
+    try {
+      setLoading(true)
+      setError('')
+      setMessage('')
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const res = await fetch('/api/disparo-sms/send', { 
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json', 
+          ...(token ? { Authorization: `Bearer ${token}` } : {}) 
+        }, 
+        body: JSON.stringify({ batch_id: bid, include_failed: includeFailed, limit: parseInt(chunkSize || '1000', 10) }) 
+      })
+      const data = await res.json()
+      if (res.ok) {
+        const msg = `✅ Lote enviado! Válidos: ${data.valid || 0}, Inválidos: ${data.invalid || 0}`
+        setMessage(msg)
+        setCampaignsRefreshKey(k => k + 1)
+        loadBalance()
+      } else {
+        setError(data?.error || 'Falha ao enviar lote')
+      }
+    } catch (e) {
+      setError('Erro inesperado no envio do lote')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -323,10 +378,10 @@ export default function DisparoSmsPage() {
       // primeira execução após delay
       setTimeout(async () => {
         // dispara imediatamente um primeiro lote
-        await enviar(batchId, false)
+        await enviarDireto(batchId, false)
         // agendar execuções subsequentes
         const id = setInterval(async () => {
-          await enviar(batchId, false)
+          await enviarDireto(batchId, false)
         }, gapMs)
         setSendingScheduler({ active: true, nextAt: new Date(Date.now() + gapMs).toISOString(), intervalId: id })
       }, delayMs)
@@ -346,6 +401,27 @@ export default function DisparoSmsPage() {
     loadSegments()
     loadBalance()
   }, [])
+
+  const fetchDetailsReport = async (period = 168) => {
+    try {
+      setDetailsLoading(true); setDetailsError(''); setDetailsData(null)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const res = await fetch('/api/disparo-sms/reports/quantity-jobs', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', ...(token?{Authorization:`Bearer ${token}`}:{}) },
+        body: JSON.stringify({ period })
+      })
+      const js = await res.json()
+      if(!res.ok){
+        setDetailsError(js?.error || 'Falha ao carregar detalhes')
+        return
+      }
+      setDetailsData(js.report || js)
+    } catch(e){
+      setDetailsError('Erro inesperado')
+    } finally { setDetailsLoading(false) }
+  }
 
   // Carregar dados do localStorage se vindo de clientes
   useEffect(() => {
@@ -636,26 +712,17 @@ export default function DisparoSmsPage() {
 
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Campanhas Importadas</CardTitle>
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <div><strong>Legenda:</strong></div>
-                  <div className="flex flex-wrap gap-3">
-                    <span><strong>T</strong>: Total</span>
-                    <span><strong>Q</strong>: Na fila</span>
-                    <span><strong>S</strong>: Enviadas</span>
-                    <span><strong>F</strong>: Falhas</span>
-                    <span><strong>B</strong>: Blacklist</span>
-                    <span><strong>N</strong>: Não perturbe</span>
-                  </div>
-                </div>
-              </div>
+              <CardTitle>Campanhas Importadas</CardTitle>
+              <CardDescription>Métricas e progresso de cada campanha</CardDescription>
             </CardHeader>
             <CardContent>
               <CampaignsList
                 refreshKey={campaignsRefreshKey}
                 selectedBatchId={batchId}
                 onSend={(id, includeFailed) => { setBatchId(id); prepareEnviar(id, includeFailed) }}
+                jobStates={jobStates}
+                setJobStates={setJobStates}
+                openDetails={(bid) => { setShowDetails(true); fetchDetailsReport(); }}
               />
             </CardContent>
           </Card>
@@ -712,17 +779,68 @@ export default function DisparoSmsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog Detalhes de Jobs */}
+      <Dialog open={showDetails} onOpenChange={setShowDetails}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Detalhes de Jobs (até 168h)</DialogTitle>
+            <DialogDescription>Relatório de respostas e mensagens processadas</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-[200px] space-y-4">
+            {detailsLoading && <div className="text-sm text-muted-foreground">Carregando...</div>}
+            {detailsError && <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>{detailsError}</AlertDescription></Alert>}
+            {!detailsLoading && !detailsError && detailsData && (
+              <div className="overflow-auto max-h-[60vh] border rounded p-2 text-xs font-mono bg-muted/30">
+                {Array.isArray(detailsData?.data) && detailsData.data.length ? (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-muted">
+                        <th className="p-1 border">Job</th>
+                        <th className="p-1 border">Telefone</th>
+                        <th className="p-1 border">Enviado em</th>
+                        <th className="p-1 border">Resposta</th>
+                        <th className="p-1 border">Recebido em</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailsData.data.map((r,i)=>(
+                        <tr key={i} className="hover:bg-accent/40">
+                          <td className="p-1 border">{r.job}</td>
+                          <td className="p-1 border">{r.phone}</td>
+                          <td className="p-1 border">{r.send_at}</td>
+                          <td className="p-1 border max-w-[240px] truncate" title={r.reply}>{r.reply || '-'}</td>
+                          <td className="p-1 border">{r.received_at}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="text-sm text-muted-foreground">Sem dados no período.</div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={()=>fetchDetailsReport(24)}>24h</Button>
+            <Button variant="outline" onClick={()=>fetchDetailsReport(72)}>72h</Button>
+            <Button variant="outline" onClick={()=>fetchDetailsReport(168)}>168h</Button>
+            <Button onClick={()=>setShowDetails(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
   )
 }
 
-function CampaignsList({ selectedBatchId, onSend, refreshKey }) {
+function CampaignsList({ selectedBatchId, onSend, refreshKey, jobStates, setJobStates, openDetails }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
-  const [sendingBatch, setSendingBatch] = useState(null) // Track which batch is being sent
+  const [sendingBatch, setSendingBatch] = useState(null)
   const [cancelMessage, setCancelMessage] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 6 // menos itens para caber cards
 
-  // Expor função para limpar estado de envio
   useEffect(() => {
     window.clearSendingBatch = () => setSendingBatch(null)
     return () => { window.clearSendingBatch = null }
@@ -733,129 +851,167 @@ function CampaignsList({ selectedBatchId, onSend, refreshKey }) {
       setLoading(true)
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch('/api/disparo-sms/batches', { 
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined 
-      })
+      const res = await fetch('/api/disparo-sms/batches', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       const data = await res.json()
       if (res.ok) setItems(data?.batches || [])
-    } catch {}
+    } catch (e) {}
     finally { setLoading(false) }
   }
-
   useEffect(() => { load() }, [refreshKey])
 
+  const totalPages = Math.ceil((items || []).length / itemsPerPage)
+  const startIdx = (currentPage - 1) * itemsPerPage
+  const endIdx = startIdx + itemsPerPage
+  const paginatedItems = (items || []).slice(startIdx, endIdx)
+
+  const pct = (v, total) => {
+    if (!total) return '0.00%'
+    return ((v / total) * 100).toFixed(2) + '%'
+  }
+
   return (
-    <div className="border rounded">
+    <div className="space-y-4">
       {cancelMessage && (
-        <Alert className="m-2">
+        <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{cancelMessage}</AlertDescription>
         </Alert>
       )}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Data</TableHead>
-            <TableHead>Batch</TableHead>
-            <TableHead>Contagens</TableHead>
-            <TableHead>Ações</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {(items || []).map((b) => (
-            <TableRow key={b.batch_id} className={selectedBatchId === b.batch_id ? 'bg-muted/50' : ''}>
-              <TableCell>{new Date(b.created_at).toLocaleString()}</TableCell>
-              <TableCell className="font-mono text-xs">{b.batch_id.slice(0, 8)}</TableCell>
-              <TableCell>
-                <span className="text-xs">
-                  Tot:{b.counts.total} Fila:{b.counts.queued} Env:{b.counts.sent} Fal:{b.counts.failed} Bl:{b.counts.blacklist} NP:{b.counts.not_disturb}
-                </span>
-              </TableCell>
-              <TableCell>
-                <div className="flex gap-2">
-                  {(() => {
-                    const hasQueued = (b.counts?.queued || 0) > 0
-                    const hasFailed = (b.counts?.failed || 0) > 0
-                    const label = hasQueued ? 'Enviar' : (hasFailed ? 'Reenviar falhas' : 'Enviar')
-                    const disabled = !hasQueued && !hasFailed
-                    const includeFailed = !hasQueued && hasFailed
-                    const isSending = sendingBatch === b.batch_id
-                    
-                    return (
-                      <>
-                        {isSending ? (
-                          <Button size="sm" disabled className="opacity-50">
-                            <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                            Enviando...
-                          </Button>
-                        ) : (
-                          <>
-                            <Button 
-                              size="sm" 
-                              onClick={() => {
-                                setSendingBatch(b.batch_id)
-                                setCancelMessage('')
-                                onSend(b.batch_id, includeFailed)
-                              }} 
-                              disabled={disabled}
-                            >
-                              <Send className="h-3 w-3 mr-1" />{label}
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={async () => {
-                                if (!confirm(`Deseja realmente cancelar/excluir a campanha ${b.batch_id.slice(0, 8)}?`)) return
-                                
-                                try {
-                                  const { error } = await supabase
-                                    .from('sms_disparo')
-                                    .delete()
-                                    .eq('batch_id', b.batch_id)
-                                  
-                                  if (error) {
-                                    console.error('Erro ao excluir:', error)
-                                    setCancelMessage('❌ Erro ao cancelar campanha')
-                                  } else {
-                                    setCancelMessage('✅ Campanha cancelada com sucesso')
-                                    // Recarregar lista após 1 segundo
-                                    setTimeout(() => {
-                                      load()
-                                      setCancelMessage('')
-                                    }, 1500)
-                                  }
-                                } catch (e) {
-                                  console.error('Erro ao cancelar:', e)
-                                  setCancelMessage('❌ Erro inesperado ao cancelar')
-                                }
-                              }}
-                              disabled={disabled}
-                            >
-                              <X className="h-3 w-3 mr-1" />
-                              Cancelar
-                            </Button>
-                          </>
-                        )}
-                      </>
-                    )
-                  })()}
+      {loading && <div className="text-xs text-muted-foreground">Carregando campanhas...</div>}
+      {!loading && !items.length && (
+        <div className="text-sm text-muted-foreground border rounded p-4 text-center">Nenhuma campanha importada ainda.</div>
+      )}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {paginatedItems.map(b => {
+          const counts = b.counts || {}
+          const total = counts.total || 0
+          const sent = counts.sent || 0
+          const failed = counts.failed || 0
+          // Tentativa de delivered (se houver campo entregue futuramente). Por enquanto aproximamos usando sent - failed.
+          const delivered = Math.max(0, sent - failed)
+          const replies = (jobStates[b.batch_id]?.metrics?.replies || 0)
+          const queued = counts.queued || 0
+          const finished = queued === 0 && sent > 0
+          const progressPerc = total ? Math.min(100, ((sent + failed) / total) * 100) : 0
+          const js = jobStates[b.batch_id]
+          const isRunning = js && js.status === 'running'
+          const isPaused = js && js.status === 'paused'
+          const hasQueued = queued > 0
+          const hasFailed = failed > 0
+          const disabled = !hasQueued && !hasFailed
+          const includeFailed = !hasQueued && hasFailed
+          const label = hasQueued ? 'Enviar' : (hasFailed ? 'Reenviar falhas' : 'Enviar')
+          const isSending = sendingBatch === b.batch_id
+          return (
+            <div key={b.batch_id} className={`rounded-xl border shadow-sm bg-white/50 dark:bg-neutral-900/50 backdrop-blur-sm p-4 relative ${selectedBatchId === b.batch_id ? 'ring-2 ring-teal-500' : ''}`}>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <div className="text-xs text-muted-foreground">Criada em</div>
+                  <div className="text-sm font-medium">{new Date(b.created_at).toLocaleString()}</div>
                 </div>
-              </TableCell>
-            </TableRow>
-          ))}
-          {(!items || !items.length) && (
-            <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground">Nenhuma campanha importada ainda.</TableCell></TableRow>
-          )}
-        </TableBody>
-      </Table>
+                <Badge variant={finished ? 'default' : 'secondary'}>{finished ? 'FINALIZADO' : isPaused ? 'PAUSADO' : isRunning ? 'EM ANDAMENTO' : 'AGUARDANDO'}</Badge>
+              </div>
+              <div className="font-mono text-[10px] mb-2 opacity-70">Batch {b.batch_id.slice(0,8)}</div>
+              <div className="grid grid-cols-5 gap-2 text-center mb-3">
+                <div className="space-y-1">
+                  <div className="text-[10px] font-medium">ENVIADOS</div>
+                  <div className="text-sm font-bold">{sent}</div>
+                  <div className="text-[10px] text-muted-foreground">{pct(sent,total)}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-medium">ENTREGUES</div>
+                  <div className="text-sm font-bold text-green-600 dark:text-green-400">{delivered}</div>
+                  <div className="text-[10px] text-muted-foreground">{pct(delivered,total)}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-medium">FALHAS</div>
+                  <div className="text-sm font-bold text-red-600 dark:text-red-400">{failed}</div>
+                  <div className="text-[10px] text-muted-foreground">{pct(failed,total)}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-medium">RESPOSTAS</div>
+                  <div className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{replies}</div>
+                  <div className="text-[10px] text-muted-foreground">{pct(replies,total)}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-medium">TOTAL</div>
+                  <div className="text-sm font-bold">{total}</div>
+                  <div className="text-[10px] text-muted-foreground">100%</div>
+                </div>
+              </div>
+              <div className="h-2 w-full rounded bg-muted overflow-hidden mb-3">
+                <div className={`h-full transition-all ${finished ? 'bg-green-500' : 'bg-teal-500'} `} style={{ width: progressPerc + '%' }} />
+              </div>
+              {finished && <div className="text-center text-[11px] font-medium text-green-700 dark:text-green-300 mb-3">ENVIO FINALIZADO</div>}
+              <div className="flex flex-wrap gap-2">
+                {js ? (
+                  <>
+                    {isRunning && (
+                      <Button size="sm" variant="secondary" onClick={async () => {
+                        try {
+                          const { data: sessionData } = await supabase.auth.getSession()
+                          const token = sessionData?.session?.access_token
+                          const r = await fetch('/api/disparo-sms/jobs/pause', { method: 'POST', headers: { 'Content-Type':'application/json', ...(token?{Authorization:`Bearer ${token}`}:{}) }, body: JSON.stringify({ smsJob: js.smsJob }) })
+                          if (r.ok) setJobStates(p => ({ ...p, [b.batch_id]: { ...p[b.batch_id], status: 'paused' } }))
+                        } catch {}
+                      }}>Pausar</Button>
+                    )}
+                    {isPaused && (
+                      <Button size="sm" variant="secondary" onClick={async () => {
+                        try {
+                          const { data: sessionData } = await supabase.auth.getSession()
+                          const token = sessionData?.session?.access_token
+                          const r = await fetch('/api/disparo-sms/jobs/play', { method: 'POST', headers: { 'Content-Type':'application/json', ...(token?{Authorization:`Bearer ${token}`}:{}) }, body: JSON.stringify({ smsJob: js.smsJob }) })
+                          if (r.ok) setJobStates(p => ({ ...p, [b.batch_id]: { ...p[b.batch_id], status: 'running' } }))
+                        } catch {}
+                      }}>Play</Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => openDetails(b.batch_id)}>Detalhes</Button>
+                  </>
+                ) : isSending ? (
+                  <Button size="sm" disabled className="opacity-50"><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Enviando...</Button>
+                ) : (
+                  <>
+                    <Button size="sm" onClick={() => { setSendingBatch(b.batch_id); setCancelMessage(''); onSend(b.batch_id, includeFailed) }} disabled={disabled}><Send className="h-3 w-3 mr-1" />{label}</Button>
+                    <Button size="sm" variant="outline" disabled={disabled} onClick={async () => {
+                      if (!confirm(`Deseja realmente cancelar/excluir a campanha ${b.batch_id.slice(0,8)}?`)) return
+                      try {
+                        const { error } = await supabase.from('sms_disparo').delete().eq('batch_id', b.batch_id)
+                        if (error) { setCancelMessage('❌ Erro ao cancelar campanha') } else { setCancelMessage('✅ Campanha cancelada'); setTimeout(()=>{ load(); setCancelMessage('') },1500) }
+                      } catch { setCancelMessage('❌ Erro inesperado ao cancelar') }
+                    }}><X className="h-3 w-3 mr-1" />Cancelar</Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )})}
+      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-muted-foreground">Página {currentPage} de {totalPages} ({items.length} campanhas)</div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>Anterior</Button>
+            <Button size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>Próxima</Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function RelatoriosCampanhas() {
+function RelatoriosCampanhas({ jobStates, setShowDetails, setDetailsData }) {
   const [loading, setLoading] = useState(false)
   const [batches, setBatches] = useState([])
   const [error, setError] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+  // Modal respostas (quantity-jobs)
+  const [showReplies, setShowReplies] = useState(false)
+  const [repliesData, setRepliesData] = useState(null)
+  const [repliesLoading, setRepliesLoading] = useState(false)
+  const [repliesError, setRepliesError] = useState('')
+  const [period, setPeriod] = useState(168)
+  
   const load = async () => {
     try {
       setLoading(true); setError('')
@@ -879,12 +1035,34 @@ function RelatoriosCampanhas() {
   const totalMsgs = batches.reduce((acc, b) => acc + (b.counts?.total || 0), 0)
   const totalEnviadas = batches.reduce((acc, b) => acc + (b.counts?.sent || 0), 0)
   const totalFalhas = batches.reduce((acc, b) => acc + (b.counts?.failed || 0), 0)
+  
+  const totalPages = Math.ceil(batches.length / itemsPerPage)
+  const startIdx = (currentPage - 1) * itemsPerPage
+  const endIdx = startIdx + itemsPerPage
+  const paginatedBatches = batches.slice(startIdx, endIdx)
+  
+  const loadReplies = async (hours = period) => {
+    try {
+      setRepliesLoading(true); setRepliesError(''); setRepliesData(null); setPeriod(hours)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const res = await fetch('/api/disparo-sms/reports/quantity-jobs', { method: 'POST', headers: { 'Content-Type':'application/json', ...(token?{Authorization:`Bearer ${token}`}:{}) }, body: JSON.stringify({ period: hours }) })
+      const js = await res.json()
+      if(!res.ok){ setRepliesError(js?.error || 'Falha ao carregar respostas'); return }
+      setRepliesData(js.report || js)
+    } catch(e){ setRepliesError('Erro inesperado') }
+    finally { setRepliesLoading(false) }
+  }
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle>Resumo Geral</CardTitle>
           <CardDescription>Indicadores agregados conforme sua hierarquia</CardDescription>
+          <div className="mt-2">
+            <Button size="sm" variant="outline" onClick={() => { setShowReplies(true); loadReplies(168) }}>Detalhes (Respostas)</Button>
+          </div>
         </CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-3 rounded border bg-muted/50">
@@ -926,7 +1104,7 @@ function RelatoriosCampanhas() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(batches || []).map(b => (
+                {paginatedBatches.map(b => (
                   <TableRow key={b.batch_id}>
                     <TableCell>{new Date(b.created_at).toLocaleString()}</TableCell>
                     <TableCell className="font-mono text-xs">{b.batch_id.slice(0,8)}</TableCell>
@@ -944,9 +1122,88 @@ function RelatoriosCampanhas() {
                 )}
               </TableBody>
             </Table>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between p-3 border-t">
+                <div className="text-xs text-muted-foreground">Página {currentPage} de {totalPages} ({batches.length} itens)</div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>Anterior</Button>
+                  <Button size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>Próxima</Button>
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
+      {/* Modal respostas */}
+      <Dialog open={showReplies} onOpenChange={setShowReplies}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Respostas de SMS (últimas {period}h)</DialogTitle>
+            <DialogDescription>Mensagens recebidas de jobs via Web</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 min-h-[200px]">
+            <div className="flex gap-2">
+              <Button size="sm" variant={period===24?'default':'outline'} onClick={()=>loadReplies(24)}>24h</Button>
+              <Button size="sm" variant={period===72?'default':'outline'} onClick={()=>loadReplies(72)}>72h</Button>
+              <Button size="sm" variant={period===168?'default':'outline'} onClick={()=>loadReplies(168)}>168h</Button>
+            </div>
+            {repliesLoading && <div className="text-sm text-muted-foreground">Carregando...</div>}
+            {repliesError && <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>{repliesError}</AlertDescription></Alert>}
+            {!repliesLoading && !repliesError && repliesData && Array.isArray(repliesData.data) && (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="p-3 rounded border bg-muted/50">
+                    <div className="text-[11px] text-muted-foreground">Total Registros</div>
+                    <div className="text-lg font-semibold">{repliesData.total || repliesData.data.length}</div>
+                  </div>
+                  <div className="p-3 rounded border bg-muted/50">
+                    <div className="text-[11px] text-muted-foreground">Com Resposta</div>
+                    <div className="text-lg font-semibold text-indigo-600">{repliesData.data.filter(d=>d.reply).length}</div>
+                  </div>
+                  <div className="p-3 rounded border bg-muted/50">
+                    <div className="text-[11px] text-muted-foreground">Sem Resposta</div>
+                    <div className="text-lg font-semibold text-orange-600">{repliesData.data.filter(d=>!d.reply).length}</div>
+                  </div>
+                  <div className="p-3 rounded border bg-muted/50">
+                    <div className="text-[11px] text-muted-foreground">Jobs Únicos</div>
+                    <div className="text-lg font-semibold">{new Set(repliesData.data.map(d=>d.job)).size}</div>
+                  </div>
+                </div>
+                <div className="border rounded overflow-auto max-h-[55vh] text-xs">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-muted">
+                        <th className="p-2 border">Job</th>
+                        <th className="p-2 border">Telefone</th>
+                        <th className="p-2 border">Mensagem Enviada</th>
+                        <th className="p-2 border">Resposta</th>
+                        <th className="p-2 border">Recebido em</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {repliesData.data.map((r,i)=>(
+                        <tr key={i} className="hover:bg-accent/40">
+                          <td className="p-2 border font-mono text-[10px]">{r.job}</td>
+                          <td className="p-2 border">{r.phone}</td>
+                          <td className="p-2 border max-w-[240px] truncate" title={r.message}>{r.message}</td>
+                          <td className="p-2 border max-w-[240px] truncate" title={r.reply}>{r.reply || '-'}</td>
+                          <td className="p-2 border">{r.received_at || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+            {!repliesLoading && !repliesError && repliesData && (!Array.isArray(repliesData.data) || !repliesData.data.length) && (
+              <div className="text-sm text-muted-foreground">Sem respostas no período.</div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={()=>setShowReplies(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -958,6 +1215,21 @@ function RelatoriosDetalhados() {
   const [messages, setMessages] = useState([])
   const [error, setError] = useState('')
   const [stats, setStats] = useState({})
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+
+  // Inicializar: data inicial 3 horas atrás, data final 2 horas antes da hora atual
+  useEffect(() => {
+    const now = new Date()
+    const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000)
+    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000)
+    const formatDateTime = (d) => {
+      const pad = (n) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    }
+    setStartDate(formatDateTime(threeHoursAgo))
+    setEndDate(formatDateTime(twoHoursAgo))
+  }, [])
 
   const loadDetailed = async () => {
     if (!startDate || !endDate) {
@@ -969,10 +1241,17 @@ function RelatoriosDetalhados() {
       setError('')
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
+      
+      // Converter formato datetime-local (2025-11-11T21:21) para Y-m-d H:i (2025-11-11 21:21)
+      const formatToApi = (dt) => dt ? dt.replace('T', ' ') : ''
+      
       const res = await fetch('/api/disparo-sms/reports/detailed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ start_at: startDate, end_at: endDate })
+        body: JSON.stringify({ 
+          start_at: formatToApi(startDate), 
+          end_at: formatToApi(endDate) 
+        })
       })
       const data = await res.json()
       if (!res.ok) {
@@ -993,6 +1272,11 @@ function RelatoriosDetalhados() {
       setLoading(false)
     }
   }
+
+  const totalPages = Math.ceil(messages.length / itemsPerPage)
+  const startIdx = (currentPage - 1) * itemsPerPage
+  const endIdx = startIdx + itemsPerPage
+  const paginatedMessages = messages.slice(startIdx, endIdx)
 
   return (
     <div className="space-y-4">
@@ -1057,7 +1341,7 @@ function RelatoriosDetalhados() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {messages.map((m, idx) => (
+                  {paginatedMessages.map((m, idx) => (
                     <TableRow key={idx}>
                       <TableCell className="font-mono text-xs">{m.telefone}</TableCell>
                       <TableCell>{m.nome}</TableCell>
@@ -1071,6 +1355,15 @@ function RelatoriosDetalhados() {
                   ))}
                 </TableBody>
               </Table>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between p-3 border-t">
+                  <div className="text-xs text-muted-foreground">Página {currentPage} de {totalPages} ({messages.length} mensagens)</div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>Anterior</Button>
+                    <Button size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>Próxima</Button>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
