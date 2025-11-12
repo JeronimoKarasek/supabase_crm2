@@ -195,7 +195,7 @@ export default function AppChrome({ children }) {
             <span className="text-sm text-muted-foreground">Menu</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="text-sm font-semibold px-2 text-success dark:text-success">Crédito: {creditsBRL}</div>
+            <div className="text-sm font-semibold px-2 py-1 rounded bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-200 border border-green-300 dark:border-green-700 shadow-sm">Crédito: {creditsBRL}</div>
             {isAdmin && smsBalance && (
               <div className="text-sm font-semibold px-2 py-1 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700">
                 SMS Kolmeya: {smsBalance}

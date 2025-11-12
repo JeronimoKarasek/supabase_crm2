@@ -1,6 +1,30 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
+// Função para extrair mensagem amigável de erro JSON
+function parseErrorMessage(raw) {
+  if (!raw) return ''
+  let msg = ''
+  try {
+    if (typeof raw === 'string') {
+      // Tenta extrair mensagem após dois pontos
+      const match = raw.match(/mensagem\":\"([^\"]+)/i)
+      if (match) return match[1]
+      // Se for JSON string
+      const js = JSON.parse(raw)
+      if (js?.erros && Array.isArray(js.erros) && js.erros[0]?.mensagem) return js.erros[0].mensagem
+      if (js?.mensagem) return js.mensagem
+      msg = raw
+    } else if (typeof raw === 'object') {
+      if (raw.erros && Array.isArray(raw.erros) && raw.erros[0]?.mensagem) return raw.erros[0].mensagem
+      if (raw.mensagem) return raw.mensagem
+      msg = JSON.stringify(raw)
+    }
+  } catch {}
+  // Limpa caracteres indesejados
+  msg = msg.replace(/["\\{}\[\]]/g, '').replace(/mensagem:/i, '').replace(/^[^:]*:/, '').trim()
+  return msg
+}
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -100,7 +124,10 @@ export default function SimularDigitarPage() {
             if (r.bankKey !== t.bankKey) return r
             const idx = r.products.findIndex(p => p.product === t.product)
             const next = [...r.products]
-            next[idx >= 0 ? idx : 0] = { product: t.product, error: e.message, loading: false }
+            // Formata mensagem de erro amigável
+            let msg = e.message
+            msg = parseErrorMessage(msg)
+            next[idx >= 0 ? idx : 0] = { product: t.product, error: msg, loading: false }
             return { ...r, products: next }
           }))
         })
@@ -320,10 +347,17 @@ export default function SimularDigitarPage() {
                           <div className="text-destructive text-sm">{item.error}</div>
                         ) : (
                           <div className="space-y-2 text-sm">
+                            {/* Valor liberado centralizado se existir */}
+                            {typeof d.valor_liberado !== 'undefined' && d.valor_liberado !== null && (
+                              <div className="flex flex-col items-center justify-center my-2">
+                                <div className="text-lg font-bold text-green-700">Valor liberado</div>
+                                <div className="text-2xl font-mono text-green-800 mb-2">R$ {String(d.valor_liberado)}</div>
+                              </div>
+                            )}
+                            {/* Demais informações em Detalhes */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                               {d.mensagem && <div><span className="font-medium">Mensagem:</span> {String(d.mensagem)}</div>}
                               {typeof d.valor_cliente !== 'undefined' && <div><span className="font-medium">Valor cliente:</span> {String(d.valor_cliente)}</div>}
-                              {typeof d.valor_liberado !== 'undefined' && <div><span className="font-medium">Valor liberado:</span> {String(d.valor_liberado)}</div>}
                               {typeof d.taxa !== 'undefined' && <div><span className="font-medium">Taxa:</span> {String(d.taxa)}</div>}
                               {typeof d.tabela !== 'undefined' && <div><span className="font-medium">Tabela:</span> {String(d.tabela)}</div>}
                               {typeof d.prazo !== 'undefined' && <div><span className="font-medium">Prazo:</span> {String(d.prazo)}</div>}
@@ -415,7 +449,12 @@ export default function SimularDigitarPage() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-              <Button onClick={doDigitar} disabled={digLoading}>{digLoading ? 'Enviando...' : 'Enviar'}</Button>
+              <Button 
+                onClick={doDigitar} 
+                disabled={digLoading || !(currentBank?.digitarFields || []).every(f => !f.required || (digForm[f.key] && String(digForm[f.key]).trim() !== ''))}
+              >
+                {digLoading ? 'Enviando...' : 'Enviar'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
