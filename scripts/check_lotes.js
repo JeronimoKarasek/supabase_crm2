@@ -2,18 +2,18 @@ import { supabaseAdmin } from '../lib/supabase-admin.js'
 
 async function checkLotes() {
   try {
-    console.log('🔍 Verificando registros na tabela importar...\n')
+    console.log('🔍 Verificando registros na tabela lote_items...\n')
 
     // 1. Total de registros
     const { count: total } = await supabaseAdmin
-      .from('importar')
+      .from('lote_items')
       .select('*', { count: 'exact', head: true })
     
     console.log(`📊 Total de registros: ${total}`)
 
     // 2. Registros COM lote_id
     const { count: comLote } = await supabaseAdmin
-      .from('importar')
+      .from('lote_items')
       .select('*', { count: 'exact', head: true })
       .not('lote_id', 'is', null)
     
@@ -21,7 +21,7 @@ async function checkLotes() {
 
     // 3. Registros SEM lote_id
     const { count: semLote } = await supabaseAdmin
-      .from('importar')
+      .from('lote_items')
       .select('*', { count: 'exact', head: true })
       .is('lote_id', null)
     
@@ -29,7 +29,7 @@ async function checkLotes() {
 
     // 4. Listar todos os clientes
     const { data: clientes } = await supabaseAdmin
-      .from('importar')
+      .from('lote_items')
       .select('cliente')
       .not('cliente', 'is', null)
     
@@ -42,7 +42,7 @@ async function checkLotes() {
     
     for (const cliente of clientesUnicos) {
       const { data: registros } = await supabaseAdmin
-        .from('importar')
+        .from('lote_items')
         .select('lote_id, produto, banco_simulado, created_at, status')
         .eq('cliente', cliente)
         .not('lote_id', 'is', null)
@@ -77,7 +77,7 @@ async function checkLotes() {
 
       // Verificar se há registros sem lote_id para este cliente
       const { count: semLoteCliente } = await supabaseAdmin
-        .from('importar')
+        .from('lote_items')
         .select('*', { count: 'exact', head: true })
         .eq('cliente', cliente)
         .is('lote_id', null)
@@ -97,3 +97,4 @@ async function checkLotes() {
 }
 
 checkLotes()
+

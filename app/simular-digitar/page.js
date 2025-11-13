@@ -1,30 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo } from 'react'
-// Função para extrair mensagem amigável de erro JSON
-function parseErrorMessage(raw) {
-  if (!raw) return ''
-  let msg = ''
-  try {
-    if (typeof raw === 'string') {
-      // Tenta extrair mensagem após dois pontos
-      const match = raw.match(/mensagem\":\"([^\"]+)/i)
-      if (match) return match[1]
-      // Se for JSON string
-      const js = JSON.parse(raw)
-      if (js?.erros && Array.isArray(js.erros) && js.erros[0]?.mensagem) return js.erros[0].mensagem
-      if (js?.mensagem) return js.mensagem
-      msg = raw
-    } else if (typeof raw === 'object') {
-      if (raw.erros && Array.isArray(raw.erros) && raw.erros[0]?.mensagem) return raw.erros[0].mensagem
-      if (raw.mensagem) return raw.mensagem
-      msg = JSON.stringify(raw)
-    }
-  } catch {}
-  // Limpa caracteres indesejados
-  msg = msg.replace(/["\\{}\[\]]/g, '').replace(/mensagem:/i, '').replace(/^[^:]*:/, '').trim()
-  return msg
-}
+import { cleanBankErrorMessage } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -125,8 +102,7 @@ export default function SimularDigitarPage() {
             const idx = r.products.findIndex(p => p.product === t.product)
             const next = [...r.products]
             // Formata mensagem de erro amigável
-            let msg = e.message
-            msg = parseErrorMessage(msg)
+            let msg = cleanBankErrorMessage(e.message)
             next[idx >= 0 ? idx : 0] = { product: t.product, error: msg, loading: false }
             return { ...r, products: next }
           }))
@@ -219,7 +195,7 @@ export default function SimularDigitarPage() {
       // Extrai link da resposta normalizada
       const resp = json?.response || {}
       const url = resp.link || ''
-      const mensagem = resp.mensagem || resp.status || ''
+      const mensagem = cleanBankErrorMessage(resp.mensagem || resp.status || '')
       const protocolo = resp.protocolo || ''
       
       // Atualiza resultados com dados da digitação
@@ -250,7 +226,8 @@ export default function SimularDigitarPage() {
         setTimeout(()=>setMessage(''), 3000)
       }
     } catch (e) {
-      setMessage(`❌ ${e?.message || 'Erro ao enviar'}`)
+      const clean = cleanBankErrorMessage(e?.message)
+      setMessage(`❌ ${clean || 'Erro ao enviar'}`)
       setTimeout(()=>setMessage(''), 3000)
     } finally {
       setDigLoading(false)
@@ -356,7 +333,7 @@ export default function SimularDigitarPage() {
                             )}
                             {/* Demais informações em Detalhes */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                              {d.mensagem && <div><span className="font-medium">Mensagem:</span> {String(d.mensagem)}</div>}
+                              {d.mensagem && <div><span className="font-medium">Mensagem:</span> {cleanBankErrorMessage(String(d.mensagem))}</div>}
                               {typeof d.valor_cliente !== 'undefined' && <div><span className="font-medium">Valor cliente:</span> {String(d.valor_cliente)}</div>}
                               {typeof d.taxa !== 'undefined' && <div><span className="font-medium">Taxa:</span> {String(d.taxa)}</div>}
                               {typeof d.tabela !== 'undefined' && <div><span className="font-medium">Tabela:</span> {String(d.tabela)}</div>}

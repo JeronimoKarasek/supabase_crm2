@@ -3,10 +3,11 @@ import redis from '../../../lib/redis.js'
 import fs from 'fs'
 import path from 'path'
 import { supabaseAdmin } from '../../../lib/supabase-admin.js'
+import { getEmpresaForUser } from '../../../lib/empresa.js'
 
 export const dynamic = 'force-dynamic'
 
-const storePath = path.join(process.cwd(), '.emergent', 'importar.json')
+const storePath = path.join(process.cwd(), '.emergent', 'lote.json')
 function ensureDir() { const dir = path.dirname(storePath); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }) }
 function readStore() {
   try {
@@ -124,18 +125,18 @@ export async function GET(request) {
   const limit = Math.min(50, Math.max(1, parseInt(limitParam || '10', 10) || 10))
   if (downloadId) {
     console.log(`📥 Download - Lote: ${downloadId}, User: ${user.email}`)
-    // Busca o schema completo da tabela importar
+    // Busca o schema completo da tabela lote_items
     const { data: schemaData, error: schemaError } = await supabaseAdmin
       .from('information_schema.columns')
       .select('column_name')
       .eq('table_schema', 'public')
-      .eq('table_name', 'importar')
+      .eq('table_name', 'lote_items')
       .order('ordinal_position', { ascending: true })
 
     let allSchemaColumns = []
     if (!schemaError && Array.isArray(schemaData)) {
       allSchemaColumns = schemaData.map(c => c.column_name)
-      console.log(`📋 Schema da tabela importar: ${allSchemaColumns.length} colunas`)
+      console.log(`📋 Schema da tabela lote_items: ${allSchemaColumns.length} colunas`)
     } else {
       console.warn('⚠️ Não foi possível buscar schema, usando colunas base')
       // Fallback para colunas base conhecidas
@@ -151,7 +152,7 @@ export async function GET(request) {
     
     while (hasMore) {
       const { data, error } = await supabaseAdmin
-        .from('importar')
+        .from('lote_items')
         .select('*')
         .eq('lote_id', downloadId)
         .range(from, from + pageSize - 1)
@@ -233,11 +234,11 @@ export async function GET(request) {
   
   // Cleanup diário: remove dados com mais de 7 dias (uma vez a cada 24h)
   try {
-    const fired = await redis.setNX('importar:cleanup:daily', 24 * 60 * 60)
+    const fired = await redis.setNX('lote:cleanup:daily', 24 * 60 * 60)
     if (fired) {
       const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-      console.log(`[Cleanup] Removendo registros de importar antes de ${cutoff}`)
-      try { await supabaseAdmin.from('importar').delete().lt('created_at', cutoff) } catch (e) { console.warn('[Cleanup] Erro ao remover registros antigos:', e?.message) }
+      console.log(`[Cleanup] Removendo registros de lote_items antes de ${cutoff}`)
+      try { await supabaseAdmin.from('lote_items').delete().lt('created_at', cutoff) } catch (e) { console.warn('[Cleanup] Erro ao remover registros antigos:', e?.message) }
       try { pruneStoreOlderThan(cutoff) } catch {}
     }
   } catch {}
@@ -259,7 +260,7 @@ export async function GET(request) {
 
   while (groups.length < targetEnd) {
     let query = supabaseAdmin
-      .from('importar')
+      .from('lote_items')
       .select('id, lote_id, produto, banco_simulado, status, created_at, consultado, cliente')
     if (!isAdmin) query = query.eq('cliente', user.email)
     const { data: chunk, error } = await query
@@ -293,6 +294,7 @@ export async function GET(request) {
           createdAt: r.created_at,
           userEmail: r.cliente || '-',
           count: 1,
+          base: hasReal ? (getBaseFile(loteKey) || null) : null,
         })
       }
     }
@@ -311,12 +313,12 @@ export async function GET(request) {
       if (it.originalLoteId) {
         const loteOwnerEmail = it.userEmail || user.email
         const { count: total } = await supabaseAdmin
-          .from('importar')
+          .from('lote_items')
           .select('*', { count: 'exact', head: true })
           .eq('cliente', loteOwnerEmail)
           .eq('lote_id', it.originalLoteId)
         const { count: done } = await supabaseAdmin
-          .from('importar')
+          .from('lote_items')
           .select('*', { count: 'exact', head: true })
           .eq('cliente', loteOwnerEmail)
           .eq('lote_id', it.originalLoteId)
@@ -343,6 +345,7 @@ export async function POST(request) {
     const rows = parseCsv(body.csv || '')
     const produto = body.produto || ''
     const bancoKey = body.banco || ''
+    const bankUserIds = Array.isArray(body.bankUserIds) ? body.bankUserIds.filter(id => typeof id === 'string') : []
 
     const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`
   const fileName = (body.fileName || '').toString().trim() || null
@@ -362,7 +365,7 @@ export async function POST(request) {
       if (bank?.webhookUrl) webhookUrl = bank.webhookUrl
     } catch {}
 
-    // Insert into Supabase table 'importar'
+    // Insert into Supabase table 'lote_items'
     const payload = rows.map(r => ({
       nome: (r.__nome ?? r.nome ?? '').toString(),
       telefone: (r.__telefone ?? r.telefone ?? '').toString(),
@@ -375,7 +378,7 @@ export async function POST(request) {
       lote_id: id,
     }))
   if (payload.length > 0) {
-      const { error: insErr } = await supabaseAdmin.from('importar').insert(payload)
+      const { error: insErr } = await supabaseAdmin.from('lote_items').insert(payload)
       if (insErr) {
         return NextResponse.json({ error: 'Insert failed', details: insErr.message }, { status: 500 })
       }
@@ -387,25 +390,53 @@ export async function POST(request) {
     // Trigger webhook if configured
     if (webhookUrl) {
       try {
-        // Load user credentials from Supabase table
-        const { data: credsRows } = await supabaseAdmin
-          .from('bank_credentials')
-          .select('credentials')
-          .eq('user_id', user.id)
-          .eq('bank_key', bancoKey)
-          .single()
-        const userCreds = credsRows?.credentials || {}
-        
+        // Multi-user credentials list (if provided)
+        let credentialsList = []
+        if (bankUserIds.length) {
+          const { data: multiRows } = await supabaseAdmin
+            .from('bank_user_credentials')
+            .select('id, alias, credentials, is_default')
+            .in('id', bankUserIds)
+            .eq('user_id', user.id)
+            .eq('bank_key', bancoKey)
+          if (Array.isArray(multiRows)) {
+            credentialsList = multiRows.map(r => ({ id: r.id, alias: r.alias, credentials: r.credentials || {}, is_default: r.is_default }))
+          }
+        } else {
+          // fallback: include default multi user if exists
+          const { data: defRows } = await supabaseAdmin
+            .from('bank_user_credentials')
+            .select('id, alias, credentials, is_default')
+            .eq('user_id', user.id)
+            .eq('bank_key', bancoKey)
+            .eq('is_default', true)
+            .limit(1)
+          if (Array.isArray(defRows) && defRows.length) {
+            credentialsList = defRows.map(r => ({ id: r.id, alias: r.alias, credentials: r.credentials || {}, is_default: r.is_default }))
+          }
+        }
+        // Empresa (nome)
+        let empresaName = null
+        try {
+          const { empresaId } = await getEmpresaForUser(user.id)
+          if (empresaId) {
+            const { data: emp } = await supabaseAdmin.from('empresa').select('name').eq('id', empresaId).single()
+            empresaName = emp?.name || null
+          }
+        } catch {}
+
         await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             banco: bancoKey,
+            bancoName: bancoName,
             produto,
-            credentials: userCreds,
+            credentialsList,
             itemId: id,
             email: user.email,
-            userId: user.id
+            userId: user.id,
+            empresaName
           })
         })
       } catch (webhookError) {
@@ -418,7 +449,7 @@ export async function POST(request) {
     // Admin (junior.karaseks@gmail.com) vê todos os lotes
     const isAdmin = user.email === 'junior.karaseks@gmail.com'
     let query = supabaseAdmin
-      .from('importar')
+      .from('lote_items')
       .select('lote_id, produto, banco_simulado, status, created_at, cliente')
     
     if (!isAdmin) {
@@ -450,12 +481,12 @@ export async function POST(request) {
     for (const it of items) {
       try {
         const { count: total } = await supabaseAdmin
-          .from('importar')
+          .from('lote_items')
           .select('*', { count: 'exact', head: true })
           .eq('cliente', it.userEmail)
           .eq('lote_id', it.id)
-        const { count: done } = await supabaseAdmin
-          .from('importar')
+        const { count: con } = await supabaseAdmin
+          .from('lote_items')
           .select('*', { count: 'exact', head: true })
           .eq('cliente', it.userEmail)
           .eq('lote_id', it.id)
@@ -479,8 +510,8 @@ export async function DELETE(request) {
     const body = await request.json()
     const { id } = body || {}
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
-    const { error } = await supabaseAdmin
-      .from('importar')
+    const { error} = await supabaseAdmin
+      .from('lote_items')
       .delete()
       .eq('cliente', user.email)
       .eq('lote_id', id)
@@ -508,9 +539,9 @@ export async function PUT(request) {
       }
     } catch {}
 
-    // Busca informações do lote na tabela importar (primeiro registro do lote_id)
+    // Busca informações do lote na tabela lote_items (primeiro registro do lote_id)
     const { data: loteRows, error: loteErr } = await supabaseAdmin
-      .from('importar')
+      .from('lote_items')
       .select('produto, banco_simulado')
       .eq('lote_id', id)
       .eq('cliente', user.email)
@@ -538,26 +569,44 @@ export async function PUT(request) {
       return NextResponse.json({ error: 'Webhook not configured for this bank' }, { status: 400 })
     }
 
-    // Load user credentials using bank key
-    const { data: credsRows } = await supabaseAdmin
-      .from('bank_credentials')
-      .select('credentials')
-      .eq('user_id', user.id)
-      .eq('bank_key', bank.key)
-      .single()
-    const userCreds = credsRows?.credentials || {}
+    // Multi-user credentials list (fallback ao default)
+    let credentialsList = []
+    try {
+      const { data: defRows } = await supabaseAdmin
+        .from('bank_user_credentials')
+        .select('id, alias, credentials, is_default')
+        .eq('user_id', user.id)
+        .eq('bank_key', bank.key)
+        .eq('is_default', true)
+        .limit(1)
+      if (Array.isArray(defRows) && defRows.length) {
+        credentialsList = defRows.map(r => ({ id: r.id, alias: r.alias, credentials: r.credentials || {}, is_default: r.is_default }))
+      }
+    } catch {}
 
-    // Fire webhook again (status tracked via importar records)
+    // Empresa (nome)
+    let empresaName = null
+    try {
+      const { empresaId } = await getEmpresaForUser(user.id)
+      if (empresaId) {
+        const { data: emp } = await supabaseAdmin.from('empresa').select('name').eq('id', empresaId).single()
+        empresaName = emp?.name || null
+      }
+    } catch {}
+
+    // Fire webhook again (status tracked via lote_items records)
     await fetch(bank.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         banco: bank.key,
+        bancoName: bank.name,
         produto: lote.produto,
-        credentials: userCreds,
+        credentialsList,
         itemId: id,
         email: user.email,
-        userId: user.id
+        userId: user.id,
+        empresaName
       })
     })
 

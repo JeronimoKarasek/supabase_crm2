@@ -5,7 +5,7 @@ import { supabaseAdmin } from '../../../../lib/supabase-admin.js'
 
 export const dynamic = 'force-dynamic'
 
-const storePath = path.join(process.cwd(), '.emergent', 'importar.json')
+const storePath = path.join(process.cwd(), '.emergent', 'lote.json')
 function ensureDir() { const dir = path.dirname(storePath); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }) }
 function readStore() { try { ensureDir(); if (!fs.existsSync(storePath)) return { items: [] }; return JSON.parse(fs.readFileSync(storePath,'utf8')) } catch { return { items: [] } } }
 function writeStore(obj) { ensureDir(); fs.writeFileSync(storePath, JSON.stringify(obj, null, 2), 'utf8') }
@@ -18,7 +18,7 @@ export async function POST(request) {
 
     // Update Supabase rows for this lote_id
     const { error } = await supabaseAdmin
-      .from('importar')
+      .from('lote_items')
       .update({ status })
       .eq('lote_id', itemId)
     if (error) return NextResponse.json({ error: 'Failed to update status', details: error.message }, { status: 500 })

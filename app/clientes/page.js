@@ -558,8 +558,8 @@ export default function App() {
       }
       const csv = lines.join('\n')
 
-      // Send to importar API (same flow as Consulta em lote upload)
-      const postRes = await fetch('/api/importar', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ csv, produto: sendProduct, banco: sendBank }) })
+      // Send to lote API (same flow as Consulta em lote upload)
+      const postRes = await fetch('/api/lote', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ csv, produto: sendProduct, banco: sendBank }) })
       const postJson = await postRes.json().catch(() => ({}))
       if (!postRes.ok) throw new Error(postJson?.error || 'Falha ao enviar para consulta em lote')
 

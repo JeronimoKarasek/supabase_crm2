@@ -21,6 +21,9 @@ export default function ConsultaLotePage() {
   const [products, setProducts] = useState([])
   const [sendBank, setSendBank] = useState('')
   const [sendProduct, setSendProduct] = useState('')
+  const [bankUsers, setBankUsers] = useState([])
+  const [selectedUserIds, setSelectedUserIds] = useState([])
+  const [selectAllUsers, setSelectAllUsers] = useState(false)
   const [csvText, setCsvText] = useState('')
   const [fileName, setFileName] = useState('')
   const [sending, setSending] = useState(false)
@@ -38,7 +41,7 @@ export default function ConsultaLotePage() {
       setError('')
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch(`/api/importar?page=${pageToLoad}&limit=${itemsPerPage}` , { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+      const res = await fetch(`/api/lote?page=${pageToLoad}&limit=${itemsPerPage}` , { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Falha ao listar lotes')
       const pageItems = Array.isArray(json?.items) ? json.items : []
@@ -69,6 +72,24 @@ export default function ConsultaLotePage() {
       } catch {}
     })()
   }, [])
+
+  // Carrega usuários do banco selecionado
+  useEffect(() => {
+    ;(async () => {
+      if (!sendBank) { setBankUsers([]); setSelectedUserIds([]); setSelectAllUsers(false); return }
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData?.session?.access_token
+        const res = await fetch(`/api/banks/credentials/users?bank_key=${encodeURIComponent(sendBank)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        const json = await res.json().catch(() => ({}))
+        if (res.ok) {
+          setBankUsers(json.items || [])
+          const def = (json.items || []).find(u => u.is_default)
+          setSelectedUserIds(def ? [def.id] : [])
+        }
+      } catch {}
+    })()
+  }, [sendBank])
 
   // Permissão para envio em lote
   useEffect(() => {
@@ -120,6 +141,7 @@ export default function ConsultaLotePage() {
 
   const onSend = async () => {
     if (!csvText || !sendProduct || !sendBank) return
+    const effectiveUserIds = selectAllUsers ? bankUsers.map(u => u.id) : selectedUserIds
     
     // Validar se o usuário do banco específico está preenchido
     try {
@@ -168,7 +190,7 @@ export default function ConsultaLotePage() {
       setMessage('')
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-  const res = await fetch('/api/importar', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ csv: csvText, produto: sendProduct, banco: sendBank, fileName }) })
+  const res = await fetch('/api/lote', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ csv: csvText, produto: sendProduct, banco: sendBank, fileName, bankUserIds: effectiveUserIds }) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Falha ao enviar lote')
   setMessage('Lote enviado para processamento.')
@@ -185,7 +207,7 @@ export default function ConsultaLotePage() {
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch(`/api/importar?downloadId=${encodeURIComponent(id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+      const res = await fetch(`/api/lote?downloadId=${encodeURIComponent(id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       if (!res.ok) return
       
       // Download direto do CSV retornado pela API, preservando TODAS as colunas
@@ -214,7 +236,7 @@ export default function ConsultaLotePage() {
       setMessage('')
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch('/api/importar', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id }) })
+      const res = await fetch('/api/lote', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id }) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Falha ao reprocessar lote')
       setMessage(json?.dedup ? 'Reprocessamento já em andamento.' : 'Webhook disparado para o lote.')
@@ -234,7 +256,7 @@ export default function ConsultaLotePage() {
       setMessage('')
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
-      const res = await fetch('/api/importar', { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id }) })
+      const res = await fetch('/api/lote', { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ id }) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Falha ao cancelar lote')
   setMessage('Lote cancelado com sucesso.')
@@ -335,8 +357,42 @@ export default function ConsultaLotePage() {
                 <Input type="file" accept=".csv,text/csv" onChange={onFileChange} />
                 {fileName ? <div className="text-xs text-muted-foreground">Selecionado: {fileName}</div> : null}
               </div>
+              {sendBank && bankUsers.length > 0 && (
+                <div className="md:col-span-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-muted-foreground">Usuários do banco</div>
+                    <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
+                      <input type="checkbox" className="scale-90" checked={selectAllUsers} onChange={(e)=> { const chk = e.target.checked; setSelectAllUsers(chk); setSelectedUserIds(chk ? bankUsers.map(u=>u.id) : []) }} /> Selecionar todos
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {bankUsers.map(u => {
+                      const checked = selectAllUsers || selectedUserIds.includes(u.id)
+                      return (
+                        <label key={u.id} className={`text-[11px] px-2 py-1 rounded border cursor-pointer ${checked ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                          <input
+                            type="checkbox"
+                            className="mr-1 align-middle scale-90"
+                            checked={checked}
+                            onChange={(e)=> {
+                              const isChecked = e.target.checked
+                              setSelectAllUsers(false)
+                              setSelectedUserIds(prev => {
+                                if (isChecked) return [...prev, u.id]
+                                return prev.filter(id => id !== u.id)
+                              })
+                            }}
+                          />
+                          {u.alias}{u.is_default ? ' (padrão)' : ''}
+                        </label>
+                      )
+                    })}
+                  </div>
+                  {selectedUserIds.length === 0 && !selectAllUsers && <div className="text-[11px] text-amber-600">Selecione ao menos um usuário ou marque "Selecionar todos".</div>}
+                </div>
+              )}
               <div className="md:col-span-4 flex gap-2">
-                <Button onClick={onSend} disabled={sending || !csvText || !sendProduct || !sendBank}>{sending ? 'Enviando...' : 'Enviar'}</Button>
+                <Button onClick={onSend} disabled={sending || !csvText || !sendProduct || !sendBank || (bankUsers.length>0 && !selectAllUsers && selectedUserIds.length===0)}>{sending ? 'Enviando...' : 'Enviar'}</Button>
                 <Button variant="outline" onClick={() => { setCsvText(''); setFileName(''); }} disabled={!csvText}>Limpar arquivo</Button>
               </div>
             </div>
