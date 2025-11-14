@@ -278,8 +278,8 @@ export async function GET(request) {
           .eq('cliente', loteOwnerEmail)
           .eq('lote_id', it.originalLoteId)
           .eq('consultado', true)
-        const percent = total ? Math.round(((con || 0) / total) * 100) : 0
-        it.progress = { done: con || 0, total: total || 0, percent }
+        const percent = total ? Math.round(((done || 0) / total) * 100) : 0
+        it.progress = { done: done || 0, total: total || 0, percent }
         if (percent === 100 && it.status !== 'concluido') it.status = 'concluido'
       } else {
         it.progress = { done: 0, total: it.count || 0, percent: 0 }
@@ -515,7 +515,7 @@ export async function DELETE(request) {
     if (error) return NextResponse.json({ error: 'Delete failed', details: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
   } catch (e) {
-    return NextResponse.json({ error: 'Request failed', details: e.message }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
   }
 }
 
@@ -609,7 +609,6 @@ export async function PUT(request) {
 
     return NextResponse.json({ ok: true })
   } catch (e) {
-    return NextResponse.json({ error: 'Request failed', details: e.message }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid payload', details: e.message }, { status: 400 })
   }
 }
-
