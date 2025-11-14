@@ -177,7 +177,11 @@ export default function DisparoSmsPage() {
     if (!file) return
     const text = await file.text()
     setCsvText(text)
-    setCsvRows(parseCsv(text))
+    const parsed = parseCsv(text)
+    console.log(`📄 [SMS] Arquivo carregado: ${file.name}`)
+    console.log(`📄 [SMS] Linhas totais no CSV: ${text.split(/\r?\n/).filter(l => l.trim().length > 0).length}`)
+    console.log(`📄 [SMS] Linhas parseadas (sem header): ${parsed.length}`)
+    setCsvRows(parsed)
   }
 
   const importRows = async () => {
@@ -192,36 +196,69 @@ export default function DisparoSmsPage() {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
       const segmentId = selectedSegmentId && selectedSegmentId !== 'default' ? parseInt(selectedSegmentId, 10) : null
-      const payload = { 
-        message_template: messageTemplate,
-        tenant_segment_id: segmentId,
-        reference_prefix: referencePrefix || null,
-        rows: csvRows 
+      
+      // Dividir em chunks de 1000 linhas
+      const CHUNK_SIZE = 1000
+      const chunks = []
+      for (let i = 0; i < csvRows.length; i += CHUNK_SIZE) {
+        const chunk = csvRows.slice(i, i + CHUNK_SIZE)
+        chunks.push(chunk)
+        console.log(`📨 [SMS Frontend] Chunk ${chunks.length}: ${chunk.length} linhas (índice ${i} até ${i + chunk.length - 1})`)
       }
-      const res = await fetch('/api/disparo-sms/import', { 
-        method: 'POST', 
-        headers: { 
-          'Content-Type': 'application/json', 
-          ...(token ? { Authorization: `Bearer ${token}` } : {}) 
-        }, 
-        body: JSON.stringify(payload) 
-      })
-      let data = {}
-      try {
-        data = await res.json()
-      } catch (parseErr) {
-        console.error('Falha ao parsear resposta JSON da importação:', parseErr)
-        setError('Resposta inválida do servidor ao importar')
-        setLoading(false)
-        return
+      
+      console.log(`📨 [SMS Frontend] Total: ${csvRows.length} linhas divididas em ${chunks.length} campanha(s)`)
+      console.log(`📨 [SMS Frontend] Tamanhos dos chunks:`, chunks.map((c, i) => `Chunk ${i+1}: ${c.length}`).join(', '))
+      
+      const createdBatches = []
+      let totalInserted = 0
+      
+      // Importar cada chunk sequencialmente
+      for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+        const chunk = chunks[chunkIndex]
+        console.log(`📨 [SMS Frontend] Importando campanha ${chunkIndex + 1}/${chunks.length} (${chunk.length} linhas)...`)
+        
+        setMessage(`Importando campanha ${chunkIndex + 1} de ${chunks.length}... (${chunk.length} linhas)`)
+        
+        const payload = { 
+          message_template: messageTemplate,
+          tenant_segment_id: segmentId,
+          reference_prefix: referencePrefix || null,
+          rows: chunk 
+        }
+        
+        const res = await fetch('/api/disparo-sms/import', { 
+          method: 'POST', 
+          headers: { 
+            'Content-Type': 'application/json', 
+            ...(token ? { Authorization: `Bearer ${token}` } : {}) 
+          }, 
+          body: JSON.stringify(payload) 
+        })
+        
+        let data = {}
+        try {
+          data = await res.json()
+        } catch (parseErr) {
+          console.error('Falha ao parsear resposta JSON da importação:', parseErr)
+          setError(`Erro na campanha ${chunkIndex + 1}: Resposta inválida do servidor`)
+          setLoading(false)
+          return
+        }
+        
+        if (res.ok) {
+          createdBatches.push(data.batch_id)
+          totalInserted += data.inserted || 0
+          console.log(`✅ [SMS Frontend] Campanha ${chunkIndex + 1}/${chunks.length} criada: ${data.batch_id} (${data.inserted} registros)`)
+        } else {
+          setError(`Erro na campanha ${chunkIndex + 1}: ${data?.error || 'Falha ao importar'}`)
+          setLoading(false)
+          return
+        }
       }
-      if (res.ok) {
-        setMessage(`Importação concluída. ${data.inserted || 0} registros. Batch: ${data.batch_id}`)
-        setBatchId(data.batch_id)
-        setCampaignsRefreshKey(k => k + 1)
-      } else {
-        setError(data?.error || 'Falha ao importar')
-      }
+      
+      setMessage(`✅ Importação concluída! ${chunks.length} campanha(s) criada(s) com ${totalInserted} registros no total.`)
+      setBatchId(createdBatches[0]) // Define o primeiro batch como padrão
+      setCampaignsRefreshKey(k => k + 1)
     } catch (e) {
       console.error('Erro inesperado ao importar:', e)
       setError('Erro inesperado ao importar: ' + (e.message || ''))

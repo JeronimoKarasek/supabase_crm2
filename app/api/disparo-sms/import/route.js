@@ -41,6 +41,9 @@ export async function POST(request) {
     const message_template = body?.message_template || ''
     const tenant_segment_id = body?.tenant_segment_id || null
     const reference_prefix = body?.reference_prefix || ''
+    
+    console.log(`📨 [SMS Import] Recebido: ${rows.length} linhas no CSV`)
+    
     if (!rows.length || !message_template) {
       return NextResponse.json({ error: 'Parâmetros insuficientes' }, { status: 400 })
     }
@@ -70,7 +73,7 @@ export async function POST(request) {
     }
 
     // Preparar todos os registros primeiro (filtrar inválidos)
-    const allMapped = rows.map((r) => {
+    const allMappedBeforeFilter = rows.map((r) => {
       const phone = String(r.phone || '').replace(/\D/g, '')
       const message = replaceVariables(message_template, r)
       const ref = reference_prefix ? `${reference_prefix}_${phone}` : null
@@ -87,67 +90,46 @@ export async function POST(request) {
         status: 'queued',
         attempt_count: 0,
       }
-    }).filter(r => r.phone.length >= 10) // Filtrar telefones inválidos
+    })
+    
+    const allMapped = allMappedBeforeFilter.filter(r => r.phone.length >= 10) // Filtrar telefones inválidos
+    const invalidCount = allMappedBeforeFilter.length - allMapped.length
 
     if (!allMapped.length) {
       return NextResponse.json({ error: 'Nenhum telefone válido encontrado' }, { status: 400 })
     }
 
-    console.log(`📨 [SMS Import] Total de ${allMapped.length} registros válidos`)
+    console.log(`📨 [SMS Import] Total de ${allMapped.length} registros válidos (${invalidCount} telefones inválidos removidos)`)
 
-    // Dividir em lotes de no máximo 1000 linhas
-    const BATCH_SIZE = 1000
-    const batches = []
-    for (let i = 0; i < allMapped.length; i += BATCH_SIZE) {
-      batches.push(allMapped.slice(i, i + BATCH_SIZE))
-    }
+    const batch_id = uuidv4()
 
-    console.log(`📨 [SMS Import] Dividindo em ${batches.length} campanha(s)`)
+    // Adicionar batch_id, created_at e updated_at em cada registro
+    const recordsWithBatchId = allMapped.map(r => ({
+      ...r,
+      batch_id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }))
 
-    const batchIds = []
-    let totalInserted = 0
-
-    // Criar uma campanha separada para cada lote
-    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-      const batchChunk = batches[batchIndex]
-      const batch_id = uuidv4()
-      
-      // Adicionar batch_id, created_at e updated_at em cada registro
-      const recordsWithBatchId = batchChunk.map(r => ({
-        ...r,
-        batch_id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }))
-
-      try {
-        const { error } = await supabaseAdmin.from('sms_disparo').insert(recordsWithBatchId)
-        if (error) {
-          if (error?.message?.toLowerCase()?.includes('does not exist') || error?.code === '42P01') {
-            return NextResponse.json({ 
-              error: 'Tabela sms_disparo não encontrada. Execute o SQL sugerido.', 
-              missingTable: true 
-            }, { status: 400 })
-          }
-          console.error(`❌ [SMS Import] Erro ao inserir lote ${batchIndex + 1}:`, error)
-          return NextResponse.json({ error: 'Falha ao inserir base', details: error.message }, { status: 400 })
+    try {
+      const { error } = await supabaseAdmin.from('sms_disparo').insert(recordsWithBatchId)
+      if (error) {
+        if (error?.message?.toLowerCase()?.includes('does not exist') || error?.code === '42P01') {
+          return NextResponse.json({ 
+            error: 'Tabela sms_disparo não encontrada. Execute o SQL sugerido.', 
+            missingTable: true 
+          }, { status: 400 })
         }
-        batchIds.push(batch_id)
-        totalInserted += recordsWithBatchId.length
-        console.log(`✅ [SMS Import] Campanha ${batchIndex + 1}/${batches.length} criada: ${batch_id} (${recordsWithBatchId.length} registros)`)
-      } catch (e) {
-        console.error(`❌ [SMS Import] Exception ao inserir lote ${batchIndex + 1}:`, e)
-        return NextResponse.json({ error: 'Falha ao inserir base', details: e.message }, { status: 400 })
+        console.error(`❌ [SMS Import] Erro ao inserir:`, error)
+        return NextResponse.json({ error: 'Falha ao inserir base', details: error.message }, { status: 400 })
       }
+      console.log(`✅ [SMS Import] Campanha criada: ${batch_id} (${recordsWithBatchId.length} registros)`)
+    } catch (e) {
+      console.error(`❌ [SMS Import] Exception ao inserir:`, e)
+      return NextResponse.json({ error: 'Falha ao inserir base', details: e.message }, { status: 400 })
     }
 
-    return NextResponse.json({ 
-      ok: true, 
-      batch_id: batchIds[0], // Retorna primeiro batch_id para compatibilidade
-      batch_ids: batchIds, // Array com todos os batch_ids criados
-      campaigns_created: batches.length,
-      inserted: totalInserted 
-    })
+    return NextResponse.json({ ok: true, batch_id, inserted: allMapped.length })
   } catch (e) {
     return NextResponse.json({ error: 'Payload inválido', details: e.message }, { status: 400 })
   }
