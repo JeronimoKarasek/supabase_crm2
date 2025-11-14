@@ -341,7 +341,21 @@ export async function POST(request) {
   try {
     const user = await getUserFromRequest(request)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const body = await request.json()
+    // Parse body com fallback para texto bruto (caso não seja application/json)
+    let body
+    try {
+      body = await request.json()
+    } catch {
+      try {
+        const raw = await request.text()
+        body = JSON.parse(raw)
+      } catch (e) {
+        return NextResponse.json({ error: 'Payload deve ser JSON', hint: 'Envie Content-Type: application/json', required: ['csv','produto','banco'] }, { status: 400 })
+      }
+    }
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Corpo inválido', required: ['csv','produto','banco'] }, { status: 400 })
+    }
     const rows = parseCsv(body.csv || '')
     const produto = body.produto || ''
     const bancoKey = body.banco || ''
@@ -349,6 +363,17 @@ export async function POST(request) {
 
     const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`
   const fileName = (body.fileName || '').toString().trim() || null
+
+    // Valida campos obrigatórios
+    const problems = []
+    if (!body.csv || typeof body.csv !== 'string' || !body.csv.trim()) problems.push('csv')
+    if (!produto) problems.push('produto')
+    if (!bancoKey) problems.push('banco')
+    if (problems.length) {
+      return NextResponse.json({ error: 'Campos obrigatórios ausentes', missing: problems }, { status: 400 })
+    }
+
+    console.info(`[Lote] Recebido payload: banco=${bancoKey} produto=${produto} csvLen=${body.csv.length} fileName=${fileName || 'N/A'} users=${bankUserIds.length}`)
 
     // Map bank key -> bank name from global settings
     let bancoName = bancoKey
@@ -430,9 +455,9 @@ export async function POST(request) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             banco: bancoKey,
-            bancoName: bancoName,
+            nomeBanco: bancoName,
             produto,
-            credentialsList,
+            credencialList: credentialsList,
             itemId: id,
             email: user.email,
             userId: user.id,
@@ -600,9 +625,9 @@ export async function PUT(request) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         banco: bank.key,
-        bancoName: bank.name,
+        nomeBanco: bank.name,
         produto: lote.produto,
-        credentialsList,
+        credencialList: credentialsList,
         itemId: id,
         email: user.email,
         userId: user.id,
