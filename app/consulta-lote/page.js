@@ -129,10 +129,24 @@ export default function ConsultaLotePage() {
   const onFileChange = async (e) => {
     try {
       const f = e?.target?.files?.[0]
-      if (!f) { setFileName(''); setCsvText(''); return }
-      setFileName(f.name)
+      if (!f) { setFileName(''); setCsvText(''); setError(''); return }
       const text = await f.text().catch(() => '')
+      
+      // Validar limite de 5000 linhas
+      const lines = (text || '').split(/\r?\n/).filter(l => l.trim().length > 0)
+      const dataLines = lines.length > 0 ? lines.length - 1 : 0 // Remove cabeçalho
+      
+      if (dataLines > 5000) {
+        setError(`O arquivo contém ${dataLines.toLocaleString('pt-BR')} linhas. O limite máximo é de 5.000 linhas por lote.`)
+        setFileName('')
+        setCsvText('')
+        e.target.value = '' // Limpa o input
+        return
+      }
+      
+      setFileName(f.name)
       setCsvText(text || '')
+      setError('') // Limpa erro anterior se houver
     } catch {
       setFileName('')
       setCsvText('')
@@ -355,7 +369,11 @@ export default function ConsultaLotePage() {
               <div className="space-y-1 md:col-span-2">
                 <div className="text-xs text-muted-foreground">Arquivo CSV</div>
                 <Input type="file" accept=".csv,text/csv" onChange={onFileChange} />
-                {fileName ? <div className="text-xs text-muted-foreground">Selecionado: {fileName}</div> : null}
+                {fileName ? (
+                  <div className="text-xs text-muted-foreground">Selecionado: {fileName}</div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">Limite máximo: 5.000 linhas por lote</div>
+                )}
               </div>
               {sendBank && bankUsers.length > 0 && (
                 <div className="md:col-span-4 space-y-2">
