@@ -85,7 +85,11 @@ export default function SimularDigitarPage() {
       t.promise
         .then(async (res) => {
           const json = await res.json().catch(() => ({}))
-          if (!res.ok) throw new Error(json?.error || json?.message || `HTTP ${res.status}`)
+          if (!res.ok) {
+            // Mostrar erro ou mensagem retornada pelo endpoint
+            const errorMsg = json?.error || json?.message || json?.mensagem || `Erro HTTP ${res.status}`
+            throw new Error(cleanBankErrorMessage(errorMsg))
+          }
           const updatedBank = json.results?.[0]
           setResults(prev => prev.map(r => {
             if (r.bankKey !== t.bankKey) return r
@@ -97,13 +101,14 @@ export default function SimularDigitarPage() {
           }))
         })
         .catch((e) => {
+          // Mostra a mensagem de erro completa retornada
+          const msg = cleanBankErrorMessage(e?.message || e?.toString() || 'Erro desconhecido')
+          console.log('[Simulação Erro]', t.bankKey, t.product, msg)
           setResults(prev => prev.map(r => {
             if (r.bankKey !== t.bankKey) return r
             const idx = r.products.findIndex(p => p.product === t.product)
             const next = [...r.products]
-            // Formata mensagem de erro amigável
-            let msg = cleanBankErrorMessage(e.message)
-            next[idx >= 0 ? idx : 0] = { product: t.product, error: msg, loading: false }
+            next[idx >= 0 ? idx : 0] = { product: t.product, error: msg, loading: false, data: null }
             return { ...r, products: next }
           }))
         })
@@ -188,15 +193,26 @@ export default function SimularDigitarPage() {
       })
       
       const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'Falha ao enviar digitação')
       
-      setOpen(false)
-      
-      // Extrai link da resposta normalizada
+      // SEMPRE mostrar a mensagem/erro retornado, mesmo se for erro HTTP
       const resp = json?.response || {}
       const url = resp.link || ''
-      const mensagem = cleanBankErrorMessage(resp.mensagem || resp.status || '')
+      const mensagem = cleanBankErrorMessage(
+        resp.mensagem || 
+        resp.status || 
+        resp.message || 
+        json?.error || 
+        json?.message || 
+        (res.ok ? 'Sucesso' : `Erro HTTP ${res.status}`)
+      )
       const protocolo = resp.protocolo || ''
+      
+      // Se houve erro HTTP, mas temos resposta do webhook, mostra ela
+      if (!res.ok && !url && !resp.mensagem && !resp.status) {
+        throw new Error(json?.error || json?.message || 'Falha ao enviar digitação')
+      }
+      
+      setOpen(false)
       
       // Atualiza resultados com dados da digitação
       setResults(prev => prev.map(r => {
@@ -208,27 +224,46 @@ export default function SimularDigitarPage() {
         return { ...r, products: next }
       }))
       
-      // Se retornou link, mostra popup
+      // SEMPRE abre popup: com link OU com mensagem de erro
+      const finalMensagem = url 
+        ? (mensagem || 'Link de formalização disponível')
+        : (mensagem || 'Serviço indisponível no momento')
+      
+      setLinkData({ 
+        url: url || null, 
+        mensagem: finalMensagem, 
+        protocolo: protocolo || null,
+        bankName: currentBank.name, 
+        product: currentProduct,
+        hasError: !url
+      })
+      setLinkPopupOpen(true)
+      
+      // Mensagem no topo (apenas informativa)
       if (url) {
-        setLinkData({ 
-          url, 
-          mensagem: mensagem || 'Link de formalização disponível', 
-          protocolo,
-          bankName: currentBank.name, 
-          product: currentProduct 
-        })
-        setLinkPopupOpen(true)
         setMessage('✅ Link de formalização recebido!')
-        setTimeout(()=>setMessage(''), 3000)
       } else {
-        // Sem link - mostra mensagem de sucesso
-        setMessage(mensagem || '✅ Digitação enviada com sucesso')
-        setTimeout(()=>setMessage(''), 3000)
+        setMessage('⚠️ ' + finalMensagem)
       }
+      setTimeout(()=>setMessage(''), 4000)
     } catch (e) {
       const clean = cleanBankErrorMessage(e?.message)
+      
+      // Fecha dialog de digitação e abre popup de erro
+      setOpen(false)
+      
+      setLinkData({ 
+        url: null, 
+        mensagem: clean || 'Erro ao enviar digitação', 
+        protocolo: null,
+        bankName: currentBank.name, 
+        product: currentProduct,
+        hasError: true
+      })
+      setLinkPopupOpen(true)
+      
       setMessage(`❌ ${clean || 'Erro ao enviar'}`)
-      setTimeout(()=>setMessage(''), 3000)
+      setTimeout(()=>setMessage(''), 4000)
     } finally {
       setDigLoading(false)
     }
@@ -321,7 +356,15 @@ export default function SimularDigitarPage() {
                             Carregando...
                           </div>
                         ) : item.error ? (
-                          <div className="text-destructive text-sm">{item.error}</div>
+                          <div className="border-l-4 border-destructive bg-destructive/10 p-3 rounded">
+                            <div className="flex items-start gap-2">
+                              <span className="text-destructive text-lg">⚠️</span>
+                              <div className="flex-1">
+                                <div className="font-medium text-destructive text-sm mb-1">Erro na simulação</div>
+                                <div className="text-destructive/90 text-sm">{item.error}</div>
+                              </div>
+                            </div>
+                          </div>
                         ) : (
                           <div className="space-y-2 text-sm">
                             {/* Valor liberado centralizado se existir */}
@@ -439,14 +482,14 @@ export default function SimularDigitarPage() {
         <Dialog open={linkPopupOpen} onOpenChange={setLinkPopupOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>🎉 Link de Formalização Disponível</DialogTitle>
+              <DialogTitle>{linkData?.hasError ? '⚠️ Erro na Digitação' : '🎉 Link de Formalização Disponível'}</DialogTitle>
               <DialogDescription>
                 {linkData?.bankName} {linkData?.product ? `- ${linkData.product}` : ''}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               {linkData?.mensagem && (
-                <div className="text-sm text-muted-foreground border-l-4 border-primary pl-3">
+                <div className={`text-sm border-l-4 pl-3 p-3 rounded ${linkData?.hasError ? 'border-destructive bg-destructive/10 text-destructive' : 'border-primary bg-muted/50 text-muted-foreground'}`}>
                   {linkData.mensagem}
                 </div>
               )}
@@ -457,33 +500,27 @@ export default function SimularDigitarPage() {
                 </div>
               )}
               
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Link para formalização:</div>
-                <div className="flex gap-2">
-                  <div className="flex-1 border rounded px-3 py-2 bg-muted/50 overflow-x-auto text-sm font-mono break-all">
-                    {linkData?.url}
+              {linkData?.url && (
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">Link para formalização:</div>
+                  <div className="flex gap-2">
+                    <div className="flex-1 border rounded px-3 py-2 bg-muted/50 overflow-x-auto text-sm font-mono break-all">
+                      {linkData.url}
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => copyToClipboard(linkData.url)}
+                      className="shrink-0"
+                      title="Copiar link"
+                    >
+                      📋 Copiar
+                    </Button>
                   </div>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => copyToClipboard(linkData?.url)}
-                    className="shrink-0"
-                    title="Copiar link"
-                  >
-                    📋 Copiar
-                  </Button>
                 </div>
-              </div>
+              )}
 
-              <div className="flex gap-2">
+              <div className="flex justify-end">
                 <Button 
-                  className="flex-1" 
-                  onClick={() => window.open(linkData?.url, '_blank')}
-                >
-                  🔗 Abrir em nova aba
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="flex-1"
                   onClick={() => setLinkPopupOpen(false)}
                 >
                   Fechar

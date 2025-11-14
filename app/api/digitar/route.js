@@ -37,14 +37,19 @@ export async function POST(request) {
     }
     if (!target) return NextResponse.json({ error: 'Webhook digitar não configurado' }, { status: 400 })
 
-    // Load user credentials for this bank
-    const { data: credRow } = await supabaseAdmin
-      .from('bank_credentials')
-      .select('credentials')
+    // Load user credentials for this bank (busca credencial padrão is_default=true)
+    const { data: credsRows } = await supabaseAdmin
+      .from('bank_user_credentials')
+      .select('credentials, is_default')
       .eq('user_id', user.id)
       .eq('bank_key', bankKey)
-      .single()
-    const credentials = credRow?.credentials || {}
+    
+    // Prioriza credencial padrão (is_default=true), senão usa a primeira
+    let credentials = {}
+    if (credsRows && credsRows.length > 0) {
+      const defaultCred = credsRows.find(c => c.is_default)
+      credentials = (defaultCred || credsRows[0])?.credentials || {}
+    }
 
     // Chama webhook e AGUARDA resposta síncrona (igual simulador)
     const res = await fetch(target, {

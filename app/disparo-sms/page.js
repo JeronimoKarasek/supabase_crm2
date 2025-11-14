@@ -41,8 +41,6 @@ export default function DisparoSmsPage() {
   const [chunkSize, setChunkSize] = useState('') // tamanho por lote (cliente)
   const [chunkIntervalSec, setChunkIntervalSec] = useState('') // minutos entre lotes (cliente)
   const [sendingScheduler, setSendingScheduler] = useState({ active: false, nextAt: null, intervalId: null })
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
-  const [confirmData, setConfirmData] = useState(null)
   // Jobs (após envio) e métricas locais por sessão
   const [jobStates, setJobStates] = useState({}) // { batchId: { smsJob, status: 'running'|'paused', metrics: {...} } }
   const [showDetails, setShowDetails] = useState(false)
@@ -271,49 +269,7 @@ export default function DisparoSmsPage() {
     const bid = idOptional || batchId
     if (!bid) { setError('Nenhum batch selecionado ou importado.'); return }
     
-    // Buscar quantos números válidos serão enviados
-    try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData?.session?.access_token
-      
-      // Consultar quantos registros válidos existem no batch
-      const statusFilter = includeFailed ? 'failed' : 'queued'
-      
-      const { count, error: countError } = await supabase
-        .from('sms_disparo')
-        .select('*', { count: 'exact', head: true })
-        .eq('batch_id', bid)
-        .eq('status', statusFilter)
-      
-      if (countError) {
-        console.error('[SMS] Erro ao contar:', countError)
-        setError('Erro ao calcular quantidade de SMS')
-        return
-      }
-      
-      const validCount = count || 0
-      const costPerSms = Number(smsMessageValue) || 0
-      const totalCost = validCount * costPerSms
-      
-      setConfirmData({
-        bid,
-        includeFailed,
-        validCount,
-        costPerSms,
-        totalCost
-      })
-      setShowConfirmDialog(true)
-    } catch (e) {
-      console.error('[SMS] Exception ao preparar envio:', e)
-      setError('Erro ao calcular custos: ' + e.message)
-    }
-  }
-
-  const confirmarEnvio = async () => {
-    if (!confirmData) return
-    setShowConfirmDialog(false)
-    
-    const { bid, includeFailed } = confirmData
+    // Enviar DIRETO sem confirmação
     try {
       setLoading(true)
       setError('')
@@ -330,7 +286,7 @@ export default function DisparoSmsPage() {
       })
       const data = await res.json()
       if (res.ok) {
-        const msg = `✅ Envio concluído! Válidos: ${data.valid || 0}, Inválidos: ${data.invalid || 0}, Blacklist: ${data.blacklist || 0}, Não Perturbe: ${data.not_disturb || 0}. Créditos debitados: R$ ${(data.credits?.totalUnits * data.credits?.unitBRL || 0).toFixed(2)}`
+        const msg = `✅ Envio concluído! Disponíveis: ${data.valid || 0}, Inválidos: ${data.invalid || 0}, Blacklist: ${data.blacklist || 0}, Não Perturbe: ${data.not_disturb || 0}. Créditos debitados: R$ ${(data.credits?.totalUnits * data.credits?.unitBRL || 0).toFixed(2)}`
         setMessage(msg)
         setCampaignsRefreshKey(k => k + 1)
         loadBalance()
@@ -338,12 +294,12 @@ export default function DisparoSmsPage() {
         if (data.smsJob) {
           setJobStates(prev => ({
             ...prev,
-            [confirmData.bid]: {
+            [bid]: {
               smsJob: data.smsJob,
               status: 'running',
               metrics: {
                 sent: data.sent || 0,
-                delivered: data.sent || 0, // aproximação inicial
+                delivered: data.sent || 0,
                 failed: data.failed || 0,
                 replies: 0,
                 total: (data.sent || 0) + (data.failed || 0)
@@ -358,11 +314,11 @@ export default function DisparoSmsPage() {
       setError('Erro inesperado no envio')
     } finally {
       setLoading(false)
-      setConfirmData(null)
-      // Limpar estado de envio após completar
       window.clearSendingBatch?.()
     }
   }
+
+
 
   // Função auxiliar para envio direto (sem confirmação)
   const enviarDireto = async (bid, includeFailed = false) => {
@@ -773,49 +729,7 @@ export default function DisparoSmsPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog de Confirmação de Envio */}
-      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirmar Envio de SMS</DialogTitle>
-            <DialogDescription>
-              Revise os detalhes antes de confirmar o envio da campanha
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Números válidos:</span>
-                <span className="text-lg font-bold text-green-600">{confirmData?.validCount || 0}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Custo por SMS:</span>
-                <span className="text-sm">R$ {(confirmData?.costPerSms || 0).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between items-center pt-2 border-t">
-                <span className="text-sm font-bold">Total a ser debitado:</span>
-                <span className="text-xl font-bold text-red-600">R$ {(confirmData?.totalCost || 0).toFixed(2)}</span>
-              </div>
-            </div>
-            <Alert className="border-l-4 border-l-amber-500 bg-amber-50 dark:bg-amber-950/20">
-              <AlertCircle className="h-4 w-4 text-amber-600" />
-              <AlertDescription className="text-amber-800 dark:text-amber-200">
-                <strong>Atenção:</strong> Os créditos serão debitados automaticamente. Esta ação não pode ser desfeita.
-              </AlertDescription>
-            </Alert>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowConfirmDialog(false); setConfirmData(null) }}>
-              <X className="h-4 w-4 mr-2" />
-              Cancelar
-            </Button>
-            <Button onClick={confirmarEnvio} className="bg-green-600 hover:bg-green-700">
-              <Send className="h-4 w-4 mr-2" />
-              Confirmar e Enviar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
 
       {/* Dialog Detalhes de Jobs */}
       <Dialog open={showDetails} onOpenChange={setShowDetails}>
@@ -1062,6 +976,7 @@ function RelatoriosCampanhas({ jobStates, setShowDetails, setDetailsData }) {
   const [batches, setBatches] = useState([])
   const [error, setError] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  const [smsMessageValue, setSmsMessageValue] = useState(0)
   const itemsPerPage = 10
   // Modal respostas (quantity-jobs)
   const [showReplies, setShowReplies] = useState(false)
@@ -1075,6 +990,12 @@ function RelatoriosCampanhas({ jobStates, setShowDetails, setDetailsData }) {
       setLoading(true); setError('')
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData?.session?.access_token
+      
+      // Buscar valor do SMS das configurações
+      const settingsRes = await fetch('/api/global-settings')
+      const settingsData = await settingsRes.json()
+      setSmsMessageValue(Number(settingsData?.settings?.smsMessageValue || 0))
+      
       const res = await fetch('/api/disparo-sms/batches', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       const js = await res.json()
       if (!res.ok) {
@@ -1082,7 +1003,11 @@ function RelatoriosCampanhas({ jobStates, setShowDetails, setDetailsData }) {
         setBatches([])
         return
       }
-      setBatches(js.batches || [])
+      
+      // Filtrar apenas campanhas que foram enviadas (sent > 0)
+      const allBatches = js.batches || []
+      const sentBatches = allBatches.filter(b => (b.counts?.sent || 0) > 0)
+      setBatches(sentBatches)
     } catch (e) {
       setError('Erro inesperado')
     } finally {
@@ -1093,6 +1018,11 @@ function RelatoriosCampanhas({ jobStates, setShowDetails, setDetailsData }) {
   const totalMsgs = batches.reduce((acc, b) => acc + (b.counts?.total || 0), 0)
   const totalEnviadas = batches.reduce((acc, b) => acc + (b.counts?.sent || 0), 0)
   const totalFalhas = batches.reduce((acc, b) => acc + (b.counts?.failed || 0), 0)
+  const totalInvalidos = batches.reduce((acc, b) => acc + (b.counts?.failed || 0), 0)
+  const totalBlacklist = batches.reduce((acc, b) => acc + (b.counts?.blacklist || 0), 0)
+  const totalNaoPerturbe = batches.reduce((acc, b) => acc + (b.counts?.not_disturb || 0), 0)
+  const totalDisponivel = batches.reduce((acc, b) => acc + (b.counts?.sent || 0), 0)
+  const totalValor = totalDisponivel * smsMessageValue
   
   const totalPages = Math.ceil(batches.length / itemsPerPage)
   const startIdx = (currentPage - 1) * itemsPerPage
@@ -1114,37 +1044,83 @@ function RelatoriosCampanhas({ jobStates, setShowDetails, setDetailsData }) {
 
   return (
     <div className="space-y-4">
-      <Card>
+      {/* Card de Resumo Visual - Igual ao Print */}
+      <Card className="border-l-4 border-l-teal-500">
         <CardHeader>
-          <CardTitle>Resumo Geral</CardTitle>
-          <CardDescription>Indicadores agregados conforme sua hierarquia</CardDescription>
-          <div className="mt-2">
-            <Button size="sm" variant="outline" onClick={() => { setShowReplies(true); loadReplies(168) }}>Detalhes (Respostas)</Button>
-          </div>
+          <CardTitle className="flex items-center justify-between">
+            <span>Resumo de Validação</span>
+            <Badge variant="outline" className="text-lg font-bold">
+              Valor Total: R$ {totalValor.toFixed(2)}
+            </Badge>
+          </CardTitle>
+          <CardDescription>Números disponíveis, inválidos e bloqueados</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="p-3 rounded border bg-muted/50">
-            <div className="text-xs text-muted-foreground">Total Mensagens</div>
-            <div className="text-lg font-semibold">{totalMsgs}</div>
-          </div>
-          <div className="p-3 rounded border bg-muted/50">
-            <div className="text-xs text-muted-foreground">Enviadas</div>
-            <div className="text-lg font-semibold text-green-600 dark:text-green-400">{totalEnviadas}</div>
-          </div>
-          <div className="p-3 rounded border bg-muted/50">
-            <div className="text-xs text-muted-foreground">Falhas</div>
-            <div className="text-lg font-semibold text-red-600 dark:text-red-400">{totalFalhas}</div>
-          </div>
-          <div className="p-3 rounded border bg-muted/50">
-            <div className="text-xs text-muted-foreground">Campanhas</div>
-            <div className="text-lg font-semibold">{batches.length}</div>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Disponível */}
+            <div className="p-4 rounded-lg border-2 border-green-200 bg-green-50 dark:bg-green-950/20">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-sm font-medium text-green-800 dark:text-green-200">Disponível (para envio)</span>
+                <span className="text-xs text-green-600 dark:text-green-400">
+                  {totalMsgs > 0 ? ((totalDisponivel / totalMsgs) * 100).toFixed(2) : 0}%
+                </span>
+              </div>
+              <div className="text-3xl font-bold text-green-700 dark:text-green-300">{totalDisponivel}</div>
+              <div className="text-xs text-green-600 dark:text-green-400 mt-1">% disponível</div>
+            </div>
+            
+            {/* Inválidos */}
+            <div className="p-4 rounded-lg border-2 border-red-200 bg-red-50 dark:bg-red-950/20">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-sm font-medium text-red-800 dark:text-red-200">Inválidos</span>
+                <span className="text-xs text-red-600 dark:text-red-400">
+                  {totalMsgs > 0 ? ((totalInvalidos / totalMsgs) * 100).toFixed(2) : 0}%
+                </span>
+              </div>
+              <div className="text-3xl font-bold text-red-700 dark:text-red-300">{totalInvalidos}</div>
+              <div className="text-xs text-red-600 dark:text-red-400 mt-1">% inválidos</div>
+            </div>
+            
+            {/* Não Perturbe */}
+            <div className="p-4 rounded-lg border-2 border-orange-200 bg-orange-50 dark:bg-orange-950/20">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-sm font-medium text-orange-800 dark:text-orange-200">Números no não perturbe</span>
+                <span className="text-xs text-orange-600 dark:text-orange-400">
+                  {totalMsgs > 0 ? ((totalNaoPerturbe / totalMsgs) * 100).toFixed(2) : 0}%
+                </span>
+              </div>
+              <div className="text-3xl font-bold text-orange-700 dark:text-orange-300">{totalNaoPerturbe}</div>
+              <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">% não perturbe</div>
+            </div>
+            
+            {/* Histórico Negativo (Blacklist) */}
+            <div className="p-4 rounded-lg border-2 border-gray-200 bg-gray-50 dark:bg-gray-950/20">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">Histórico negativo</span>
+                <span className="text-xs text-gray-600 dark:text-gray-400">
+                  {totalMsgs > 0 ? ((totalBlacklist / totalMsgs) * 100).toFixed(2) : 0}%
+                </span>
+              </div>
+              <div className="text-3xl font-bold text-gray-700 dark:text-gray-300">{totalBlacklist}</div>
+              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">% histórico negativo</div>
+            </div>
+            
+            {/* Total */}
+            <div className="p-4 rounded-lg border-2 border-blue-200 bg-blue-50 dark:bg-blue-950/20 md:col-span-2">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-sm font-medium text-blue-800 dark:text-blue-200">Total de Campanhas</span>
+                <span className="text-xs text-blue-600 dark:text-blue-400">{batches.length} campanhas</span>
+              </div>
+              <div className="text-3xl font-bold text-blue-700 dark:text-blue-300">{totalMsgs}</div>
+              <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">mensagens totais</div>
+            </div>
           </div>
         </CardContent>
       </Card>
       <Card>
         <CardHeader>
           <CardTitle>Campanhas</CardTitle>
-          <CardDescription>Detalhes de cada batch</CardDescription>
+          <CardDescription>Detalhes de cada batch com valores</CardDescription>
         </CardHeader>
         <CardContent>
           {error && <div className="text-sm text-red-600 dark:text-red-400 mb-2">{error}</div>}
@@ -1159,23 +1135,31 @@ function RelatoriosCampanhas({ jobStates, setShowDetails, setDetailsData }) {
                   <TableHead>Fal</TableHead>
                   <TableHead>Bl</TableHead>
                   <TableHead>NP</TableHead>
+                  <TableHead className="text-right">Valor (R$)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedBatches.map(b => (
-                  <TableRow key={b.batch_id}>
-                    <TableCell>{new Date(b.created_at).toLocaleString()}</TableCell>
-                    <TableCell className="font-mono text-xs">{b.batch_id.slice(0,8)}</TableCell>
-                    <TableCell>{b.counts?.total || 0}</TableCell>
-                    <TableCell>{b.counts?.sent || 0}</TableCell>
-                    <TableCell>{b.counts?.failed || 0}</TableCell>
-                    <TableCell>{b.counts?.blacklist || 0}</TableCell>
-                    <TableCell>{b.counts?.not_disturb || 0}</TableCell>
-                  </TableRow>
-                ))}
+                {paginatedBatches.map(b => {
+                  const enviados = b.counts?.sent || 0
+                  const valor = enviados * smsMessageValue
+                  return (
+                    <TableRow key={b.batch_id}>
+                      <TableCell>{new Date(b.created_at).toLocaleString()}</TableCell>
+                      <TableCell className="font-mono text-xs">{b.batch_id.slice(0,8)}</TableCell>
+                      <TableCell>{b.counts?.total || 0}</TableCell>
+                      <TableCell className="text-green-600 dark:text-green-400 font-medium">{enviados}</TableCell>
+                      <TableCell className="text-red-600 dark:text-red-400">{b.counts?.failed || 0}</TableCell>
+                      <TableCell className="text-gray-600 dark:text-gray-400">{b.counts?.blacklist || 0}</TableCell>
+                      <TableCell className="text-orange-600 dark:text-orange-400">{b.counts?.not_disturb || 0}</TableCell>
+                      <TableCell className="text-right font-bold text-green-700 dark:text-green-300">
+                        {valor.toFixed(2)}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
                 {(!batches || !batches.length) && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">Nenhuma campanha encontrada.</TableCell>
+                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">Nenhuma campanha encontrada.</TableCell>
                   </TableRow>
                 )}
               </TableBody>

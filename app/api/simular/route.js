@@ -38,14 +38,19 @@ export async function POST(request) {
     }
     const targetBanks = banks.filter(b => (b.forSimular || false) && (!onlyBank || b.key === onlyBank))
 
-    // Load credentials for user
+    // Load credentials for user (busca credencial padrão is_default=true)
     const { data: credsRows } = await supabaseAdmin
-      .from('bank_credentials')
-      .select('bank_key, credentials')
+      .from('bank_user_credentials')
+      .select('bank_key, credentials, is_default')
       .eq('user_id', user.id)
 
     const credsMap = new Map()
-    for (const r of (credsRows || [])) credsMap.set(r.bank_key, r.credentials || {})
+    for (const r of (credsRows || [])) {
+      // Prioriza credencial padrão (is_default=true), senão usa a primeira
+      if (!credsMap.has(r.bank_key) || r.is_default) {
+        credsMap.set(r.bank_key, r.credentials || {})
+      }
+    }
 
     const out = []
     for (const b of targetBanks) {
@@ -83,7 +88,13 @@ export async function POST(request) {
               const getBySyn = (obj, syns) => { const map = new Map(Object.keys(obj||{}).map(k=>[norm(k),k])); for (const s of syns) { const key = map.get(norm(s)); if (key && typeof obj[key] !== 'undefined' && obj[key] !== null) return obj[key] } return undefined }
               const normalized = { mensagem: getBySyn(src,['mensagem','message','msg']), valor_cliente: getBySyn(src,['valor_cliente','valor cliente','valorCliente','valor','valor recomendado','valor_cliente_recomendado']), valor_liberado: getBySyn(src,['valor_liberado','valor liberado','valorLiberado','liberado']), taxa: getBySyn(src,['taxa','taxa efetiva','taxa_efetiva']), tabela: getBySyn(src,['tabela','modalidade']), prazo: getBySyn(src,['prazo','parcelas','periodo']), valor_bloqueado: getBySyn(src,['valor_bloqueado','valor bloqueado','valorBloqueado','bloqueado']) }
               normalized._raw = src
-              bankRes.products.push({ product: prodName, data: normalized })
+              // Se não retornou nenhum dado útil, marca como serviço indisponível
+              const hasData = normalized.valor_liberado || normalized.valor_cliente || normalized.taxa || normalized.prazo || normalized.mensagem
+              if (!hasData) {
+                bankRes.products.push({ product: prodName, error: 'Serviço indisponível no momento' })
+              } else {
+                bankRes.products.push({ product: prodName, data: normalized })
+              }
             }
           }
         } else if (b.webhookSimulador) {
@@ -109,11 +120,21 @@ export async function POST(request) {
             const getBySyn = (obj, syns) => { const map = new Map(Object.keys(obj||{}).map(k=>[norm(k),k])); for (const s of syns) { const key = map.get(norm(s)); if (key && typeof obj[key] !== 'undefined' && obj[key] !== null) return obj[key] } return undefined }
             const normalized = { mensagem: getBySyn(src,['mensagem','message','msg']), valor_cliente: getBySyn(src,['valor_cliente','valor cliente','valorCliente','valor','valor recomendado','valor_cliente_recomendado']), valor_liberado: getBySyn(src,['valor_liberado','valor liberado','valorLiberado','liberado']), taxa: getBySyn(src,['taxa','taxa efetiva','taxa_efetiva']), tabela: getBySyn(src,['tabela','modalidade']), prazo: getBySyn(src,['prazo','parcelas','periodo']), valor_bloqueado: getBySyn(src,['valor_bloqueado','valor bloqueado','valorBloqueado','bloqueado']) }
             normalized._raw = src
-            bankRes.products.push({ product: 'default', data: normalized })
+            // Se não retornou nenhum dado útil, marca como serviço indisponível
+            const hasData = normalized.valor_liberado || normalized.valor_cliente || normalized.taxa || normalized.prazo || normalized.mensagem
+            if (!hasData) {
+              bankRes.products.push({ product: 'default', error: 'Serviço indisponível no momento' })
+            } else {
+              bankRes.products.push({ product: 'default', data: normalized })
+            }
           }
         }
       } catch (e) {
-        bankRes.error = e.message
+        // Erro de rede ou timeout = serviço indisponível
+        const errorMsg = e.message?.includes('fetch') || e.message?.includes('timeout') || e.message?.includes('network') 
+          ? 'Serviço indisponível no momento' 
+          : e.message
+        bankRes.error = errorMsg
       }
       out.push(bankRes)
     }
