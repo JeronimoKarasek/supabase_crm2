@@ -278,8 +278,8 @@ export async function GET(request) {
           .eq('cliente', loteOwnerEmail)
           .eq('lote_id', it.originalLoteId)
           .eq('consultado', true)
-        const percent = total ? Math.round(((con || 0) / total) * 100) : 0
-        it.progress = { done: con || 0, total: total || 0, percent }
+        const percent = total ? Math.round(((done || 0) / total) * 100) : 0
+        it.progress = { done: done || 0, total: total || 0, percent }
         if (percent === 100 && it.status !== 'concluido') it.status = 'concluido'
       } else {
         it.progress = { done: 0, total: it.count || 0, percent: 0 }
