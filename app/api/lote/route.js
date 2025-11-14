@@ -418,14 +418,19 @@ export async function POST(request) {
         // Multi-user credentials list (if provided)
         let credentialsList = []
         if (bankUserIds.length) {
-          const { data: multiRows } = await supabaseAdmin
+          console.info(`[Lote] Buscando credenciais: user=${user.id} banco=${bancoKey} ids=[${bankUserIds.join(', ')}]`)
+          const { data: multiRows, error: credErr } = await supabaseAdmin
             .from('bank_user_credentials')
-            .select('id, alias, credentials, is_default')
-            .in('id', bankUserIds)
+            .select('id, alias, credentials')
             .eq('user_id', user.id)
             .eq('bank_key', bancoKey)
+            .in('id', bankUserIds)
+          if (credErr) {
+            console.error(`[Lote] Erro ao buscar credenciais:`, credErr)
+          }
           if (Array.isArray(multiRows)) {
             credentialsList = multiRows.map(r => ({ id: r.id, alias: r.alias, credentials: r.credentials || {} }))
+            console.info(`[Lote] Credenciais encontradas: ${credentialsList.length} de ${bankUserIds.length} solicitados`)
           }
         }
         // Empresa (nome)
@@ -438,19 +443,28 @@ export async function POST(request) {
           }
         } catch {}
 
+        const webhookPayload = {
+          banco: bancoKey,
+          nomeBanco: bancoName,
+          produto,
+          credencialList: credentialsList,
+          itemId: id,
+          email: user.email,
+          userId: user.id,
+          empresaName
+        }
+        
+        // Log payload (mascarando senhas)
+        const safePayload = {
+          ...webhookPayload,
+          credencialList: credentialsList.map(c => ({ ...c, credentials: Object.keys(c.credentials || {}).reduce((acc, k) => ({ ...acc, [k]: k.toLowerCase().includes('senha') ? '***' : c.credentials[k] }), {}) }))
+        }
+        console.info(`[Lote] Enviando webhook para ${webhookUrl}:`, JSON.stringify(safePayload, null, 2))
+        
         await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            banco: bancoKey,
-            nomeBanco: bancoName,
-            produto,
-            credencialList: credentialsList,
-            itemId: id,
-            email: user.email,
-            userId: user.id,
-            empresaName
-          })
+          body: JSON.stringify(webhookPayload)
         })
       } catch (webhookError) {
         console.error('❌ Erro ao chamar webhook:', webhookError)
