@@ -425,19 +425,7 @@ export async function POST(request) {
             .eq('user_id', user.id)
             .eq('bank_key', bancoKey)
           if (Array.isArray(multiRows)) {
-            credentialsList = multiRows.map(r => ({ id: r.id, alias: r.alias, credentials: r.credentials || {}, is_default: r.is_default }))
-          }
-        } else {
-          // fallback: include default multi user if exists
-          const { data: defRows } = await supabaseAdmin
-            .from('bank_user_credentials')
-            .select('id, alias, credentials, is_default')
-            .eq('user_id', user.id)
-            .eq('bank_key', bancoKey)
-            .eq('is_default', true)
-            .limit(1)
-          if (Array.isArray(defRows) && defRows.length) {
-            credentialsList = defRows.map(r => ({ id: r.id, alias: r.alias, credentials: r.credentials || {}, is_default: r.is_default }))
+            credentialsList = multiRows.map(r => ({ id: r.id, alias: r.alias, credentials: r.credentials || {} }))
           }
         }
         // Empresa (nome)
@@ -605,7 +593,7 @@ export async function PUT(request) {
         .eq('is_default', true)
         .limit(1)
       if (Array.isArray(defRows) && defRows.length) {
-        credentialsList = defRows.map(r => ({ id: r.id, alias: r.alias, credentials: r.credentials || {}, is_default: r.is_default }))
+        credentialsList = defRows.map(r => ({ id: r.id, alias: r.alias, credentials: r.credentials || {} }))
       }
     } catch {}
 
