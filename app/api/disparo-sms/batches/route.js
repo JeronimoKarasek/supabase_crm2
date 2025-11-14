@@ -36,46 +36,100 @@ export async function GET(request) {
       userIdsFilter = [user.id]
     }
 
-    let query = supabaseAdmin
-      .from('sms_disparo')
-      .select('batch_id, credential_id, status, reference, tenant_segment_id, created_at, sent_at, user_id')
-      .order('created_at', { ascending: false })
-      .limit(10000)
-    if (Array.isArray(userIdsFilter)) {
-      query = query.in('user_id', userIdsFilter)
-    }
-    const { data, error } = await query
-
-    if (error) {
-      if (error?.message?.toLowerCase()?.includes('does not exist') || error?.code === '42P01') {
-        return NextResponse.json({ batches: [], missingTable: true })
+    // Buscar TODOS os batch_ids únicos usando paginação (evita limite de 1000 registros)
+    console.log('📊 [SMS Batches] Iniciando busca paginada de batch_ids...')
+    let allBatchIds = new Set()
+    let page = 0
+    const pageSize = 1000
+    let hasMore = true
+    
+    while (hasMore) {
+      let pageQuery = supabaseAdmin
+        .from('sms_disparo')
+        .select('batch_id')
+        .order('created_at', { ascending: false })
+        .range(page * pageSize, (page + 1) * pageSize - 1)
+      
+      if (Array.isArray(userIdsFilter)) {
+        pageQuery = pageQuery.in('user_id', userIdsFilter)
       }
-      return NextResponse.json({ error: 'Falha ao listar batches', details: error.message }, { status: 400 })
-    }
-
-    // Agrupar por batch_id
-    const map = new Map()
-    for (const r of data || []) {
-      const key = r.batch_id
-      if (!map.has(key)) {
-        map.set(key, {
-          batch_id: key,
-          credential_id: r.credential_id,
-          tenant_segment_id: r.tenant_segment_id,
-          reference: r.reference,
-          created_at: r.created_at,
-          counts: { total: 0, queued: 0, sent: 0, delivered: 0, failed: 0, blacklist: 0, not_disturb: 0 },
-        })
+      
+      const { data: pageRecords, error: pageError } = await pageQuery
+      
+      if (pageError) {
+        if (pageError?.message?.toLowerCase()?.includes('does not exist') || pageError?.code === '42P01') {
+          return NextResponse.json({ batches: [], missingTable: true })
+        }
+        console.error(`❌ [SMS Batches] Erro na página ${page}:`, pageError)
+        return NextResponse.json({ error: 'Falha ao listar batches', details: pageError.message }, { status: 400 })
       }
-      const b = map.get(key)
-      b.counts.total++
-      const s = (r.status || 'queued').toLowerCase()
-      if (s in b.counts) b.counts[s]++
-      else b.counts[s] = 1
-      if (new Date(r.created_at) < new Date(b.created_at)) b.created_at = r.created_at
+      
+      if (!pageRecords || pageRecords.length === 0) {
+        hasMore = false
+      } else {
+        pageRecords.forEach(r => allBatchIds.add(r.batch_id))
+        console.log(`📊 [SMS Batches] Página ${page + 1}: ${pageRecords.length} registros, ${allBatchIds.size} batch_ids únicos acumulados`)
+        
+        if (pageRecords.length < pageSize) {
+          hasMore = false
+        }
+        page++
+      }
     }
 
-    const batches = Array.from(map.values()).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    // Extrair batch_ids únicos
+    const uniqueBatchIds = Array.from(allBatchIds)
+    console.log(`📊 [SMS Batches] Total de campanhas únicas encontradas: ${uniqueBatchIds.length}`)
+
+    if (!uniqueBatchIds.length) {
+      return NextResponse.json({ batches: [] })
+    }
+
+    // Agora buscar detalhes de cada batch (com limite razoável)
+    const batches = []
+    
+    for (const batchId of uniqueBatchIds) {
+      let batchQuery = supabaseAdmin
+        .from('sms_disparo')
+        .select('batch_id, credential_id, status, reference, tenant_segment_id, created_at, user_id')
+        .eq('batch_id', batchId)
+      
+      if (Array.isArray(userIdsFilter)) {
+        batchQuery = batchQuery.in('user_id', userIdsFilter)
+      }
+      
+      const { data: batchRecords } = await batchQuery
+      
+      if (!batchRecords || !batchRecords.length) continue
+      
+      // Agregar contadores
+      const counts = { total: 0, queued: 0, sent: 0, delivered: 0, failed: 0, blacklist: 0, not_disturb: 0 }
+      let oldestCreatedAt = batchRecords[0].created_at
+      
+      for (const r of batchRecords) {
+        counts.total++
+        const s = (r.status || 'queued').toLowerCase()
+        if (s in counts) counts[s]++
+        else counts[s] = 1
+        if (new Date(r.created_at) < new Date(oldestCreatedAt)) {
+          oldestCreatedAt = r.created_at
+        }
+      }
+      
+      batches.push({
+        batch_id: batchId,
+        credential_id: batchRecords[0].credential_id,
+        tenant_segment_id: batchRecords[0].tenant_segment_id,
+        reference: batchRecords[0].reference,
+        created_at: oldestCreatedAt,
+        counts
+      })
+    }
+
+    // Ordenar por data de criação (mais recentes primeiro)
+    batches.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    
+    console.log(`📊 [SMS Batches] Retornando ${batches.length} campanhas`)
     return NextResponse.json({ batches })
   } catch (e) {
     return NextResponse.json({ error: 'Erro interno', details: e.message }, { status: 500 })

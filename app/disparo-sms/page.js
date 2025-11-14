@@ -890,8 +890,17 @@ function CampaignsList({ selectedBatchId, onSend, refreshKey, jobStates, setJobS
       const token = sessionData?.session?.access_token
       const res = await fetch('/api/disparo-sms/batches', { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       const data = await res.json()
-      if (res.ok) setItems(data?.batches || [])
-    } catch (e) {}
+      if (res.ok) {
+        const batches = data?.batches || []
+        console.log(`📊 [CampaignsList] Total de campanhas recebidas da API: ${batches.length}`)
+        console.log(`📊 [CampaignsList] Batch IDs:`, batches.map(b => b.batch_id.slice(0,8)).join(', '))
+        setItems(batches)
+      } else {
+        console.error('❌ [CampaignsList] Erro ao carregar:', data)
+      }
+    } catch (e) {
+      console.error('❌ [CampaignsList] Exception:', e)
+    }
     finally { setLoading(false) }
   }
   useEffect(() => { load() }, [refreshKey])
@@ -915,6 +924,18 @@ function CampaignsList({ selectedBatchId, onSend, refreshKey, jobStates, setJobS
         </Alert>
       )}
       {loading && <div className="text-xs text-muted-foreground">Carregando campanhas...</div>}
+      {!loading && items.length > 0 && (
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-medium">
+            Total de campanhas: <span className="text-teal-600 font-bold">{items.length}</span>
+            {totalPages > 1 && <span className="text-muted-foreground ml-2">(Página {currentPage} de {totalPages})</span>}
+          </div>
+          <Button size="sm" variant="outline" onClick={load}>
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Atualizar
+          </Button>
+        </div>
+      )}
       {!loading && !items.length && (
         <div className="text-sm text-muted-foreground border rounded p-4 text-center">Nenhuma campanha importada ainda.</div>
       )}
