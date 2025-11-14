@@ -1,53 +1,9 @@
 import { NextResponse } from 'next/server'
 import redis from '../../../lib/redis.js'
-import fs from 'fs'
-import path from 'path'
 import { supabaseAdmin } from '../../../lib/supabase-admin.js'
 import { getEmpresaForUser } from '../../../lib/empresa.js'
 
 export const dynamic = 'force-dynamic'
-
-const storePath = path.join(process.cwd(), '.emergent', 'lote.json')
-function ensureDir() { const dir = path.dirname(storePath); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }) }
-function readStore() {
-  try {
-    ensureDir()
-    if (!fs.existsSync(storePath)) return { items: [] }
-    return JSON.parse(fs.readFileSync(storePath, 'utf8'))
-  } catch {
-    return { items: [] }
-  }
-}
-function writeStore(obj) { ensureDir(); fs.writeFileSync(storePath, JSON.stringify(obj, null, 2), 'utf8') }
-function upsertBaseFile(loteId, fileName) {
-  if (!loteId) return
-  const store = readStore()
-  const idx = store.items.findIndex(it => it.id === loteId)
-  if (idx >= 0) {
-    store.items[idx].fileName = fileName
-    if (!store.items[idx].createdAt) store.items[idx].createdAt = new Date().toISOString()
-  } else {
-    store.items.push({ id: loteId, fileName, createdAt: new Date().toISOString() })
-  }
-  writeStore(store)
-}
-function getBaseFile(loteId) {
-  if (!loteId) return null
-  const store = readStore()
-  const found = store.items.find(it => it.id === loteId)
-  return found?.fileName || null
-}
-function pruneStoreOlderThan(cutoffIso) {
-  try {
-    const store = readStore()
-    const cutoff = new Date(cutoffIso).getTime()
-    const items = (store.items || []).filter(it => {
-      const t = it?.createdAt ? new Date(it.createdAt).getTime() : 0
-      return t >= cutoff
-    })
-    writeStore({ items })
-  } catch {}
-}
 
 async function getUserFromRequest(request) {
   const auth = request.headers.get('authorization') || request.headers.get('Authorization')
@@ -239,7 +195,6 @@ export async function GET(request) {
       const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       console.log(`[Cleanup] Removendo registros de lote_items antes de ${cutoff}`)
       try { await supabaseAdmin.from('lote_items').delete().lt('created_at', cutoff) } catch (e) { console.warn('[Cleanup] Erro ao remover registros antigos:', e?.message) }
-      try { pruneStoreOlderThan(cutoff) } catch {}
     }
   } catch {}
 
@@ -261,7 +216,7 @@ export async function GET(request) {
   while (groups.length < targetEnd) {
     let query = supabaseAdmin
       .from('lote_items')
-      .select('id, lote_id, produto, banco_simulado, status, created_at, consultado, cliente')
+      .select('id, lote_id, produto, banco_simulado, status, created_at, consultado, cliente, base_filename')
     if (!isAdmin) query = query.eq('cliente', user.email)
     const { data: chunk, error } = await query
       .order('created_at', { ascending: false })
@@ -294,7 +249,7 @@ export async function GET(request) {
           createdAt: r.created_at,
           userEmail: r.cliente || '-',
           count: 1,
-          base: hasReal ? (getBaseFile(loteKey) || null) : null,
+          base: hasReal ? (r.base_filename || null) : null,
         })
       }
     }
@@ -401,6 +356,7 @@ export async function POST(request) {
       banco_simulado: bancoName,
       status: 'pendente',
       lote_id: id,
+      base_filename: fileName,
     }))
   if (payload.length > 0) {
       const { error: insErr } = await supabaseAdmin.from('lote_items').insert(payload)
@@ -408,9 +364,6 @@ export async function POST(request) {
         return NextResponse.json({ error: 'Insert failed', details: insErr.message }, { status: 500 })
       }
     }
-
-    // Persist file name in local meta-store
-    if (fileName) upsertBaseFile(id, fileName)
 
     // Trigger webhook if configured
     if (webhookUrl) {
