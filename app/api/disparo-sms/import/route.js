@@ -69,10 +69,8 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Falha ao garantir credencial placeholder', details: e.message }, { status: 500 })
     }
 
-    const batch_id = uuidv4()
-
-    // Preparar registros
-    const mapped = rows.map((r) => {
+    // Preparar todos os registros primeiro (filtrar inválidos)
+    const allMapped = rows.map((r) => {
       const phone = String(r.phone || '').replace(/\D/g, '')
       const message = replaceVariables(message_template, r)
       const ref = reference_prefix ? `${reference_prefix}_${phone}` : null
@@ -80,7 +78,6 @@ export async function POST(request) {
       return {
         user_id: user.id,
         credential_id: placeholderId,
-        batch_id,
         phone,
         name: r.name || null,
         cpf: r.cpf || null,
@@ -89,31 +86,68 @@ export async function POST(request) {
         tenant_segment_id,
         status: 'queued',
         attempt_count: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       }
     }).filter(r => r.phone.length >= 10) // Filtrar telefones inválidos
 
-    if (!mapped.length) {
+    if (!allMapped.length) {
       return NextResponse.json({ error: 'Nenhum telefone válido encontrado' }, { status: 400 })
     }
 
-    try {
-      const { error } = await supabaseAdmin.from('sms_disparo').insert(mapped)
-      if (error) {
-        if (error?.message?.toLowerCase()?.includes('does not exist') || error?.code === '42P01') {
-          return NextResponse.json({ 
-            error: 'Tabela sms_disparo não encontrada. Execute o SQL sugerido.', 
-            missingTable: true 
-          }, { status: 400 })
-        }
-        return NextResponse.json({ error: 'Falha ao inserir base', details: error.message }, { status: 400 })
-      }
-    } catch (e) {
-      return NextResponse.json({ error: 'Falha ao inserir base', details: e.message }, { status: 400 })
+    console.log(`📨 [SMS Import] Total de ${allMapped.length} registros válidos`)
+
+    // Dividir em lotes de no máximo 1000 linhas
+    const BATCH_SIZE = 1000
+    const batches = []
+    for (let i = 0; i < allMapped.length; i += BATCH_SIZE) {
+      batches.push(allMapped.slice(i, i + BATCH_SIZE))
     }
 
-    return NextResponse.json({ ok: true, batch_id, inserted: mapped.length })
+    console.log(`📨 [SMS Import] Dividindo em ${batches.length} campanha(s)`)
+
+    const batchIds = []
+    let totalInserted = 0
+
+    // Criar uma campanha separada para cada lote
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batchChunk = batches[batchIndex]
+      const batch_id = uuidv4()
+      
+      // Adicionar batch_id, created_at e updated_at em cada registro
+      const recordsWithBatchId = batchChunk.map(r => ({
+        ...r,
+        batch_id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }))
+
+      try {
+        const { error } = await supabaseAdmin.from('sms_disparo').insert(recordsWithBatchId)
+        if (error) {
+          if (error?.message?.toLowerCase()?.includes('does not exist') || error?.code === '42P01') {
+            return NextResponse.json({ 
+              error: 'Tabela sms_disparo não encontrada. Execute o SQL sugerido.', 
+              missingTable: true 
+            }, { status: 400 })
+          }
+          console.error(`❌ [SMS Import] Erro ao inserir lote ${batchIndex + 1}:`, error)
+          return NextResponse.json({ error: 'Falha ao inserir base', details: error.message }, { status: 400 })
+        }
+        batchIds.push(batch_id)
+        totalInserted += recordsWithBatchId.length
+        console.log(`✅ [SMS Import] Campanha ${batchIndex + 1}/${batches.length} criada: ${batch_id} (${recordsWithBatchId.length} registros)`)
+      } catch (e) {
+        console.error(`❌ [SMS Import] Exception ao inserir lote ${batchIndex + 1}:`, e)
+        return NextResponse.json({ error: 'Falha ao inserir base', details: e.message }, { status: 400 })
+      }
+    }
+
+    return NextResponse.json({ 
+      ok: true, 
+      batch_id: batchIds[0], // Retorna primeiro batch_id para compatibilidade
+      batch_ids: batchIds, // Array com todos os batch_ids criados
+      campaigns_created: batches.length,
+      inserted: totalInserted 
+    })
   } catch (e) {
     return NextResponse.json({ error: 'Payload inválido', details: e.message }, { status: 400 })
   }
