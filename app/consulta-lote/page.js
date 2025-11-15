@@ -32,6 +32,7 @@ export default function ConsultaLotePage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
   const itemsPerPage = 10
+  const [loteImportLimit, setLoteImportLimit] = useState(5000)
   // Lock imediato para evitar duplo clique antes do React re-render
   const reprocessLocks = useRef(new Set())
 
@@ -68,6 +69,9 @@ export default function ConsultaLotePage() {
           const allProducts = Array.isArray(json?.settings?.products) ? json.settings.products : []
           setBanks(allBanks.filter(b => !!b.forBatch))
           setProducts(allProducts.filter(p => (typeof p === 'string' ? true : !!p.forBatch)))
+          // Carregar limite de importação
+          const limit = parseInt(json?.settings?.loteImportLimit || '5000', 10)
+          setLoteImportLimit(limit > 0 ? limit : 5000)
         }
       } catch {}
     })()
@@ -132,12 +136,12 @@ export default function ConsultaLotePage() {
       if (!f) { setFileName(''); setCsvText(''); setError(''); return }
       const text = await f.text().catch(() => '')
       
-      // Validar limite de 5000 linhas
+      // Validar limite de linhas (dinâmico)
       const lines = (text || '').split(/\r?\n/).filter(l => l.trim().length > 0)
       const dataLines = lines.length > 0 ? lines.length - 1 : 0 // Remove cabeçalho
       
-      if (dataLines > 5000) {
-        setError(`O arquivo contém ${dataLines.toLocaleString('pt-BR')} linhas. O limite máximo é de 5.000 linhas por lote.`)
+      if (dataLines > loteImportLimit) {
+        setError(`O arquivo contém ${dataLines.toLocaleString('pt-BR')} linhas. O limite máximo é de ${loteImportLimit.toLocaleString('pt-BR')} linhas por lote.`)
         setFileName('')
         setCsvText('')
         e.target.value = '' // Limpa o input
@@ -372,7 +376,7 @@ export default function ConsultaLotePage() {
                 {fileName ? (
                   <div className="text-xs text-muted-foreground">Selecionado: {fileName}</div>
                 ) : (
-                  <div className="text-xs text-muted-foreground">Limite máximo: 5.000 linhas por lote</div>
+                  <div className="text-xs text-muted-foreground">Limite máximo: {loteImportLimit.toLocaleString('pt-BR')} linhas por lote</div>
                 )}
               </div>
               {sendBank && bankUsers.length > 0 && (

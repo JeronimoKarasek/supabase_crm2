@@ -482,46 +482,80 @@ export default function SimularDigitarPage() {
         <Dialog open={linkPopupOpen} onOpenChange={setLinkPopupOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>{linkData?.hasError ? '⚠️ Erro na Digitação' : '🎉 Link de Formalização Disponível'}</DialogTitle>
+              <DialogTitle>{linkData?.hasError ? '⚠️ Erro na Digitação' : '🎉 Proposta Digitada com Sucesso'}</DialogTitle>
               <DialogDescription>
                 {linkData?.bankName} {linkData?.product ? `- ${linkData.product}` : ''}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              {linkData?.mensagem && (
-                <div className={`text-sm border-l-4 pl-3 p-3 rounded ${linkData?.hasError ? 'border-destructive bg-destructive/10 text-destructive' : 'border-primary bg-muted/50 text-muted-foreground'}`}>
-                  {linkData.mensagem}
-                </div>
-              )}
-              
-              {linkData?.protocolo && (
-                <div className="text-sm">
-                  <span className="font-medium">Protocolo:</span> {linkData.protocolo}
-                </div>
-              )}
-              
-              {linkData?.url && (
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Link para formalização:</div>
-                  <div className="flex gap-2">
-                    <div className="flex-1 border rounded px-3 py-2 bg-muted/50 overflow-x-auto text-sm font-mono break-all">
-                      {linkData.url}
+              {linkData?.hasError ? (
+                // MODO ERRO: Apenas mensagem de erro, sem indicar sucesso
+                <>
+                  <div className="border-l-4 border-destructive bg-destructive/10 text-destructive p-4 rounded">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-semibold mb-1">Falha ao processar digitação</p>
+                        <p className="text-sm">{linkData.mensagem}</p>
+                      </div>
                     </div>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => copyToClipboard(linkData.url)}
-                      className="shrink-0"
-                      title="Copiar link"
-                    >
-                      📋 Copiar
-                    </Button>
                   </div>
-                </div>
+                  
+                  {linkData?.protocolo && (
+                    <div className="text-sm text-muted-foreground">
+                      <span className="font-medium">Protocolo de erro:</span> {linkData.protocolo}
+                    </div>
+                  )}
+                  
+                  <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm text-amber-900">
+                    <p className="font-medium mb-1">⚠️ Ação Necessária:</p>
+                    <ul className="list-disc list-inside space-y-1 text-xs">
+                      <li>Verifique se os dados enviados estão corretos</li>
+                      <li>Consulte o banco sobre o erro retornado</li>
+                      <li>Tente novamente após corrigir as informações</li>
+                    </ul>
+                  </div>
+                </>
+              ) : (
+                // MODO SUCESSO: Mostra link e informações
+                <>
+                  {linkData?.mensagem && (
+                    <div className="border-l-4 border-green-500 bg-green-50 text-green-800 pl-3 p-3 rounded">
+                      {linkData.mensagem}
+                    </div>
+                  )}
+                  
+                  {linkData?.protocolo && (
+                    <div className="text-sm">
+                      <span className="font-medium">Protocolo:</span> {linkData.protocolo}
+                    </div>
+                  )}
+                  
+                  {linkData?.url && (
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Link para formalização:</div>
+                      <div className="flex gap-2">
+                        <div className="flex-1 border rounded px-3 py-2 bg-muted/50 overflow-x-auto text-sm font-mono break-all">
+                          {linkData.url}
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => copyToClipboard(linkData.url)}
+                          className="shrink-0"
+                          title="Copiar link"
+                        >
+                          📋 Copiar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="flex justify-end">
                 <Button 
                   onClick={() => setLinkPopupOpen(false)}
+                  variant={linkData?.hasError ? 'default' : 'default'}
                 >
                   Fechar
                 </Button>

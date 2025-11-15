@@ -168,6 +168,7 @@ export async function GET(request) {
       }
 
       // Require Clientes or Dashboard sector and table permission for non-admins
+      // Admin bypasses all permission checks
       if (role !== 'admin') {
         if (!(sectors.includes('Clientes') || sectors.includes('Dashboard') || sectors.includes('Usuários'))) return forbidden('Acesso ao setor Clientes não permitido')
         if (!allowedTables.includes(tableName)) {
@@ -178,6 +179,8 @@ export async function GET(request) {
         }
       }
 
+      console.log(`[table-data] Fetching from table: "${tableName}", role: ${role}, page: ${page}`)
+      
       let query = supabaseAdmin.from(tableName).select('*', { count: 'exact' })
 
       // Apply filters if provided (single)
@@ -195,10 +198,12 @@ export async function GET(request) {
       if (periodStart && dateColumn) query = query.gte(dateColumn, periodStart)
       if (periodEnd && dateColumn) query = query.lte(dateColumn, periodEnd)
 
-      // Enforce user-required filters
-      const requiredFilters = Array.isArray(filtersByTable[tableName]) ? filtersByTable[tableName] : []
-      for (const rf of requiredFilters) {
-        query = applyFilterToQuery(query, rf)
+      // Enforce user-required filters (only for non-admins)
+      if (role !== 'admin') {
+        const requiredFilters = Array.isArray(filtersByTable[tableName]) ? filtersByTable[tableName] : []
+        for (const rf of requiredFilters) {
+          query = applyFilterToQuery(query, rf)
+        }
       }
 
       // Pagination via range
@@ -209,9 +214,11 @@ export async function GET(request) {
       const { data, error, count } = await query
 
       if (error) {
-        console.error('Error fetching table data:', error)
-        return NextResponse.json({ error: 'Failed to fetch table data', details: error.message }, { status: 500 })
+        console.error(`[table-data] Error fetching from "${tableName}":`, error)
+        return NextResponse.json({ error: 'Failed to fetch table data', details: error.message, table: tableName }, { status: 500 })
       }
+      
+      console.log(`[table-data] Success: ${data?.length || 0} rows from "${tableName}"`)
 
       const total = count ?? (data?.length || 0)
       const totalPages = Math.max(1, Math.ceil(total / pageSize))

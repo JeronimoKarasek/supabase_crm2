@@ -39,6 +39,7 @@ export default function UsuariosPage() {
   const [addCreditsErr, setAddCreditsErr] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [nome, setNome] = useState('')
   const [cpf, setCpf] = useState('')
   const [role, setRole] = useState('user')
   const [loading, setLoading] = useState(false)
@@ -62,6 +63,7 @@ export default function UsuariosPage() {
   // edit state
   const [editingId, setEditingId] = useState('')
   const [editRole, setEditRole] = useState('user')
+  const [editNome, setEditNome] = useState('')
   const [editCpf, setEditCpf] = useState('')
   const [editEmpresaId, setEditEmpresaId] = useState('')
   const [editAllowedTables, setEditAllowedTables] = useState([])
@@ -179,6 +181,7 @@ export default function UsuariosPage() {
       const payload = {
         email,
         password,
+        nome,
         cpf,
         role,
         empresaId: selectedEmpresaId,
@@ -197,6 +200,7 @@ export default function UsuariosPage() {
         setMessage('Usuário criado com sucesso.')
         setEmail('')
         setPassword('')
+        setNome('')
         setCpf('')
         setRole('user')
         setSelectedEmpresaId('')
@@ -249,6 +253,7 @@ export default function UsuariosPage() {
   setEditingId(u.id)
   const meta = u.user_metadata || {}
   setEditRole(meta.role || 'user')
+  setEditNome(meta.nome || '')
   setEditCpf(meta.cpf || '')
   setEditEmpresaId(meta.empresaId || '')
   const allowed = meta.permissions?.allowedTables || []
@@ -303,6 +308,7 @@ export default function UsuariosPage() {
       const payload = {
         id: editingId,
         role: editRole,
+        nome: editNome,
         cpf: editCpf,
         empresaId: editEmpresaId,
         allowedTables: editAllowedTables,
@@ -316,6 +322,7 @@ export default function UsuariosPage() {
       if (res.ok) {
         setMessage('Usuário atualizado com sucesso.')
         setEditingId('')
+        setEditNome('')
         setEditCpf('')
         setEditPassword('')
         await fetchUsers()
@@ -402,6 +409,12 @@ export default function UsuariosPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     minLength={8}
+                  />
+                  <Input
+                    type="text"
+                    placeholder="Nome completo"
+                    value={nome}
+                    onChange={(e) => setNome(e.target.value)}
                   />
                   <Input
                     type="text"
@@ -537,6 +550,7 @@ export default function UsuariosPage() {
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                      <Input type="text" placeholder="Nome completo" value={editNome} onChange={(e)=> setEditNome(e.target.value)} />
                       <Select value={editRole} onValueChange={setEditRole}>
                         <SelectTrigger>
                           <SelectValue placeholder="Papel" />
@@ -560,7 +574,7 @@ export default function UsuariosPage() {
                       <Input type="text" placeholder="CPF (opcional)" value={editCpf} onChange={(e)=> setEditCpf(e.target.value)} maxLength={14} />
                       <Input type="password" placeholder="Nova senha (opcional)" value={editPassword} onChange={(e)=> setEditPassword(e.target.value)} minLength={8} />
                       <div className="md:col-span-2 flex gap-2 justify-end">
-                        <Button variant="outline" onClick={() => { setEditingId(''); setEditCpf(''); setEditPassword('') }}>Cancelar</Button>
+                        <Button variant="outline" onClick={() => { setEditingId(''); setEditNome(''); setEditCpf(''); setEditPassword('') }}>Cancelar</Button>
                         <Button onClick={saveEdit} disabled={loading}>{loading ? 'Salvando...' : 'Salvar alterações'}</Button>
                       </div>
                     </div>
@@ -658,6 +672,7 @@ export default function UsuariosPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead>Nome</TableHead>
                           <TableHead>Email</TableHead>
                           <TableHead>Papel</TableHead>
                           <TableHead>Empresa</TableHead>
@@ -667,6 +682,7 @@ export default function UsuariosPage() {
                       <TableBody>
                         {users.map(u => (
                           <TableRow key={u.id}>
+                            <TableCell>{u.user_metadata?.nome || '—'}</TableCell>
                             <TableCell>{u.email}</TableCell>
                             <TableCell>{u.user_metadata?.role || '-'}</TableCell>
                             <TableCell>{u.user_metadata?.empresaId || '—'}</TableCell>

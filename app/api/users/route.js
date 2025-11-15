@@ -137,7 +137,7 @@ export async function POST(request) {
     if (!(roleCaller === 'admin' || sectorsCaller.includes('Usuários'))) return forbidden('Acesso ao setor Usuários não permitido')
 
   const body = await request.json()
-  const { email, password, cpf, role = 'viewer', allowedTables = [], filter = null, filters, filtersByTable, sectors, empresaId } = body || {}
+  const { email, password, nome, cpf, role = 'viewer', allowedTables = [], filter = null, filters, filtersByTable, sectors, empresaId } = body || {}
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email e senha são obrigatórios' }, { status: 400 })
@@ -217,6 +217,7 @@ export async function POST(request) {
       user_metadata: { 
         role,
         ...(empresaId ? { empresaId } : {}),
+        ...(nome ? { nome } : {}),
         ...(cpf ? { cpf: cpf.replace(/\D/g, '') } : {}),
         permissions: {
           allowedTables: Array.isArray(allowedTables) ? allowedTables : [],
@@ -259,7 +260,7 @@ export async function PUT(request) {
     if (!(roleCaller === 'admin' || sectorsCaller.includes('Usuários'))) return forbidden('Acesso ao setor Usuários não permitido')
 
   const body = await request.json()
-  const { id, role, cpf, allowedTables, filter, filters, filtersByTable, sectors, password, empresaId } = body || {}
+  const { id, role, nome, cpf, allowedTables, filter, filters, filtersByTable, sectors, password, empresaId } = body || {}
 
     if (!id) {
       return NextResponse.json({ error: 'ID do usuário é obrigatório' }, { status: 400 })
@@ -327,6 +328,7 @@ export async function PUT(request) {
       ...currentMeta,
       ...(role ? { role } : {}),
       ...(empresaId ? { empresaId } : {}),
+      ...(nome ? { nome } : {}),
       ...(cpf !== undefined ? { cpf: cpf ? cpf.replace(/\D/g, '') : '' } : {}),
       permissions: {
         allowedTables: Array.isArray(allowedTables) ? allowedTables : (currentMeta?.permissions?.allowedTables || []),

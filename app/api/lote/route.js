@@ -415,6 +415,7 @@ export async function POST(request) {
           itemId: id,
           email: user.email,
           userId: user.id,
+          userName: user.user_metadata?.nome || null,
           empresaName
         }
         

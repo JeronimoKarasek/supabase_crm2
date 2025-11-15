@@ -61,6 +61,7 @@ export async function PUT(request) {
         digitarFields: Array.isArray(b.digitarFields) ? b.digitarFields.map(f => ({ key: f.key, label: f.label, required: !!f.required, type: f.type === 'select' ? 'select' : 'text', options: Array.isArray(f.options) ? f.options.filter(Boolean) : [] })) : [],
         webhookUrl: b.webhookUrl || '', // consulta em lote
         returnWebhookUrl: b.returnWebhookUrl || '', // callback/status (lote)
+        webhookConsulta: b.webhookConsulta || '', // consulta de status individual
         webhookSimulador: b.webhookSimulador || '',
         webhookDigitar: b.webhookDigitar || '',
         webhookProposta: b.webhookProposta || '',
@@ -140,6 +141,7 @@ export async function POST(request) {
         digitarFields: Array.isArray(b.digitarFields) ? b.digitarFields.map(f => ({ key: f.key, label: f.label, required: !!f.required, type: f.type === 'select' ? 'select' : 'text', options: Array.isArray(f.options) ? f.options.filter(Boolean) : [] })) : [],
         webhookUrl: b.webhookUrl || '',
         returnWebhookUrl: b.returnWebhookUrl || '',
+        webhookConsulta: b.webhookConsulta || '', // consulta de status individual
         webhookSimulador: b.webhookSimulador || '',
         webhookDigitar: b.webhookDigitar || '',
         webhookProposta: b.webhookProposta || '',

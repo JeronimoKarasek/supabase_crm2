@@ -51,6 +51,9 @@ export default function ConfiguracaoPage() {
   const [shiftDataCostPerQuery, setShiftDataCostPerQuery] = useState('')
   const [shiftDataWebhookToken, setShiftDataWebhookToken] = useState('')
 
+  // Limite de consulta em lote
+  const [loteImportLimit, setLoteImportLimit] = useState('')
+
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -127,6 +130,7 @@ export default function ConfiguracaoPage() {
           setShiftDataAccessKey(s.shiftDataAccessKey || '96FA65CEC7234FFDA72D2D97EA6A457B')
           setShiftDataCostPerQuery(s.shiftDataCostPerQuery || '0.07')
           setShiftDataWebhookToken(s.shiftDataWebhookToken || 'https://weebserver6.farolchat.com/webhook/gerarToken')
+          setLoteImportLimit(s.loteImportLimit || '5000')
         }
       } catch {}
     })()
@@ -400,6 +404,42 @@ export default function ConfiguracaoPage() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card className="bg-card">
+              <CardHeader>
+                <CardTitle>Consulta em Lote</CardTitle>
+                <CardDescription>Configure o limite máximo de linhas por importação CSV</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="lote_import_limit">Limite para importação de consulta em lote</Label>
+                  <Input 
+                    id="lote_import_limit"
+                    type="number"
+                    min="1"
+                    placeholder="5000" 
+                    value={loteImportLimit} 
+                    onChange={(e) => setLoteImportLimit(e.target.value)} 
+                  />
+                  <p className="text-xs text-muted-foreground">Número máximo de linhas permitidas por importação de arquivo CSV na consulta em lote</p>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={async () => {
+                    const body = { loteImportLimit }
+                    await fetch('/api/global-settings', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(body)
+                    })
+                    setMessage('Limite de importação salvo!')
+                    setTimeout(() => setMessage(''), 2000)
+                  }} disabled={!loteImportLimit}>
+                    Salvar Limite
+                  </Button>
+                </div>
+                {message && <div className="text-emerald-600 text-sm">{message}</div>}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Aba Credenciais */}
@@ -640,9 +680,10 @@ export default function ConfiguracaoPage() {
                 <div className="space-y-4">
                   {banks.map((b, idx) => (
                     <div key={b.key || idx} className="p-3 border rounded space-y-2 bg-muted/50">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                         <Input placeholder="Nome do banco" value={b.name} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, name: e.target.value } : x))} />
                         <Input placeholder="Webhook (consulta em lote)" value={b.webhookUrl || ''} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookUrl: e.target.value } : x))} />
+                        <Input placeholder="Webhook (consulta de status)" value={b.webhookConsulta || ''} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, webhookConsulta: e.target.value } : x))} />
                         <div className="flex items-center gap-4 text-sm">
                           <label className="flex items-center gap-2"><input type="checkbox" checked={!!b.forBatch} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, forBatch: e.target.checked } : x))} /> Lote</label>
                           <label className="flex items-center gap-2"><input type="checkbox" checked={!!b.forSimular} onChange={(e)=> setBanks(prev => prev.map((x,i)=> i===idx ? { ...x, forSimular: e.target.checked } : x))} /> Simular/Digitar</label>
